@@ -1,0 +1,168 @@
+# ScanScribe Configuration
+# Copy to config.yml and edit before starting.
+# Restart the container to apply changes.
+#
+# First-time admin setup (set these as environment variables, not here):
+#   SCANSCRIBE_DEFAULT_ADMIN_PASSWORD — if set on empty DB, creates an admin user on startup
+#   SCANSCRIBE_DEFAULT_ADMIN_USERNAME (optional, default: admin)
+#   SCANSCRIBE_DEFAULT_ADMIN_EMAIL    (optional, default: admin@localhost)
+# If unset, the first user to register via /register becomes admin.
+
+# ==================== MODEL SETTINGS ====================
+model:
+  # Whisper model folder name (must match directory inside ./models/)
+  name: whisper-small
+  # Model directory path (use /app/models in Docker)
+  path: /app/models
+  # Parallel transcription worker threads (0 = all CPU cores)
+  workers: 4
+  # Device: cpu or cuda (GPU requires NVIDIA Docker runtime)
+  device: cpu
+
+# ==================== WATCHER SETTINGS ====================
+watcher:
+  # Auto-start transcription engine on startup
+  auto_start: true
+
+# ==================== WATCHDOG CLIENT SETTINGS ====================
+# Fetched by the scanscribe_client at runtime.
+# The client handles file monitoring, stability checking, and rejection.
+watchdog_client:
+  stability:
+    # How often to poll file size (ms). Lower = faster detection.
+    filesize_check_ms: 600
+    # File must be stable for this long before uploading (ms).
+    stability_window_ms: 800
+  rejection:
+    size:
+      enabled: false
+      min_kb: 100
+    duration:
+      enabled: true
+      min_seconds: 2.5
+  extensions:
+    - .wav
+    - .mp3
+  # Delete local file after successful upload
+  delete_after_upload: true
+
+# ==================== STORAGE & RETENTION ====================
+storage:
+  # Keep processed audio files for in-browser playback
+  save_audio_for_playback: true
+  # Days to retain transcriptions and audio (0 = never auto-delete)
+  retention_days: 30
+  # Hour (0–23) to run daily cleanup
+  cleanup_hour: 3
+
+# ==================== TRANSCRIPTION SETTINGS ====================
+# English-only transcription.
+transcription:
+  beam_size: 5
+  vad_enabled: true
+  vad_threshold: 0.5
+  vad_speech_pad_ms: 150
+  vad_min_speech_duration_ms: 100
+  # chunking mode: speech = keep VAD segments only | silence = remove silence below noise floor
+  vad_chunking_mode: silence
+  vad_chunking_enabled: true
+  # Save trimmed audio to storage instead of original
+  vad_save_speech_only: false
+  vad_segment_pad_s: 0.2
+  # Silence-removal tuning (vad_chunking_mode: silence)
+  silence_threshold: 0.015   # RMS below this = silence (tune to your noise floor: 0.01–0.03)
+  min_silence_duration_s: 0.5
+  silence_gap_s: 0.1
+
+# ==================== QUEUE SETTINGS ====================
+queue:
+  max_size: 0        # 0 = unlimited
+  pause_on_full: false
+  fifo_order: true   # true = oldest first
+
+# ==================== EVENTS PIPELINE ====================
+# NER → SpanStore → Worker LLM (opens incidents) → Master LLM (attach/skip/close)
+#   → Header normalizer → Summary generator → Cleanup sweep
+events_pipeline:
+  enabled: false
+  # Path to NER model folder (model.safetensors, config.json, tokenizer)
+  ner_model_path: ""  # e.g. ./models/incident_ner_v1
+  # Strip commas from span text before NER (recommended: true)
+  ner_strip_commas: true
+  # Minimum NER confidence to keep an entity (0.0 = disabled)
+  ner_confidence_threshold: 0.85
+
+  # Master LLM routing (requires incidents_ollama.enabled = true)
+  llm_routing: false
+  llm_routing_max_tool_rounds: 8
+  llm_routing_openai_api: true   # false = native /api/chat; true = /v1/chat/completions
+  # llm_routing_max_tokens: 1536  # cap tokens per routing call (thinking + output share budget)
+  # llm_routing_reasoning_effort: low  # none | low | medium | high (Ollama reasoning models)
+  # llm_routing_log_raw: false    # log full Ollama JSON per round (noisy; for debugging)
+
+  # Lower Master attach confidence when an event's last span is older than this (seconds). 0 = disable.
+  master_llm_stale_seconds: 3600
+
+  # Master LLM fills event_type/location/units/status_detail from transcripts. false = legacy NER header.
+  master_header_normalize: true
+  # Run header normalizer every N total attached spans (1 = every attach). 0 = every attach.
+  normalize_every_n_spans: 5
+
+  # Run summary after this many spans are attached (0 = disabled)
+  summary_trigger_spans: 5
+
+  # Auto-close events whose last radio transmission is older than this (seconds). 0 = disabled.
+  auto_close_stale_seconds: 0
+  # How often the background cleanup sweep runs (seconds). 0 = disabled.
+  cleanup_interval_seconds: 0
+
+# ==================== INCIDENTS OLLAMA ====================
+# Ollama instance for Worker (cheap triage), Master (routing + header + summary).
+incidents_ollama:
+  enabled: false
+  base_url: "http://localhost:11434"
+  # Fallback model when worker_model / master_model are not set
+  model: "llama3.2:3b"
+  # Small/cheap model: should this EVT_TYPE span open a new incident?
+  worker_model: ""
+  # Stronger model: routing (attach/skip/close) + header normalization + summaries
+  master_model: ""
+  timeout_seconds: 60
+
+# ==================== GEMINI API (OPTIONAL) ====================
+gemini:
+  enabled: false
+  # Get a key at https://aistudio.google.com/app/apikey
+  # Recommended: set via GEMINI_API_KEY environment variable instead of storing here
+  api_key: ""
+  model: gemini-2.5-flash
+
+# ==================== HOUR SUMMARIES ====================
+summaries:
+  # Automatically generate per-hour summaries in the background
+  auto_generate_enabled: false
+  # How often to scan for missing hours (seconds)
+  auto_generate_interval_seconds: 300
+  # How many days back to fill (1 = today only)
+  auto_generate_days: 1
+
+# ==================== LOGGING ====================
+logging:
+  level: INFO   # DEBUG | INFO | WARNING | ERROR | CRITICAL
+  format: simple  # simple | detailed
+  max_size_mb: 100
+  backup_count: 5
+
+# ==================== ADVANCED SETTINGS ====================
+advanced:
+  archive_directory: /app/audio_storage
+  debug_mode: false
+  max_file_size_mb: 0        # 0 = unlimited
+  transcription_timeout: 0   # 0 = no timeout (seconds)
+  chunk_length_s: 30         # Whisper native chunk size
+  chunk_stride_s: 5          # Overlap between chunks
+
+# ==================== TIMESTAMP EXTRACTION ====================
+timestamp:
+  # metadata = file mtime | title = parse from filename | both = title first, fallback to metadata
+  method: both

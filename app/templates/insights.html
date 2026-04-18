@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScanScribe - Insights</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=insights2">
+    <link rel="stylesheet" href="/static/css/insights.css">
+    <link rel="stylesheet" href="/static/css/flatpickr-dark.css">
+</head>
+<body class="insights-page">
+    <div class="container">
+        
+        <!-- Header -->
+        <header class="flex-between mb-4" id="mainHeader">
+            <div class="flex-gap">
+                <h1 class="text-hero">ScanScribe</h1>
+                <nav class="flex-gap ml-8">
+                    <a href="/dashboard" class="nav-link">Dashboard</a>
+                    <a href="/insights" class="nav-link active">Insights</a>
+                    <a href="/logs" class="nav-link">Database</a>
+                    <a href="/events" class="nav-link">Events</a>
+                    <a href="/users" class="nav-link">Users</a>
+                    <a href="/settings" class="nav-link">Settings</a>
+                </nav>
+            </div>
+            <div class="flex-gap">
+                <span id="currentUser" class="text-caption"></span>
+                <button id="logoutBtn" class="btn btn-ghost">Logout</button>
+            </div>
+        </header>
+
+        <!-- Statistics Panel -->
+        <div class="glass-panel mb-4">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="font-medium text-lg">
+                    <span id="stats-title">📈 Activity Statistics</span>
+                    <span id="stats-date" class="text-blue-300 ml-2"></span>
+                </h2>
+                <div class="flex items-center gap-4">
+                    <!-- Date Picker -->
+                    <input type="text" id="date-picker" class="px-3 py-2 text-sm rounded-lg filter-input" 
+                           placeholder="Select date">
+                    
+                    <!-- View Toggle -->
+                    <div class="flex items-center rounded-lg p-1" style="background: rgba(255, 255, 255, 0.05);">
+                        <button id="view-hourly-btn" class="view-toggle-btn active px-3 py-1 text-xs font-medium rounded-md">Hourly</button>
+                        <button id="view-daily-btn" class="view-toggle-btn px-3 py-1 text-xs font-medium rounded-md">Daily</button>
+                        <button id="view-weekly-btn" class="view-toggle-btn px-3 py-1 text-xs font-medium rounded-md">Weekly</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                <div class="stat-card">
+                    <div class="text-sm text-gray-400">Total Transcriptions</div>
+                    <div class="text-2xl font-bold" id="stat-total">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="text-sm text-gray-400" title="Transcripts in last minute">Calls/min (live)</div>
+                    <div class="text-2xl font-bold" id="stat-calls-per-min">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="text-sm text-gray-400">Unique Talkgroups</div>
+                    <div class="text-2xl font-bold" id="stat-talkgroups">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="text-sm text-gray-400">Avg Duration</div>
+                    <div class="text-2xl font-bold" id="stat-avg-duration">0s</div>
+                </div>
+                <div class="stat-card">
+                    <div class="text-sm text-gray-400">Peak Hour</div>
+                    <div class="text-2xl font-bold" id="stat-peak-hour">--</div>
+                </div>
+            </div>
+            
+            <!-- Activity Chart -->
+            <div class="chart-container">
+                <canvas id="activity-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- Tabbed section: Search & Filter, Talkgroup Activity, Summaries, Recent Activity -->
+        <div class="glass-panel mb-4">
+            <div class="flex border-b border-gray-700/50 mb-0" role="tablist">
+                <button type="button" class="insights-tab-btn active" data-tab="search" role="tab" aria-selected="true">🔍 Search & Filter</button>
+                <button type="button" class="insights-tab-btn" data-tab="talkgroup" role="tab" aria-selected="false">📡 Talkgroup Activity</button>
+                <button type="button" class="insights-tab-btn" data-tab="summaries" role="tab" aria-selected="false">📝 Summaries</button>
+                <button type="button" class="insights-tab-btn" data-tab="recent" role="tab" aria-selected="false">🕐 Recent Activity</button>
+            </div>
+
+            <!-- Tab: Search & Filter -->
+            <div id="insights-tab-search" class="insights-tab-pane active" role="tabpanel">
+            <div class="flex flex-wrap items-center gap-4 mb-4">
+                <!-- Keyword Search -->
+                <div class="flex-1 min-w-[200px]">
+                    <input type="text" id="search-keyword" 
+                           class="w-full px-3 py-2 text-sm rounded-lg filter-input"
+                           placeholder="Search transcripts...">
+                </div>
+                
+                <!-- Talkgroup Filter (dropdown with checkboxes) -->
+                <div class="tg-filter-dropdown">
+                    <button type="button" id="tg-filter-trigger" class="tg-filter-trigger">Talkgroups</button>
+                    <div id="filter-talkgroup" class="tg-filter-panel">
+                        <div class="tg-filter-placeholder text-gray-500 text-sm">Loading...</div>
+                    </div>
+                </div>
+                
+                <!-- Hour Filter (populated by graph click) -->
+                <div class="min-w-[140px]">
+                    <select id="filter-hour" 
+                            class="w-full px-3 py-2 text-sm rounded-lg filter-input">
+                        <option value="">All Hours</option>
+                    </select>
+                </div>
+                
+                <!-- Sort Options -->
+                <div class="min-w-[160px]">
+                    <select id="sort-option" 
+                            class="w-full px-3 py-2 text-sm rounded-lg"
+                            style="background: rgba(30,30,30,0.9); border: 1px solid rgba(255,255,255,0.1); color: #e5e7eb;">
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="largest">Largest First</option>
+                        <option value="smallest">Smallest First</option>
+                        <option value="longest">Longest First</option>
+                        <option value="shortest">Shortest First</option>
+                    </select>
+                </div>
+                
+                <!-- Clear Filters -->
+                <button id="clear-filters-btn" 
+                        class="px-4 py-2 text-sm rounded-lg filter-btn-secondary">
+                    Clear
+                </button>
+            </div>
+            
+            <!-- Active Filters Display -->
+            <div id="active-filters" class="flex items-center gap-2 mb-4 text-xs" style="display: none;">
+                <span class="text-gray-400">Active:</span>
+                <div id="filter-tags" class="flex flex-wrap gap-2"></div>
+            </div>
+            
+            <!-- Search Results -->
+            <div id="search-results-info" class="text-sm text-gray-400 mb-3">
+                <span id="results-count">0</span> results
+            </div>
+            <div id="search-results" class="space-y-2 insights-results-scroll">
+                <div class="text-gray-400 text-sm">Enter search criteria or click a graph point to filter...</div>
+            </div>
+            </div>
+
+            <!-- Tab: Talkgroup Activity -->
+            <div id="insights-tab-talkgroup" class="insights-tab-pane" role="tabpanel">
+            <div id="talkgroup-breakdown" class="space-y-3">
+                <div class="text-gray-400 text-sm">Loading...</div>
+            </div>
+            </div>
+
+            <!-- Tab: Summaries -->
+            <div id="insights-tab-summaries" class="insights-tab-pane" role="tabpanel">
+                <div class="flex-between mb-3">
+                    <div class="text-title" style="font-size: 1rem;">Hour Summary</div>
+                    <div class="text-caption" id="summariesStatus">Select an hour to generate.</div>
+                </div>
+
+                <div class="flex-gap" style="flex-wrap: wrap;">
+                    <select id="summaryHourSelect" class="input" style="min-width: 220px;">
+                        <option value="">Hours with activity...</option>
+                    </select>
+                    <button id="summaryGenerateBtn" class="btn btn-primary">Generate</button>
+                    <button id="summaryRegenerateBtn" class="btn btn-ghost">Regenerate</button>
+                    <button id="summaryDeleteBtn" class="btn btn-ghost">Delete</button>
+                </div>
+
+                <div id="summariesList" style="margin-top: 1rem;">
+                    <div class="text-gray-400 text-sm">Loading summaries...</div>
+                </div>
+            </div>
+
+            <!-- Tab: Recent Activity -->
+            <div id="insights-tab-recent" class="insights-tab-pane" role="tabpanel">
+            <div id="recent-activity" class="space-y-2 insights-results-scroll">
+                <div class="text-gray-400 text-sm">Loading...</div>
+            </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/js/insights.js?v=9"></script>
+</body>
+</html>

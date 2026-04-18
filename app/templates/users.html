@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ScanScribe - Users</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=2">
+</head>
+<body class="text-gray-100" style="background: linear-gradient(135deg, #1a1e1f 0%, rgba(26, 30, 31, 0.95) 100%); min-height: 100vh;">
+    
+    <div class="container" style="padding: 1rem; max-width: none;">
+        
+        <!-- Header -->
+        <header class="flex-between mb-4">
+            <div class="flex-gap">
+                <h1 class="text-hero">ScanScribe</h1>
+                <nav class="flex-gap ml-8">
+                    <a href="/dashboard" class="nav-link">Dashboard</a>
+                    <a href="/insights" class="nav-link">Insights</a>
+                    <a href="/logs" class="nav-link">Database</a>
+                    <a href="/events" class="nav-link">Events</a>
+                    <a href="/users" class="nav-link active">Users</a>
+                    <a href="/settings" class="nav-link">Settings</a>
+                </nav>
+            </div>
+            <div class="flex-gap">
+                <span id="currentUser" class="text-caption"></span>
+                <button id="logoutBtn" class="btn btn-ghost">Logout</button>
+            </div>
+        </header>
+
+        <!-- Users Management -->
+        <div class="glass-panel">
+            
+            <div class="flex-between mb-4">
+                <h2 class="text-title">User Management</h2>
+                <span id="userCount" class="text-caption">Loading...</span>
+            </div>
+
+            <!-- Status Message -->
+            <div id="statusMessage" style="display: none; margin-bottom: 1rem; padding: 0.75rem; border-radius: 0;"></div>
+
+            <!-- Users Table -->
+            <div style="overflow-x: auto;">
+                <table class="w-full" style="border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                            <th style="text-align: left; padding: 0.75rem; color: var(--grey-text-muted);">Username</th>
+                            <th style="text-align: left; padding: 0.75rem; color: var(--grey-text-muted);">Email</th>
+                            <th style="text-align: left; padding: 0.75rem; color: var(--grey-text-muted);">Status</th>
+                            <th style="text-align: left; padding: 0.75rem; color: var(--grey-text-muted);">Role</th>
+                            <th style="text-align: left; padding: 0.75rem; color: var(--grey-text-muted);">Created</th>
+                            <th style="text-align: right; padding: 0.75rem; color: var(--grey-text-muted);">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody">
+                        <tr>
+                            <td colspan="6" style="padding: 2rem; text-align: center; color: var(--grey-text-muted);">
+                                Loading users...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script src="/static/js/users.js"></script>
+</body>
+</html>

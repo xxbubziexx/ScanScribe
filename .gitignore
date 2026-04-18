@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Database
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Docker
+.dockerignore
+
+# Models (too large for git)
+models/*
+!models/.gitkeep
+
+# Audio storage
+audio_storage/*
+!audio_storage/.gitkeep
+ingest/*
+!ingest/.gitkeep
+!ingest/queue/
+ingest/queue/*
+!ingest/queue/.gitkeep
+
+# Local config (use config.yml.example as template)
+config.yml
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.test.py
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary
+*.tmp
+*.bak
+
+# Live compose file — copy docker-compose.yml.example and customize
+docker-compose.yml
+client/*

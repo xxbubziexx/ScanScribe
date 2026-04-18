@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ScanScribe - Settings</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=2">
+    <link rel="stylesheet" href="/static/css/settings.css">
+</head>
+<body class="text-gray-100 settings-page">
+    <div class="container">
+        
+        <!-- Header -->
+        <header class="flex-between mb-4">
+            <div class="flex-gap">
+                <h1 class="text-hero">ScanScribe</h1>
+                <nav class="flex-gap ml-8">
+                    <a href="/dashboard" class="nav-link">Dashboard</a>
+                    <a href="/insights" class="nav-link">Insights</a>
+                    <a href="/logs" class="nav-link">Database</a>
+                    <a href="/events" class="nav-link">Events</a>
+                    <a href="/users" class="nav-link">Users</a>
+                    <a href="/settings" class="nav-link active">Settings</a>
+                </nav>
+            </div>
+            <div class="flex-gap">
+                <span id="currentUser" class="text-caption"></span>
+                <button id="logoutBtn" class="btn btn-ghost">Logout</button>
+            </div>
+        </header>
+
+        <!-- Settings Editor -->
+        <div class="glass-panel" style="flex: 1; display: flex; flex-direction: column;">
+            
+            <!-- Editor Header -->
+            <div class="flex-between mb-4">
+                <div>
+                    <h2 class="text-title">Configuration Editor</h2>
+                    <p class="text-caption" style="margin-top: 0.5rem;">Editing: config.yml</p>
+                </div>
+                <div class="flex-gap">
+                    <button id="restartBtn" class="btn btn-danger" style="display: none;">
+                        🔄 Restart to Apply
+                    </button>
+                    <button id="saveBtn" class="btn btn-success">💾 Save Config</button>
+                </div>
+            </div>
+
+            <!-- Status Message -->
+            <div id="statusMessage" style="display: none; margin-bottom: 1rem; padding: 0.75rem; border-radius: 0;"></div>
+
+            <!-- Monaco Editor -->
+            <div id="editorContainer"></div>
+
+            <!-- Info Panel -->
+            <div style="margin-top: 1rem; padding: 0.75rem 1rem; background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 0;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; opacity: 0.6;">
+                    <div>
+                        <div class="text-muted" style="font-size: 0.75rem;">
+                            💡 Use 2-space indentation • Changes apply after restart • Ctrl+F to search
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <button id="downloadBtn" class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; opacity: 0.7;">Download Backup</button>
+                        <button id="reloadBtn" class="btn btn-ghost" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; margin-left: 0.5rem; opacity: 0.7;">Reload</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Audio Storage Management -->
+        <div class="glass-panel" style="margin-top: 1rem;">
+            <h3 class="text-title" style="margin-bottom: 1rem;">Audio Storage Management</h3>
+            
+            <div id="storageStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                <div class="stat-card">
+                    <div class="stat-value" id="storageTotalFiles">-</div>
+                    <div class="stat-label">Total Files</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="storageTotalSize">-</div>
+                    <div class="stat-label">Total Size</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="storageDirectory">-</div>
+                    <div class="stat-label">Directory</div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <button id="refreshStorageBtn" class="btn btn-ghost">🔄 Refresh Stats</button>
+                <button id="downloadZipBtn" class="btn btn-primary">📦 Download All as ZIP</button>
+                <button id="purgeAudioBtn" class="btn btn-danger">🗑️ Purge Saved Audio</button>
+                <span id="storageMessage" style="margin-left: 1rem; color: var(--accent-success);"></span>
+            </div>
+        </div>
+
+        <!-- Data retention cleanup (manual) -->
+        <div class="glass-panel" style="margin-top: 1rem;">
+            <h3 class="text-title" style="margin-bottom: 1rem;">Data retention cleanup</h3>
+            <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 1rem;">
+                Remove database entries and their audio files older than a given number of days. Does not run automatically; use this to clean up by your retention policy.
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: center;">
+                <label class="flex items-center gap-2">
+                    <span class="text-muted" style="font-size: 0.85rem;">Delete data older than</span>
+                    <input type="number" id="retentionDaysInput" min="0" step="1" class="input" style="width: 5rem;">
+                    <span class="text-muted" style="font-size: 0.85rem;">days (0 = never)</span>
+                </label>
+                <button id="runRetentionCleanupBtn" class="btn btn-primary">Run cleanup</button>
+                <span id="retentionCleanupMessage" style="color: var(--accent-success); font-size: 0.85rem;"></span>
+            </div>
+            <div class="text-muted" style="font-size: 0.75rem; margin-top: 0.5rem;" id="retentionConfigHint">Config: -- days</div>
+        </div>
+
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <script src="/static/js/settings.js"></script>
+</body>
+</html>

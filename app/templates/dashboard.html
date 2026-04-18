@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ScanScribe - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=10">
+    <script src="/static/js/dashboard-alpine.js?v=1"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+</head>
+<body class="text-gray-100 dashboard-page">
+    <div class="container">
+        
+        <!-- Header -->
+        <header class="flex-between mb-4" id="mainHeader">
+            <div class="flex-gap">
+                <h1 class="text-hero">ScanScribe</h1>
+                <nav class="flex-gap ml-8">
+                    <a href="/dashboard" class="nav-link active">Dashboard</a>
+                    <a href="/insights" class="nav-link">Insights</a>
+                    <a href="/logs" class="nav-link">Database</a>
+                    <a href="/events" class="nav-link">Events</a>
+                    <a href="/users" class="nav-link">Users</a>
+                    <a href="/settings" class="nav-link">Settings</a>
+                </nav>
+            </div>
+            <div class="flex-gap">
+                <div class="flex-gap text-caption">
+                    <span class="status-dot status-warning"></span>
+                    <span>Health: <span id="health" class="text-yellow-300">Checking...</span></span>
+                </div>
+                <span id="currentUser" class="text-caption"></span>
+                <button id="logoutBtn" class="btn btn-ghost">Logout</button>
+            </div>
+        </header>
+
+        <!-- Stats Grid -->
+        <section class="grid-auto mb-4" style="flex-shrink: 0;" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-label">📥 Ingest</div>
+                <div id="statIngest" class="stat-value">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">📋 Queue</div>
+                <div id="statQueue" class="stat-value">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">✅ Processed</div>
+                <div id="statProcessed" class="stat-value">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">❌ Rejected</div>
+                <div id="statRejected" class="stat-value">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">⚡ Engine</div>
+                <div id="statEngine" class="stat-value">Loading...</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">🎯 Model</div>
+                <div id="statModel" class="stat-value" style="font-size: 0.75rem;">Loading...</div>
+            </div>
+        </section>
+
+        <!-- Control Panel -->
+        <section class="glass-panel mb-4" style="flex-shrink: 0;" id="controlPanel">
+            <div class="flex-between mb-4">
+                <div class="flex-gap">
+                    <button id="startBtn" class="btn btn-success">▶ Start Watcher</button>
+                    <button id="stopBtn" class="btn btn-danger">⏹ Stop Watcher</button>
+                    <button id="pauseBtn" class="btn btn-ghost">⏸ Pause</button>
+                </div>
+                <button id="fullscreenBtn" class="btn btn-ghost">⛶ Fullscreen</button>
+            </div>
+
+            <!-- Status Information -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 p-3 rounded-lg" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1);">
+                <div class="flex items-center gap-3">
+                    <span class="status-dot status-inactive" id="statusDot"></span>
+                    <div class="flex flex-col">
+                        <span id="status" class="font-medium" style="font-size: 0.85rem;">Status: Idle</span>
+                        <span id="engineStatus" class="text-xs text-muted">Transcription Engine: Not running</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3" style="min-width: 150px;">
+                    <div class="flex flex-col" style="flex: 1;">
+                        <div class="flex-between" style="margin-bottom: 4px;">
+                            <span class="text-muted" style="font-size: 0.75rem;">Memory</span>
+                            <span id="memoryText" class="text-muted" style="font-size: 0.7rem;">Loading...</span>
+                        </div>
+                        <div class="memory-bar-container">
+                            <div class="memory-bar" id="memoryBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3" style="min-width: 150px;">
+                    <div class="flex flex-col" style="flex: 1;">
+                        <div class="flex-between" style="margin-bottom: 4px;">
+                            <span class="text-muted" style="font-size: 0.75rem;">CPU</span>
+                            <span id="cpuText" class="text-muted" style="font-size: 0.7rem;">Loading...</span>
+                        </div>
+                        <div class="memory-bar-container">
+                            <div class="memory-bar" id="cpuBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Main Content - Resizable Panes (Vertical Split) -->
+        <div class="resizable-container-wrapper">
+            <div class="resizable-container" id="resizable-container">
+                
+            <!-- Transcriptions Panel (Left) -->
+            <section class="glass-panel flex-col resizable-pane resizable-pane-left" style="border-radius: 0;" id="transcriptionsPane" 
+                     x-data="transcriptionCards" x-init="init()">
+                <div class="flex-between mb-4" style="position: sticky; top: 0; background: var(--glass-bg); backdrop-filter: blur(20px); z-index: 10; padding: 1rem; margin: -1rem -1rem 1rem -1rem;">
+                    <h2 class="text-title">Transcriptions</h2>
+                    <div class="flex-gap">
+                        <span class="text-caption" x-text="cards.length + ' items'">0 items</span>
+                        <label class="flex-gap" style="cursor: pointer; font-size: 0.75rem; color: var(--grey-text-muted);">
+                            <input type="checkbox" x-model="autoScroll" style="cursor: pointer;">
+                            Auto-scroll
+                        </label>
+                        <button class="btn btn-ghost" @click="clearAll()">Clear</button>
+                    </div>
+                </div>
+                <div id="transcriptionsList" class="space-y-lg transcription-list" style="padding-right: 1rem; flex: 1; overflow-y: auto;"
+                     @scroll="handleScroll($event)">
+                    <template x-for="(card, index) in cards" :key="`card-${card.id}-${index}`">
+                        <div class="transcription-card" 
+                             x-transition:enter="transition ease-out duration-400"
+                             x-transition:enter-start="opacity-0 transform translate-y-4"
+                             x-transition:enter-end="opacity-100 transform translate-y-0">
+                            <div class="card-header">
+                                <span class="card-filename" :title="card.filename" x-text="truncate(card.filename, 50)"></span>
+                                <span class="card-timestamp" x-text="formatTime(card.timestamp)"></span>
+                            </div>
+                            <template x-if="card.duration > 0">
+                                <div class="card-meta">
+                                    <span x-text="'Duration: ' + card.duration.toFixed(1) + 's'"></span>
+                                    <span x-text="'Size: ' + formatBytes(card.file_size)"></span>
+                                </div>
+                            </template>
+                            <div class="card-content">
+                                <span class="card-talkgroup" x-text="card.talkgroup"></span>
+                                <span class="confidence-badge" :class="getConfidenceClass(card.confidence)" 
+                                      x-text="(card.confidence * 100).toFixed(0) + '%'"></span>
+                            </div>
+                            <div class="card-transcript" x-text="formatTranscript(card.transcript)"></div>
+                            <template x-if="card.audio_path !== 'file not saved'">
+                                <div class="card-audio">
+                                    <audio controls preload="none">
+                                        <source :src="'/' + card.audio_path" type="audio/mpeg">
+                                        Your browser does not support audio playback.
+                                    </audio>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </section>
+
+                <!-- Vertical Resizer -->
+                <div class="width-resizer" id="width-resizer"></div>
+
+                <!-- Console Panel (Right) -->
+                <section class="glass-panel flex-col resizable-pane resizable-pane-right" style="border-radius: 0;" id="consolePane">
+                    <div class="flex-between mb-4" style="position: sticky; top: 0; background: var(--glass-bg); backdrop-filter: blur(20px); z-index: 10; padding: 1rem; margin: -1rem -1rem 1rem -1rem;">
+                        <h2 class="text-title">Console</h2>
+                        <div class="flex-gap">
+                            <label class="flex-gap text-caption" style="cursor: pointer; font-size: 0.75rem;">
+                                <input type="checkbox" id="consoleAutoScroll" checked class="input" style="width: auto; height: auto;">
+                                Auto-scroll
+                            </label>
+                            <button id="clearLog" class="btn btn-ghost">Clear</button>
+                        </div>
+                    </div>
+                    <div id="console" class="console" style="padding-right: 1rem; flex: 1; overflow-y: auto; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; background: rgba(0, 0, 0, 0.2); border-radius: 4px; padding: 0.75rem;">
+                        <!-- Console messages will appear here -->
+                    </div>
+                </section>
+                
+            </div>
+            
+            <!-- Horizontal Height Resizer -->
+            <div class="height-resizer" id="height-resizer"></div>
+        </div>
+
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScanScribe - Events</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/dashboard.css?v=10">
+    <link rel="stylesheet" href="/static/css/events.css?v=3">
+</head>
+<body class="events-page dashboard-page">
+    <div class="container">
+        <header class="flex-between mb-4">
+            <div class="flex-gap">
+                <h1 class="text-hero">ScanScribe</h1>
+                <nav class="flex-gap ml-8">
+                    <a href="/dashboard" class="nav-link">Dashboard</a>
+                    <a href="/insights" class="nav-link">Insights</a>
+                    <a href="/logs" class="nav-link">Database</a>
+                    <a href="/events" class="nav-link active">Events</a>
+                    <a href="/users" class="nav-link">Users</a>
+                    <a href="/settings" class="nav-link">Settings</a>
+                </nav>
+            </div>
+            <div class="flex-gap">
+                <span id="currentUser" class="text-caption"></span>
+                <button id="logoutBtn" class="btn btn-ghost">Logout</button>
+            </div>
+        </header>
+
+        <div class="events-toolbar">
+            <div class="events-toolbar-text">
+                <h2 class="events-page-title">Incident pipeline</h2>
+                <p class="events-page-lede">Open incidents, NER / LLM debug, and monitor configuration.</p>
+            </div>
+            <button type="button" id="eventsRefreshBtn" class="btn events-refresh-btn" title="Reload lists">Refresh</button>
+        </div>
+
+        <nav class="events-tab-nav" aria-label="Events sections">
+            <button type="button" class="events-tab-btn active" data-tab="events">Open incidents</button>
+            <button type="button" class="events-tab-btn" data-tab="closed">Closed</button>
+            <button type="button" class="events-tab-btn" data-tab="monitors">Monitors</button>
+        </nav>
+
+        <!-- Events pane -->
+        <div id="paneEvents" class="events-tab-pane active">
+            <section class="glass-panel events-section mb-4">
+                <div class="events-section-head">
+                    <h3 class="events-section-title">Open incidents</h3>
+                    <p class="events-section-desc">Close stops new transcripts from attaching (history kept). Delete removes the event.</p>
+                </div>
+                <div class="events-table-wrap">
+                    <table class="events-table">
+                        <thead><tr><th>Event ID</th><th>Monitor</th><th>Status</th><th>Type</th><th>Location</th><th>Units</th><th>Spans</th><th>Talkgroup</th><th>Incident time</th><th>System time</th><th>Recommend</th><th>Actions</th></tr></thead>
+                        <tbody id="eventsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="glass-panel events-section mb-4">
+                <div class="events-section-head">
+                    <h3 class="events-section-title">Recently closed</h3>
+                </div>
+                <div class="events-table-wrap">
+                    <table class="events-table">
+                        <thead><tr><th>Event ID</th><th>Monitor</th><th>Type</th><th>Location</th><th>Closed</th><th>Actions</th></tr></thead>
+                        <tbody id="recentlyClosedBody"></tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="glass-panel mb-4">
+                <div class="events-section-head events-section-head--row">
+                    <h2 class="text-lg font-semibold mb-2">Pipeline Activity</h2>
+                    <div class="flex-gap">
+                        <label class="events-closed-limit">
+                            <span class="events-closed-limit-label">Show</span>
+                            <select id="debugLimit" class="events-select-sm" aria-label="Number of pipeline activity entries to load">
+                                <option value="10">10</option>
+                                <option value="20" selected>20</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </label>
+                        <button type="button" id="clearDebugLogsBtn" class="btn events-btn events-btn--danger">Clear Logs</button>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-400 mb-2">
+                    <span id="llmStatus" class="llm-status">NER: —</span>
+                    <span class="ml-2">Recent pipeline activity</span>
+                </p>
+                <div class="overflow-x-auto">
+                    <table class="debug-table">
+                        <thead><tr><th>Time</th><th>LLM</th><th>Monitor</th><th>Log entry</th><th>Action</th><th>Event ID</th><th>Duration (ms)</th><th>Closed</th><th>Error</th></tr></thead>
+                        <tbody id="debugBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- Closed events pane -->
+        <div id="paneClosed" class="events-tab-pane">
+            <section class="glass-panel events-section mb-4">
+                <div class="events-section-head events-section-head--row">
+                    <div>
+                        <h3 class="events-section-title">Closed incidents</h3>
+                        <p class="events-section-desc">No new transcripts attach here. Delete to remove permanently.</p>
+                    </div>
+                    <label class="events-closed-limit">
+                        <span class="events-closed-limit-label">Show</span>
+                        <select id="closedEventsLimit" class="events-select-sm" aria-label="Number of closed incidents to load">
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="events-table-wrap">
+                    <table class="events-table">
+                        <thead><tr><th>Event ID</th><th>Monitor</th><th>Type</th><th>Location</th><th>Units</th><th>Spans</th><th>Talkgroup</th><th>Incident time</th><th>System time</th><th>Closed</th><th>Actions</th></tr></thead>
+                        <tbody id="closedEventsBody"></tbody>
+                    </table>
+                </div>
+                <div id="closedEventsPager"></div>
+            </section>
+        </div>
+
+        <!-- Monitors pane -->
+        <div id="paneMonitors" class="events-tab-pane">
+            <section class="glass-panel events-section mb-4">
+                <div class="events-section-head">
+                    <h3 class="events-section-title" id="monitorFormTitle">Add monitor</h3>
+                    <p class="events-section-desc">Enter talkgroups manually (comma-separated). The list on the right shows what has been logged today for reference. Then pick which NER labels may start a new event.</p>
+                </div>
+                <div class="events-monitor-form-layout">
+                    <div class="events-monitor-form-main">
+                        <div class="events-form-grid">
+                            <div class="events-field">
+                                <label class="events-label" for="monitorName">Name</label>
+                                <input type="text" id="monitorName" placeholder="e.g. St. Francois Fire" class="events-input events-input--wide" />
+                            </div>
+                            <div class="events-field">
+                                <label class="events-label" for="monitorTalkgroups">Talkgroups</label>
+                                <input type="text" id="monitorTalkgroups" class="events-input events-input--wide" placeholder="e.g. Fire A, Fire B, 45112" autocomplete="off" />
+                                <p class="events-muted events-field-hint">Comma-separated. Must match log talkgroup strings exactly.</p>
+                            </div>
+                            <div class="events-field">
+                                <label class="events-label">Start event by label</label>
+                                <div id="startEventLabelsContainer" class="tg-checkboxes">
+                                    <span id="startLabelsLoading" class="events-muted">Loading…</span>
+                                </div>
+                            </div>
+                            <div id="monitorEnabledWrap" class="events-field hidden">
+                                <label class="events-check-label">
+                                    <input type="checkbox" id="monitorEnabled" />
+                                    <span>Enabled</span>
+                                </label>
+                            </div>
+                            <input type="hidden" id="editingMonitorId" value="" />
+                            <div class="events-form-actions">
+                                <button type="button" id="addMonitorBtn" class="btn btn-primary">Add monitor</button>
+                                <button type="button" id="cancelEditBtn" class="btn hidden">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                    <aside class="events-monitor-today-rail" aria-label="Talkgroups logged today">
+                        <p class="events-label events-label--sub">Logged today</p>
+                        <div id="talkgroupsTodayList" class="events-tg-today-list-wrap" aria-live="polite">
+                            <span id="talkgroupsLoading" class="events-muted">Loading…</span>
+                        </div>
+                    </aside>
+                </div>
+            </section>
+            <section class="glass-panel events-section mb-4">
+                <div class="events-section-head">
+                    <h3 class="events-section-title">Configured monitors</h3>
+                </div>
+                <div class="events-table-wrap">
+                    <table class="monitors-table">
+                        <thead><tr><th>ID</th><th>Name</th><th>Enabled</th><th>Talkgroups</th><th>Start labels</th><th>Actions</th></tr></thead>
+                        <tbody id="monitorsBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+    </div>
+    <script src="/static/js/events.js?v=3"></script>
+</body>
+</html>

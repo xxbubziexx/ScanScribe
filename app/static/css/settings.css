@@ -1,0 +1,23 @@
+/* Settings page styles */
+
+body.settings-page {
+    background: linear-gradient(135deg, #1a1e1f 0%, rgba(26, 30, 31, 0.95) 100%);
+    min-height: 100vh;
+}
+body.settings-page .container {
+    padding: 1rem;
+    max-width: none;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#editorContainer {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0;
+    overflow: hidden;
+    position: relative;
+    min-height: 500px;
+}
