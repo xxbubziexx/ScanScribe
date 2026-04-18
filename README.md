@@ -1,15 +1,14 @@
 # ScanScribe
-
-Public-safety audio transcription system built on Whisper AI with an LLM-powered incident events pipeline. Designed for Docker deployment on a LAN server receiving audio from recording software or the ScanScribe client.
+An open source AI powered transcription system designed for public safety radio scanning. Uses whisper AI to transcribe raw radio recordings and stores and catagorizes them in an advanced searchable database. Has the ability to create detailed incident threads with local ollama hosted LLM's. Docker ready deployment for easy setup.
 
 ## Screenshots
 ### ScanScribe Dashboard
 <img src="screenshots/Screenshot_1.png" alt="ScanScribe Dashboard">
 
-### Search engine for transcriptions
+### Search and advanced filtering
 <img src="screenshots/Screenshot_2.png" alt="Search Engine for Transcriptions">
 
-### Advanced Insights
+### Insights Dashboard
 <img src="screenshots/Screenshot_3.png" alt="Advanced Insights">
 
 ## Features
