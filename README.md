@@ -3,8 +3,13 @@
 Public-safety audio transcription system built on Whisper AI with an LLM-powered incident events pipeline. Designed for Docker deployment on a LAN server receiving audio from recording software or the ScanScribe client.
 
 ## Screenshots
+### ScanScribe Dashboard
 <img src="screenshots/Screenshot_1.png" alt="ScanScribe Dashboard">
-<img src="screenshots/Screenshot_2.png" alt="Search engine for transcriptions">
+
+### Search engine for transcriptions
+<img src="screenshots/Screenshot_2.png" alt="Search Engine for Transcriptions">
+
+### Advanced Insights
 <img src="screenshots/Screenshot_3.png" alt="Advanced Insights">
 
 ## Features
