@@ -14,13 +14,13 @@ An open source AI powered transcription system designed for public safety radio 
 ## Features
 
 - **Whisper transcription** — multi-worker, VAD-filtered, CPU or GPU
-- **Events pipeline** — NER → Worker LLM (opens incidents) → Master LLM (attach/skip/close) → header normalizer → summary
-- **Ollama LLM integration** — local model routing, header normalization, and event summaries (no cloud required)
-- **Incident management** — open/close/reopen events, paginated archive, pipeline activity log, auto-close stale events by incident time
-- **Insights** — per-hour summaries via Gemini API or auto-generation
-- **ScanScribe client** — lightweight Windows uploader for ProScan integration
-- **Multi-user auth** — JWT-based login, user management
 - **Real-time Web UI** — WebSocket live updates, modern dark web interface
+- **Search and Playback** - Search for specific words in the database. Playback any transcriptions.
+- **Insights** — Daily activity statistics with interactable graph. Counts how many transcriptions per hour and logs talkgroups.
+- **Multi-user auth** — JWT-based login, user management
+- **Ollama LLM integration** — local model routing, header normalization, and event summaries (no cloud required)
+- **Events pipeline** — NER → Worker LLM (opens incidents) → Master LLM (attach/skip/close) → header normalizer → summary
+- **Incident management** — open/close/reopen events, paginated archive, pipeline activity log, auto-close stale events by incident time
 
 ## Prerequisites
 
@@ -149,6 +149,23 @@ All runtime settings live in **`config.yml`**. Environment variables in **`.env`
 ## ScanScribe Client
 
 A lightweight audio file uploader for Windows. Available here: [Uploader Client on Github](https://github.com/xxbubziexx/Scanscribe-Uploader-Client). This is an active folder watcher for your scanner recording software recording directory. It uploads all recordings to the scanscribe server. Configurable in config.yml.
+
+## Timestamp and Talkgroup Extraction
+
+ScanScribe handles timestamps two different ways (config chooses). Talkgroup effectively has one implemented path on ingest, plus how it’s stored. SDRtrunk works natively with scanscribe and there is no need for any config.
+### 1. From the filename (“title”) 
+- YYYYMMDD_HHMMSS (e.g. 20260125_123543)
+- HH-MM-SS AM/PM MM-DD-YY
+- HH-MM-SS AM/PM only → uses today’s date
+
+
+### 2. From the filesystem (“metadata”) 
+- **macOS:** st_birthtime if present
+- **otherwise:** st_mtime (modification time)
+
+### How to configure proscan
+1. Use `%TT %D %C` as a custom file format. **Use this format if you plan on extracting timestamp data from the title.**
+2. Use `%TG %G %C` as a custom TIT2(title). **This is crucial for talkgroup extraction to work. SDRtrunk does this natively.**
 
 ## Docker Commands
 
