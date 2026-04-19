@@ -176,16 +176,21 @@ def _worker_tool_loop_path(
         "STEP 1: call get_recent_spans to see recent activity on this monitor.\n"
         "STEP 2: call list_open_events to see if a matching incident is already open.\n"
         "STEP 3: output ONLY this JSON (nothing else, never echo the context):\n"
-        '{"action":"create"|"skip","reason":"<10 words max>","event_type":null|"BROADCAST"}\n\n'
+        '{"action":"create"|"skip","reason":"<10 words max>","event_type":null|"BROADCAST",'
+        '"broadcast_type":null|storm_warning|cni_drivers|road_debris|attempt_to_locate}\n\n'
         "BROADCAST (non-incident traffic): If the transcript is primarily one of these, "
-        "you MUST output create with event_type exactly \"BROADCAST\" (and a short reason). "
+        "you MUST output create with event_type exactly \"BROADCAST\", a short reason, AND "
+        "broadcast_type set to exactly one slug: storm_warning | cni_drivers | road_debris | "
+        "attempt_to_locate (pick the best match). "
+        "Alternatively call the classify_broadcast tool with that slug before your final JSON. "
+        "Do not emit BROADCAST with broadcast_type null.\n"
         "Do not treat these as normal ongoing incidents; they are logged and closed immediately:\n"
-        "- Storm warnings / severe weather alerts\n"
-        "- CNI driver traffic (CNI drivers)\n"
-        "- Road debris calls\n"
-        "- Attempt to locate (ATL / attempt to locate)\n\n"
-        "For BROADCAST, still call tools if useful, then output e.g. "
-        '{"action":"create","reason":"storm warning","event_type":"BROADCAST"}\n\n'
+        "- Storm warnings / severe weather alerts → storm_warning\n"
+        "- CNI driver traffic → cni_drivers\n"
+        "- Road debris calls → road_debris\n"
+        "- Attempt to locate (ATL) → attempt_to_locate\n\n"
+        "Example: "
+        '{"action":"create","reason":"CNI highway traffic","event_type":"BROADCAST","broadcast_type":"cni_drivers"}\n\n'
         "create (normal): evt_type is a genuine new incident not already open; use event_type null or omit it.\n"
         "if transcript is VAD_REJECTED (or equivalent system/VAD marker): always skip.\n"
         "skip if: duplicate dispatch, continuation of open incident, "

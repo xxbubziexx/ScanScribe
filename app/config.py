@@ -170,6 +170,10 @@ class EventsPipelineConfig(BaseModel):
     master_llm_stale_seconds: int = 3600
     # Auto-close open events when no new span has been attached for this many seconds. 0 = disable.
     auto_close_stale_seconds: int = 0
+    # IANA timezone for naive LogEntry.timestamp values (e.g. America/Chicago). Queue ingest uses naive
+    # local wall times; empty = host system local timezone. Wrong zone makes auto-close compare UTC "now"
+    # to misinterpreted incident times (premature closes).
+    log_naive_timezone: str = ""
     # How often (seconds) the background cleanup sweep runs. 0 = disable.
     cleanup_interval_seconds: int = 0
     # Run header normalizer every N total attached spans (1 = every attach, 5 = 1st/5th/10th…). 0 = every attach.

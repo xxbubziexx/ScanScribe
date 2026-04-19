@@ -1,10 +1,12 @@
 """Events pipeline: NER → span_store; Worker (EVT_TYPE) opens incidents; Master routes until close."""
 import json
 import logging
+import re
 import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..config import get_settings
@@ -30,6 +32,28 @@ from .ollama_worker import (
 logger = logging.getLogger(__name__)
 
 
+def _utc_from_log_timestamp(dt: datetime, iana_tz: str) -> datetime:
+    """LogEntry.timestamp is naive local wall time from ingest (queue_processor); see routes/events._iso_utc."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc)
+    name = (iana_tz or "").strip()
+    if name:
+        try:
+            tz = ZoneInfo(name)
+        except Exception:
+            tz = datetime.now().astimezone().tzinfo
+    else:
+        tz = datetime.now().astimezone().tzinfo
+    return dt.replace(tzinfo=tz).astimezone(timezone.utc)
+
+
+def _utc_from_event_created(dt: datetime) -> datetime:
+    """Event.created_at defaults to aware UTC; SQLite may round-trip naive UTC."""
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc)
+    return dt.replace(tzinfo=timezone.utc)
+
+
 def _use_master_header_normalize() -> bool:
     settings = get_settings()
     pipe = settings.config.events_pipeline
@@ -53,6 +77,27 @@ def _entities_json(entities: Dict[str, List[str]]) -> Optional[str]:
 def _comma_join_parts(parts: List[str]) -> Optional[str]:
     out = [((p or "").strip()) for p in parts if (p or "").strip()]
     return ", ".join(out) if out else None
+
+
+def _infer_broadcast_slug_from_transcript(transcript: str) -> Optional[str]:
+    """If Worker returns BROADCAST without broadcast_type, infer category from transcript text."""
+    if not (transcript or "").strip():
+        return None
+    t = transcript.lower()
+    if "attempt to locate" in t or re.search(r"\batl\b", t):
+        return "attempt_to_locate"
+    if "road debris" in t or ("debris" in t and "road" in t):
+        return "road_debris"
+    if "cni" in t or "cni driver" in t:
+        return "cni_drivers"
+    if (
+        "storm warning" in t
+        or "severe weather" in t
+        or "tornado" in t
+        or ("storm" in t and "warning" in t)
+    ):
+        return "storm_warning"
+    return None
 
 
 def _span_store_from_entities(
@@ -209,12 +254,16 @@ def _auto_close_stale_events(events_db, stale_seconds: int) -> None:
     """Close open events whose last linked log entry timestamp is older than stale_seconds.
 
     Uses actual incident time (LogEntry.timestamp) rather than system/link timestamps.
+    Naive log timestamps are interpreted as local wall time (config or host TZ), not UTC.
     """
     if stale_seconds <= 0:
         return
     from ..database import LogsSessionLocal
     from ..models.log_entry import LogEntry
     from sqlalchemy import func as sa_func
+
+    pipe = get_settings().config.events_pipeline
+    log_tz = str(getattr(pipe, "log_naive_timezone", "") or "")
 
     now = datetime.now(timezone.utc)
     open_events = events_db.query(Event).filter(Event.status == "open").all()
@@ -239,15 +288,16 @@ def _auto_close_stale_events(events_db, stale_seconds: int) -> None:
                     LogEntry.id.in_(log_ids),
                     LogEntry.is_deleted == False,
                 ).scalar()
+                if ref_ts is not None:
+                    ref_ts = _utc_from_log_timestamp(ref_ts, log_tz)
             else:
                 ref_ts = None
 
             if ref_ts is None:
-                ref_ts = ev.created_at
+                ca = ev.created_at
+                ref_ts = _utc_from_event_created(ca) if ca is not None else None
             if ref_ts is None:
                 continue
-            if getattr(ref_ts, "tzinfo", None) is None:
-                ref_ts = ref_ts.replace(tzinfo=timezone.utc)
             if (now - ref_ts).total_seconds() >= stale_seconds:
                 ev.status = "closed"
                 ev.closed_at = now
@@ -313,9 +363,18 @@ def _create_event_full(
 ) -> str:
     is_broadcast = (worker_event_type or "").upper() == WORKER_BROADCAST_EVENT_TYPE
     bt_slug = None
-    if is_broadcast and broadcast_type_slug:
-        s = broadcast_type_slug.strip().lower()
-        bt_slug = s if s in BROADCAST_TYPE_SLUGS else None
+    if is_broadcast:
+        if broadcast_type_slug:
+            s = broadcast_type_slug.strip().lower()
+            bt_slug = s if s in BROADCAST_TYPE_SLUGS else None
+        if bt_slug is None:
+            inferred = _infer_broadcast_slug_from_transcript(transcript)
+            if inferred:
+                bt_slug = inferred
+                logger.info(
+                    "Events: inferred broadcast_type=%r (Worker omitted valid slug)",
+                    bt_slug,
+                )
 
     if is_broadcast:
         header = {
