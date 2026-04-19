@@ -1,17 +1,26 @@
 # ScanScribe
+An open source AI powered transcription system designed for public safety radio scanning. Uses whisper AI to transcribe raw radio recordings then stores and catagorizes them in an advanced searchable database. Easy to use web UI. Has the ability to create detailed incident threads with local ollama hosted LLM's. Docker ready deployment for easy setup.
 
-Public-safety audio transcription system built on Whisper AI with an LLM-powered incident events pipeline. Designed for Docker deployment on a LAN server receiving audio from recording software or the ScanScribe client.
+## Screenshots
+### ScanScribe Dashboard
+<img src="screenshots/Screenshot_1.png" alt="ScanScribe Dashboard">
+
+### Search and advanced filtering
+<img src="screenshots/Screenshot_2.png" alt="Search Engine for Transcriptions">
+
+### Insights Dashboard
+<img src="screenshots/Screenshot_3.png" alt="Advanced Insights">
 
 ## Features
 
 - **Whisper transcription** — multi-worker, VAD-filtered, CPU or GPU
-- **Events pipeline** — NER → Worker LLM (opens incidents) → Master LLM (attach/skip/close) → header normalizer → summary
-- **Ollama LLM integration** — local model routing, header normalization, and event summaries (no cloud required)
-- **Incident management** — open/close/reopen events, paginated archive, pipeline activity log, auto-close stale events by incident time
-- **Insights** — per-hour summaries via Gemini API or auto-generation
-- **ScanScribe client** — lightweight Windows uploader (`client/`) for ProScan integration
+- **Real-time Web UI** — WebSocket live updates, modern dark web interface
+- **Search and Playback** - Search for specific words in the database. Playback any transcriptions.
+- **Insights** — Daily activity statistics with interactable graph. Counts how many transcriptions per hour and logs talkgroups.
 - **Multi-user auth** — JWT-based login, user management
-- **Real-time UI** — WebSocket live updates, modern dark web interface
+- **Ollama LLM integration** — local model routing, header normalization, and event summaries (no cloud required)
+- **Events pipeline** — NER → Worker LLM (opens incidents) → Master LLM (attach/skip/close) → header normalizer → summary
+- **Incident management** — open/close/reopen events, paginated archive, pipeline activity log, auto-close stale events by incident time
 
 ## Prerequisites
 
@@ -32,23 +41,25 @@ openssl rand -hex 32   # generate a key
 ```
 
 ### 2. Configure `config.yml`
+**Events pipeline is DISABLED by default.**
+
+It's recommened to use whisper-small fined tuned on public safety audio. There is no official release for a finetuned model as of now. Just use the base whisper-small model available here on [Huggingface.](https://huggingface.co/openai/whisper-small)
 
 Key sections to set before first run:
-
 ```yaml
 model:
   name: <your-whisper-model-dir>   # folder name inside ./models/
   workers: 4                        # parallel transcription threads
 
 events_pipeline:
-  enabled: true
+  enabled: false
   ner_model_path: ./models/incident_ner_<version>
   llm_routing: true
   auto_close_stale_seconds: 3600    # close events idle > 1 hour
   cleanup_interval_seconds: 300     # sweep every 5 min
 
 incidents_ollama:
-  enabled: true
+  enabled: false
   base_url: "http://<ollama-host>:11434"
   worker_model: "gemma4:latest"     # cheap triage model
   master_model: "qwen3.5"           # routing + header + summary
@@ -92,6 +103,7 @@ ScanScribe Container (port 8000)
 ```
 
 ## Events Pipeline
+You can find my fine-tuned NER model here on [huggingface.](https://huggingface.co/xxbubziexx/incident_ner_v1)
 
 The pipeline processes every transcription through:
 
@@ -136,7 +148,24 @@ All runtime settings live in **`config.yml`**. Environment variables in **`.env`
 
 ## ScanScribe Client
 
-A lightweight Python/PyInstaller uploader for Windows (`client/`). Monitors a local directory (e.g. ProScan output), checks file stability, and uploads via HTTP to the ScanScribe API. Client settings (stability window, rejection filters, extensions) are fetched from the server at runtime.
+A lightweight audio file uploader for Windows. Available here: [Uploader Client on Github](https://github.com/xxbubziexx/Scanscribe-Uploader-Client). This is an active folder watcher for your scanner recording software recording directory. It uploads all recordings to the scanscribe server. Configurable in config.yml.
+
+## Timestamp and Talkgroup Extraction
+
+ScanScribe handles timestamps two different ways (config chooses). Talkgroup effectively has one implemented path on ingest, plus how it’s stored. SDRtrunk works natively with scanscribe and there is no need for any config.
+### 1. From the filename (“title”) 
+- YYYYMMDD_HHMMSS (e.g. 20260125_123543)
+- HH-MM-SS AM/PM MM-DD-YY
+- HH-MM-SS AM/PM only → uses today’s date
+
+
+### 2. From the filesystem (“metadata”) 
+- **macOS:** st_birthtime if present
+- **otherwise:** st_mtime (modification time)
+
+### How to configure proscan
+1. Use `%TT %D %C` as a custom file format. **Use this format if you plan on extracting timestamp data from the title.**
+2. Use `%TG %G %C` as a custom TIT2(title). **This is crucial for talkgroup extraction to work. SDRtrunk does this natively.**
 
 ## Docker Commands
 
@@ -203,7 +232,6 @@ scanscribe/
 │   │   └── summaries_auto.py
 │   ├── templates/                 # Jinja2 HTML pages
 │   └── static/                    # CSS + JS
-├── client/                        # ScanScribe Windows uploader
 ├── models/                        # Whisper + NER model weights
 ├── data/                          # SQLite databases (persistent)
 ├── logs/                          # Application logs
