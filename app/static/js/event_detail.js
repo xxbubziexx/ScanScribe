@@ -29,6 +29,20 @@ function escapeHtml(s) {
     return div.innerHTML;
 }
 
+const BROADCAST_SLUG_LABELS = {
+    storm_warning: 'STORM WARNING',
+    cni_drivers: 'CNI DRIVER',
+    road_debris: 'ROAD DEBRIS',
+    attempt_to_locate: 'ATTEMPT TO LOCATE',
+};
+
+function broadcastCategoryLabel(slug) {
+    if (!slug) return '';
+    const s = String(slug).trim().toLowerCase();
+    if (BROADCAST_SLUG_LABELS[s]) return BROADCAST_SLUG_LABELS[s];
+    return s.split('_').filter(Boolean).map((w) => w.toUpperCase()).join(' ');
+}
+
 function audioUrl(audioPath) {
     if (!audioPath || audioPath === 'file not saved') return null;
     const name = audioPath.split('/').pop() || audioPath;
@@ -44,9 +58,15 @@ function renderHeader(ev) {
             ? '<div class="ed-recommend-banner">Summary recommends closing this incident.</div>'
             : '';
     const typeLine = (() => {
-        const t = ev.event_type && String(ev.event_type).trim() ? String(ev.event_type).trim() : '—';
         const b = ev.broadcast_type && String(ev.broadcast_type).trim();
-        return b ? `${t} (${b})` : t;
+        if (b) {
+            return 'BROADCAST: ' + broadcastCategoryLabel(b);
+        }
+        const t = ev.event_type && String(ev.event_type).trim();
+        if (t && t.toUpperCase() === 'BROADCAST') {
+            return 'BROADCAST';
+        }
+        return t ? t : '—';
     })();
     if (hero) {
         hero.innerHTML = `

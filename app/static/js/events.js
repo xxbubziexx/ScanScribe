@@ -24,6 +24,34 @@ function escapeHtml(s) {
     return div.innerHTML;
 }
 
+/** Display labels for Worker classify_broadcast slugs (see ollama_worker.BROADCAST_TYPE_SLUGS). */
+const BROADCAST_SLUG_LABELS = {
+    storm_warning: 'STORM WARNING',
+    cni_drivers: 'CNI DRIVER',
+    road_debris: 'ROAD DEBRIS',
+    attempt_to_locate: 'ATTEMPT TO LOCATE',
+};
+
+function broadcastCategoryLabel(slug) {
+    if (!slug) return '';
+    const s = String(slug).trim().toLowerCase();
+    if (BROADCAST_SLUG_LABELS[s]) return BROADCAST_SLUG_LABELS[s];
+    return s.split('_').filter(Boolean).map((w) => w.toUpperCase()).join(' ');
+}
+
+/** Type column: incidents show event_type; broadcasts show BROADCAST: CATEGORY. */
+function formatEventTypeCell(e) {
+    const bt = e.broadcast_type && String(e.broadcast_type).trim();
+    if (bt) {
+        return 'BROADCAST: ' + broadcastCategoryLabel(bt);
+    }
+    const et = e.event_type && String(e.event_type).trim();
+    if (et && et.toUpperCase() === 'BROADCAST') {
+        return 'BROADCAST';
+    }
+    return et || '—';
+}
+
 function renderClosedEvents(list, monitorById) {
     const tbody = document.getElementById('closedEventsBody');
     if (!tbody) return;
@@ -33,7 +61,7 @@ function renderClosedEvents(list, monitorById) {
             <tr>
                 <td><a href="/events/${escapeHtml(e.event_id)}" class="events-id-link"><code>${escapeHtml(e.event_id)}</code></a></td>
                 <td>${monitorById[e.monitor_id] ? escapeHtml(monitorById[e.monitor_id].name) : e.monitor_id}</td>
-                <td>${escapeHtml(e.broadcast_type ? `${e.event_type || '—'} (${e.broadcast_type})` : (e.event_type || '—'))}</td>
+                <td>${escapeHtml(formatEventTypeCell(e))}</td>
                 <td>${escapeHtml(e.location || '—')}</td>
                 <td>${escapeHtml(e.units || '—')}</td>
                 <td>${e.spans_attached ?? 0}</td>
@@ -58,7 +86,7 @@ function renderRecentlyClosed(list, monitorById) {
             <tr>
                 <td><a href="/events/${escapeHtml(e.event_id)}" class="events-id-link"><code>${escapeHtml(e.event_id)}</code></a></td>
                 <td>${monitorById[e.monitor_id] ? escapeHtml(monitorById[e.monitor_id].name) : e.monitor_id}</td>
-                <td>${escapeHtml(e.broadcast_type ? `${e.event_type || '—'} (${e.broadcast_type})` : (e.event_type || '—'))}</td>
+                <td>${escapeHtml(formatEventTypeCell(e))}</td>
                 <td>${escapeHtml(e.location || '—')}</td>
                 <td>${e.closed_at ? new Date(e.closed_at).toLocaleString() : '—'}</td>
                 <td class="events-actions"><button type="button" class="events-btn events-btn--reopen event-reopen-btn" data-event-id="${escapeHtml(e.event_id)}">Reopen</button></td>
@@ -75,7 +103,7 @@ function renderEvents(list, monitorById) {
                 <td><a href="/events/${escapeHtml(e.event_id)}" class="events-id-link"><code>${escapeHtml(e.event_id)}</code></a></td>
                 <td>${monitorById[e.monitor_id] ? escapeHtml(monitorById[e.monitor_id].name) : e.monitor_id}</td>
                 <td>${e.status === 'open' ? '<span class="events-status events-status--open">Open</span>' : escapeHtml(e.status)}</td>
-                <td>${escapeHtml(e.broadcast_type ? `${e.event_type || '—'} (${e.broadcast_type})` : (e.event_type || '—'))}</td>
+                <td>${escapeHtml(formatEventTypeCell(e))}</td>
                 <td>${escapeHtml(e.location || '—')}</td>
                 <td>${escapeHtml(e.units || '—')}</td>
                 <td>${e.spans_attached ?? 0}</td>
