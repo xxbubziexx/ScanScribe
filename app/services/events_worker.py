@@ -440,6 +440,11 @@ def process_transcript_for_monitor(
             and getattr(io_cfg, "enabled", False)
         )
 
+        # Persist every span to span_store so get_recent_spans reflects full monitor activity,
+        # including VAD_REJECTED / NER-empty spans (NER columns blank).
+        events_db.add(_span_store_from_entities(monitor_id, talkgroup or "", transcript, log_entry_id, entities))
+        events_db.commit()
+
         if not entities:
             if not open_events or not llm_on:
                 # Idle monitor or LLM off — nothing to route, drop span.
@@ -448,10 +453,6 @@ def process_transcript_for_monitor(
                 )
                 return
             # Open incident exists — pass raw transcript to Master for continuity routing.
-            # No span_store insert since there are no entities to store.
-        else:
-            events_db.add(_span_store_from_entities(monitor_id, talkgroup or "", transcript, log_entry_id, entities))
-            events_db.commit()
 
         start_labels = parse_json_list(monitor.keyword_config) or ["EVT_TYPE"]
         start_labels = [s.strip().upper() for s in start_labels if s]

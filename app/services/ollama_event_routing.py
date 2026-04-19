@@ -122,9 +122,9 @@ ROUTING_TOOLS: List[Dict[str, Any]] = [
         "function": {
             "name": "get_recent_spans",
             "description": (
-                "Last N rows from span_store for this monitor (NER columns + transcript preview), "
-                "newest last; default is current talkgroup, or set all_talkgroups:true for the whole monitor. "
-                "Read-only."
+                "Last N rows from span_store for this monitor (transcript preview + NER columns when present; "
+                "NER-empty spans are included too). Newest last; default is current talkgroup, "
+                "or set all_talkgroups:true for the whole monitor. Read-only."
             ),
             "parameters": {
                 "type": "object",
@@ -921,6 +921,17 @@ def route_transcript_with_llm(
         "You route public-safety radio spans to an active incident.\n"
         "An event is already open for this monitor. Your job is attach, skip, or close — never create.\n\n"
 
+        "GROUNDING (read this first):\n"
+        "- The JSON field \"transcript\" is the only authoritative text of this span. Base attach/skip/close "
+        "on what those words actually mean (dispatch instruction, acknowledgment, scene update, noise, etc.).\n"
+        "- The field \"ner_clues\" is machine NER output: wrong labels, noise, and missed phrases are common. "
+        "Use it only as a hint when it agrees with the transcript; never let NER override plain English in "
+        "the transcript.\n"
+        "- Do NOT attach because ner_clues shows EVT_TYPE, LOC, or UNIT if the transcript itself does not "
+        "support tying this transmission to that open event.\n"
+        "- Your \"reason\" must reflect the transcript's meaning (paraphrase or short quote of what was "
+        "said), not a restatement of NER tags or event headers.\n\n"
+
         "DEFAULT: skip. Attaching incorrectly pollutes incidents. Only attach when the transcript has "
         "clear evidence linking it to a specific open event (shared units, same location, direct "
         "reference to the incident, or explicit dispatch continuity).\n\n"
@@ -935,26 +946,33 @@ def route_transcript_with_llm(
         "  \"Troop-C clear\" = dispatcher sign-off, never means incident resolved\n\n"
 
         "PROCESS:\n"
-        "STEP 1: Read the transcript. Identify any unit IDs, locations, or incident references.\n"
+        "STEP 1: Read \"transcript\" only — decide what this transmission is actually doing (scene detail vs "
+        "generic ack vs unrelated traffic). Then optionally glance at ner_clues for disambiguation, not "
+        "as a decision shortcut.\n"
         "STEP 2: Call tools (get_recent_spans, list_open_events or get_event_snapshot) for context.\n"
         "STEP 3: Output ONLY this JSON:\n"
         '{"action":"attach"|"skip"|"close","event_id":"<id or null>","reason":"<10 words max>"}\n\n'
 
         "RULES:\n"
-        "- attach: transcript contains a unit, location, or phrase that directly matches an open event.\n"
-        "- close: scene clear, all units released, dispatch formally closes, or disregard issued.\n"
+        "- attach: the transcript text semantically ties this span to one open event (same units/locations/"
+        "incident thread), not merely because NER and an event header both mention a keyword.\n"
+        "- close: scene clear, all units released, dispatch formally closes, or disregard issued — "
+        "supported by words in the transcript.\n"
         "- skip: default for generic traffic, 10-codes without context, noise, junk, or VAD_REJECTED.\n"
         "- If NER found no entities AND transcript is under 10 words, skip unless a unit ID in the "
         "transcript exactly matches an open event's units field.\n"
         "- Your reason MUST reference words actually in the transcript. "
-        "Never restate the event header as your reason.\n"
+        "Never restate the event header as your reason; never cite NER field names as the reason.\n"
         f"{primary_hint}{worker_hint}{stale_hint}\n"
         "Do not narrate. Do not explain. Output only the JSON."
     )
 
     system = system_builtin
 
+    # transcript first so the model sees ground truth before NER hints (JSON key order preserved).
     user_payload = {
+        "transcript": transcript,
+        "ner_clues": entities,
         "monitor_id": monitor_id,
         "monitor_name": monitor_name,
         "talkgroup": talkgroup,
@@ -964,8 +982,6 @@ def route_transcript_with_llm(
         "timestamp": ts_str,
         "primary_event_id": primary_event_id,
         "worker_deferred": worker_deferred,
-        "transcript": transcript,
-        "ner_clues": entities,
         "pipeline": "master_router",
     }
 
