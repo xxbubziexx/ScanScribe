@@ -170,20 +170,21 @@ def get_weekly_activity(db: Session, target_date: date):
 
 
 def get_last_full_minute_window(now: Optional[datetime] = None) -> tuple[datetime, datetime]:
-    """Return [start, end) for the previous complete minute in local wall-clock time."""
-    now_local = now or datetime.now()
-    end = now_local.replace(second=0, microsecond=0)
+    """Return [start, end) for the previous complete minute in UTC wall-clock time."""
+    # created_at is persisted in UTC (SQLite may return naive UTC), so keep this window naive UTC.
+    now_utc = now or datetime.utcnow()
+    end = now_utc.replace(second=0, microsecond=0)
     start = end - timedelta(minutes=1)
     return start, end
 
 
 def get_last_full_minute_transcription_count(db: Session) -> int:
-    """Count transcriptions whose timestamp falls in the previous full minute."""
+    """Count transcriptions created in the previous full minute."""
     start, end = get_last_full_minute_window()
     return int(
         db.query(func.count(LogEntry.id)).filter(
-            LogEntry.timestamp >= start,
-            LogEntry.timestamp < end,
+            LogEntry.created_at >= start,
+            LogEntry.created_at < end,
             LogEntry.is_deleted == False
         ).scalar() or 0
     )
