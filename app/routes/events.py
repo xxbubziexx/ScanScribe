@@ -1,10 +1,13 @@
 """Events pipeline API: monitors (departments) and events."""
+import csv
+import io
 import json
 from collections import defaultdict
-from datetime import datetime as dt, timezone
-from typing import Any, Dict, List, Optional
+from datetime import date, datetime as dt, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -45,6 +48,69 @@ def _iso_utc(d: dt | None, assume_utc: bool = False) -> str | None:
 def _start_labels(raw: Optional[str]) -> List[str]:
     labels = parse_json_list(raw)
     return labels if labels else ["EVT_TYPE"]
+
+
+def _batch_event_link_aggregates(
+    events_db: Session,
+    logs_db: Session,
+    event_ids: List[int],
+) -> Tuple[Dict[int, int], Dict[int, str], Dict[int, Optional[dt]]]:
+    """Spans per event, aggregated talkgroups, earliest linked log timestamp per event."""
+    if not event_ids:
+        return {}, {}, {}
+    count_rows = (
+        events_db.query(EventTranscriptLink.event_id, func.count(EventTranscriptLink.id))
+        .filter(EventTranscriptLink.event_id.in_(event_ids))
+        .group_by(EventTranscriptLink.event_id)
+        .all()
+    )
+    link_counts = {eid: int(cnt or 0) for eid, cnt in count_rows}
+    link_rows = (
+        events_db.query(EventTranscriptLink.event_id, EventTranscriptLink.log_entry_id)
+        .filter(EventTranscriptLink.event_id.in_(event_ids))
+        .all()
+    )
+    log_ids = sorted({lid for _, lid in link_rows if lid is not None})
+    talkgroup_by_log_id: Dict[int, str] = {}
+    ts_by_log_id: Dict[int, dt] = {}
+    if log_ids:
+        for lid, tg, ts in logs_db.query(
+            LogEntry.id, LogEntry.talkgroup, LogEntry.timestamp
+        ).filter(LogEntry.id.in_(log_ids)).all():
+            if tg:
+                talkgroup_by_log_id[lid] = tg
+            if ts is not None:
+                ts_by_log_id[lid] = ts
+    links_by_event: Dict[int, List[int]] = defaultdict(list)
+    for ev_id, log_id in link_rows:
+        if log_id is not None:
+            links_by_event[ev_id].append(log_id)
+    first_span_at_by_event: Dict[int, dt] = {}
+    for ev_id, lids in links_by_event.items():
+        tss = [ts_by_log_id[lid] for lid in lids if lid in ts_by_log_id]
+        if tss:
+            first_span_at_by_event[ev_id] = min(tss)
+    talkgroups_by_event: Dict[int, set] = defaultdict(set)
+    for ev_id, log_id in link_rows:
+        tg = talkgroup_by_log_id.get(log_id)
+        if tg:
+            talkgroups_by_event[ev_id].add(tg)
+    talkgroup_str = {
+        eid: ", ".join(sorted(talkgroups_by_event[eid])) if talkgroups_by_event.get(eid) else ""
+        for eid in event_ids
+    }
+    return link_counts, talkgroup_str, first_span_at_by_event
+
+
+def _event_type_csv_display(event: Event) -> str:
+    """Single column matching UI: BROADCAST subtype vs incident event_type."""
+    bt = (getattr(event, "broadcast_type", None) or "").strip()
+    if bt:
+        return f"BROADCAST:{bt}"
+    et = (event.event_type or "").strip()
+    if et.upper() == "BROADCAST":
+        return "BROADCAST"
+    return et
 
 
 router = APIRouter(prefix="/api/events", tags=["events"])
@@ -188,52 +254,13 @@ async def list_events(
     total: int = q.count()
     events = q.offset(offset).limit(limit).all()
     event_ids = [e.id for e in events]
-    link_counts = {}
-    talkgroups_by_event = {}
-    if event_ids:
-        count_rows = (
-            events_db.query(EventTranscriptLink.event_id, func.count(EventTranscriptLink.id))
-            .filter(EventTranscriptLink.event_id.in_(event_ids))
-            .group_by(EventTranscriptLink.event_id)
-            .all()
-        )
-        link_counts = {eid: int(cnt or 0) for eid, cnt in count_rows}
-        link_rows = (
-            events_db.query(EventTranscriptLink.event_id, EventTranscriptLink.log_entry_id)
-            .filter(EventTranscriptLink.event_id.in_(event_ids))
-            .all()
-        )
-        log_ids = sorted({lid for _, lid in link_rows if lid is not None})
-        talkgroup_by_log_id = {}
-        ts_by_log_id = {}
-        if log_ids:
-            for lid, tg, ts in logs_db.query(
-                LogEntry.id, LogEntry.talkgroup, LogEntry.timestamp
-            ).filter(LogEntry.id.in_(log_ids)).all():
-                if tg:
-                    talkgroup_by_log_id[lid] = tg
-                if ts is not None:
-                    ts_by_log_id[lid] = ts
-        links_by_event = defaultdict(list)
-        for ev_id, log_id in link_rows:
-            if log_id is not None:
-                links_by_event[ev_id].append(log_id)
-        first_span_at_by_event = {}
-        for ev_id, lids in links_by_event.items():
-            tss = [ts_by_log_id[lid] for lid in lids if lid in ts_by_log_id]
-            if tss:
-                first_span_at_by_event[ev_id] = min(tss)
-        for ev_id, log_id in link_rows:
-            tg = talkgroup_by_log_id.get(log_id)
-            if not tg:
-                continue
-            talkgroups_by_event.setdefault(ev_id, set()).add(tg)
-    else:
-        first_span_at_by_event = {}
+    link_counts, talkgroup_str_map, first_span_at_by_event = _batch_event_link_aggregates(
+        events_db, logs_db, event_ids
+    )
     out = []
     for e in events:
         spans_attached = link_counts.get(e.id, 0)
-        talkgroup_str = ", ".join(sorted(talkgroups_by_event.get(e.id, set()))) if talkgroups_by_event.get(e.id) else ""
+        talkgroup_str = talkgroup_str_map.get(e.id, "")
         incident_at = first_span_at_by_event.get(e.id)
         out.append(EventResponse(
             id=e.id,
@@ -255,6 +282,82 @@ async def list_events(
             talkgroup=talkgroup_str,
         ))
     return {"items": out, "total": total}
+
+
+@router.get("/events/export-headers")
+async def export_events_normalized_headers(
+    monitor_id: Optional[int] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(10000, ge=1, le=50000),
+    current_user: User = Depends(get_current_active_user),
+    events_db: Session = Depends(get_events_db),
+    logs_db: Session = Depends(get_logs_db),
+):
+    """Download CSV of pipeline-normalized headers: event type, location, units, times (Master/worker fields on Event)."""
+    q = events_db.query(Event).order_by(Event.created_at.desc())
+    if monitor_id is not None:
+        q = q.filter(Event.monitor_id == monitor_id)
+    if status:
+        q = q.filter(Event.status == status)
+    rows = q.limit(limit).all()
+    event_ids = [e.id for e in rows]
+    monitors = {m.id: m.name for m in events_db.query(Monitor).all()}
+    link_counts, talkgroup_str_map, first_span_at_by_event = _batch_event_link_aggregates(
+        events_db, logs_db, event_ids
+    )
+
+    buf = io.StringIO(newline="")
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "event_id",
+            "monitor_id",
+            "monitor_name",
+            "status",
+            "event_type",
+            "broadcast_type",
+            "type_display",
+            "location",
+            "units",
+            "status_detail",
+            "summary",
+            "spans_attached",
+            "talkgroups",
+            "incident_at_iso",
+            "created_at_iso",
+            "closed_at_iso",
+        ]
+    )
+    for e in rows:
+        mid = e.monitor_id
+        writer.writerow(
+            [
+                e.event_id,
+                mid,
+                monitors.get(mid, ""),
+                e.status or "",
+                (e.event_type or "").strip(),
+                (getattr(e, "broadcast_type", None) or "").strip(),
+                _event_type_csv_display(e),
+                (e.location or "").strip(),
+                (e.units or "").strip(),
+                (e.status_detail or "").strip(),
+                (e.summary or "").replace("\r\n", " ").replace("\n", " ").strip(),
+                link_counts.get(e.id, 0),
+                talkgroup_str_map.get(e.id, ""),
+                _iso_utc(first_span_at_by_event.get(e.id)) if first_span_at_by_event.get(e.id) else "",
+                _iso_utc(e.created_at, assume_utc=True) or "",
+                _iso_utc(e.closed_at, assume_utc=True) or "",
+            ]
+        )
+
+    payload = "\ufeff" + buf.getvalue()
+    fn = f"scanscribe_events_headers_{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        iter([payload.encode("utf-8")]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+    )
 
 
 @router.get("/events/{event_id}")
