@@ -33,7 +33,10 @@
                 <h2 class="events-page-title">Incident pipeline</h2>
                 <p class="events-page-lede">Open incidents, NER / LLM debug, and monitor configuration.</p>
             </div>
-            <button type="button" id="eventsRefreshBtn" class="btn events-refresh-btn" title="Reload lists">Refresh</button>
+            <div class="flex-gap">
+                <button type="button" id="eventsExportHeadersBtn" class="btn" title="CSV: normalized type, location, units, times">Download headers CSV</button>
+                <button type="button" id="eventsRefreshBtn" class="btn events-refresh-btn" title="Reload lists">Refresh</button>
+            </div>
         </div>
 
         <nav class="events-tab-nav" aria-label="Events sections">
@@ -182,6 +185,6 @@
             </section>
         </div>
     </div>
-    <script src="/static/js/events.js?v=4"></script>
+    <script src="/static/js/events.js?v=5"></script>
 </body>
 </html>

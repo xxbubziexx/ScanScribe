@@ -87,7 +87,8 @@ body.insights-page .container {
 .search-result-row:hover {
     background: rgba(255, 255, 255, 0.04) !important;
 }
-.copy-result-btn {
+.copy-result-btn,
+.download-result-btn {
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 4px;
@@ -97,9 +98,14 @@ body.insights-page .container {
     color: #9ca3af;
     transition: background 0.2s, color 0.2s;
 }
-.copy-result-btn:hover {
+.copy-result-btn:hover,
+.download-result-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
     color: #e5e7eb;
+}
+.download-result-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
 }
 .search-result-row .search-result-transcript {
     white-space: pre-wrap;

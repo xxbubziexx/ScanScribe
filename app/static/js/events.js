@@ -522,8 +522,34 @@ function initTabs() {
     });
 }
 
+async function downloadNormalizedHeadersCsv() {
+    const res = await fetch('/api/events/events/export-headers?limit=50000', {
+        headers: { Authorization: `Bearer ${token()}` },
+    });
+    if (!res.ok) {
+        alert('Export failed: ' + res.statusText);
+        return;
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition');
+    let fname = 'scanscribe_events_headers.csv';
+    const m = cd && cd.match(/filename="([^"]+)"/);
+    if (m) fname = m[1];
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('currentUser').textContent = username || 'User';
+    document.getElementById('eventsExportHeadersBtn')?.addEventListener('click', () => {
+        downloadNormalizedHeadersCsv().catch((err) => {
+            console.error(err);
+            alert('Export failed');
+        });
+    });
     document.getElementById('eventsRefreshBtn')?.addEventListener('click', async () => {
         const monitors = await loadAll();
         const closedPane = document.getElementById('paneClosed');

@@ -484,8 +484,15 @@ function updateSearchResults(results, total) {
                 ${entry.talkgroup || 'N/A'}
             </div>
             <div class="flex-1 text-sm search-result-transcript">${highlightKeyword(entry.transcript || '', searchFilters.keyword)}</div>
-            <div class="flex flex-col gap-1 text-right min-w-[60px] items-end">
-                <button type="button" class="copy-result-btn" title="Copy [talkgroup] &quot;transcript&quot;" data-talkgroup="${escapeHtml(entry.talkgroup || 'N/A')}" data-transcript="${escapeHtml(entry.transcript || '')}">📋</button>
+            <div class="flex flex-col gap-1 text-right min-w-[72px] items-end">
+                <div class="flex flex-row gap-1 items-center justify-end">
+                    <button type="button" class="copy-result-btn" title="Copy [talkgroup] &quot;transcript&quot;" data-talkgroup="${escapeHtml(entry.talkgroup || 'N/A')}" data-transcript="${escapeHtml(entry.transcript || '')}">📋</button>
+                    <button type="button" class="download-result-btn"
+                        title="${hasAudio ? 'Download audio file' : 'No audio saved for this log'}"
+                        data-audio="${escapedPath}"
+                        data-id="${entry.id}"
+                        ${!hasAudio ? 'disabled' : ''}>💾</button>
+                </div>
                 <div class="text-xs text-gray-400">${(entry.duration || 0).toFixed(1)}s</div>
                 <div class="text-xs text-gray-500">${formatBytes(entry.file_size || 0)}</div>
             </div>
@@ -519,6 +526,25 @@ function updateSearchResults(results, total) {
             } else {
                 fallbackCopy(text, doCopy);
             }
+        });
+    });
+
+    container.querySelectorAll('.download-result-btn:not([disabled])').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const raw = btn.dataset.audio;
+            if (!raw) return;
+            const audioPath = decodeURIComponent(raw);
+            if (!audioPath || audioPath === 'file not saved') return;
+            const url = '/' + audioPath.replace(/^\/+/, '');
+            const basename = audioPath.split('/').pop() || `log_${btn.dataset.id || 'audio'}`;
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = basename;
+            a.rel = 'noopener';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         });
     });
 
