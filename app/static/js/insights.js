@@ -58,13 +58,13 @@ document.addEventListener('DOMContentLoaded', () => {
     startLiveCpmPolling();
 });
 
-// Poll live CPM every 10s
+// Poll calls/min card every 10s (previous full minute count)
 function startLiveCpmPolling() {
     const token = localStorage.getItem('access_token');
     if (!token) return;
     const poll = async () => {
         try {
-            const r = await fetch('/api/insights/live-cpm?window=1', {
+            const r = await fetch('/api/insights/live-cpm', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (r.ok) {
@@ -179,7 +179,7 @@ async function loadInsights() {
 // Update live CPM (called by updateStats and by polling)
 function updateLiveCpm(value) {
     const el = document.getElementById('stat-calls-per-min');
-    if (el) el.textContent = (value != null ? value : 0).toFixed(2);
+    if (el) el.textContent = String(Math.max(0, Number.isFinite(Number(value)) ? Math.round(Number(value)) : 0));
 }
 
 // Update stat cards

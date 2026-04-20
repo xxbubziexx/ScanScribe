@@ -24,14 +24,17 @@ class HourSummaryRequest(BaseModel):
 
 @router.get("/live-cpm")
 async def get_live_cpm(
-    window: int = Query(5, ge=1, le=60, description="Rolling window in minutes"),
+    window: int = Query(1, ge=1, le=60, description="Deprecated. Metric is fixed to previous full minute."),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db)
 ):
-    """Live calls per minute (transcripts in last N minutes / N). For real-time dashboard polling."""
+    """Calls/min card value: count of transcriptions in the previous full minute."""
+    minute_start, minute_end = get_last_full_minute_window()
     return {
-        "calls_per_minute": get_live_calls_per_minute(db, window_minutes=window),
-        "window_minutes": window,
+        "calls_per_minute": get_last_full_minute_transcription_count(db),
+        "window_minutes": 1,
+        "minute_start": minute_start.isoformat(),
+        "minute_end": minute_end.isoformat(),
     }
 
 
@@ -64,8 +67,8 @@ async def get_insights_stats(
         activity = get_weekly_activity(db, target_date)
         summary = get_monthly_summary(db, target_date)
     
-    # Live calls per minute (rolling window, independent of selected date)
-    summary["calls_per_minute"] = get_live_calls_per_minute(db, window_minutes=1)
+    # Calls/min card: previous full minute count (independent of selected date)
+    summary["calls_per_minute"] = get_last_full_minute_transcription_count(db)
     summary["calls_per_minute_window"] = 1
     
     # Get talkgroup breakdown
@@ -166,16 +169,24 @@ def get_weekly_activity(db: Session, target_date: date):
     return activity
 
 
-def get_live_calls_per_minute(db: Session, window_minutes: int = 5) -> float:
-    """Transcripts in last N minutes / N = live calls per minute."""
-    if window_minutes <= 0:
-        return 0.0
-    cutoff = datetime.now() - timedelta(minutes=window_minutes)
-    count = db.query(func.count(LogEntry.id)).filter(
-        LogEntry.timestamp >= cutoff,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    return round(count / window_minutes, 2)
+def get_last_full_minute_window(now: Optional[datetime] = None) -> tuple[datetime, datetime]:
+    """Return [start, end) for the previous complete minute in local wall-clock time."""
+    now_local = now or datetime.now()
+    end = now_local.replace(second=0, microsecond=0)
+    start = end - timedelta(minutes=1)
+    return start, end
+
+
+def get_last_full_minute_transcription_count(db: Session) -> int:
+    """Count transcriptions whose timestamp falls in the previous full minute."""
+    start, end = get_last_full_minute_window()
+    return int(
+        db.query(func.count(LogEntry.id)).filter(
+            LogEntry.timestamp >= start,
+            LogEntry.timestamp < end,
+            LogEntry.is_deleted == False
+        ).scalar() or 0
+    )
 
 
 def get_daily_summary(db: Session, target_date: date):
