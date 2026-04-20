@@ -152,7 +152,8 @@ A lightweight audio file uploader for Windows. Available here: [Uploader Client 
 
 ## Timestamp and Talkgroup Extraction
 
-ScanScribe handles timestamps two different ways (config chooses). Talkgroup effectively has one implemented path on ingest, plus how it’s stored. SDRtrunk works natively with scanscribe and there is no need for any config.
+ScanScribe handles timestamps two different ways (config chooses). From file date modified or from the filename. SDRtrunk works natively with scanscribe and there is no need for any config.
+
 ### 1. From the filename (“title”) 
 - YYYYMMDD_HHMMSS (e.g. 20260125_123543)
 - HH-MM-SS AM/PM MM-DD-YY
