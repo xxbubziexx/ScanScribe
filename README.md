@@ -30,6 +30,81 @@ An open source AI powered transcription system designed for public safety radio 
 - Whisper model (`models/whisper-*`)
 - 8 GB+ RAM recommended; 16+ GB if running Ollama on the same host
 
+## Windows First-Time Docker Setup (Simple Guide)
+
+If this is your first time using Docker, follow these exact steps.
+
+### Step 1: Install Docker Desktop
+1. Go to [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
+2. Download **Docker Desktop for Windows**
+3. Run the installer and keep default options
+4. Restart your PC if Docker asks
+5. Open Docker Desktop and wait until it says Docker is running
+
+### Step 2: Download ScanScribe
+Open **PowerShell** and run:
+
+```powershell
+git clone https://github.com/xxbubziexx/scanscribe.git
+cd scanscribe
+```
+
+If you do not have Git installed, install **Git for Windows** first:
+[https://git-scm.com/download/win](https://git-scm.com/download/win)
+
+### Step 3: Create your environment file
+In PowerShell (inside the `scanscribe` folder):
+
+```powershell
+copy .env.example .env
+```
+
+Then open `.env` in Notepad and set a strong `SECRET_KEY`.
+
+Quick way to generate one:
+
+```powershell
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### Step 4: Check `config.yml`
+Open `config.yml` and confirm:
+- `model.name` matches your Whisper model folder in `./models`
+- `events_pipeline.enabled` is true/false as you want
+- `incidents_ollama.enabled` and `base_url` are correct if using Ollama
+
+### Step 5: Start ScanScribe
+From the project folder:
+
+```powershell
+docker-compose up -d --build
+```
+
+First build can take a while. This is normal.
+
+### Step 6: Open the app
+Go to:
+
+`http://localhost:8000`
+
+Register your first account.
+
+### Step 7: Basic commands you will use later
+```powershell
+# See running logs
+docker-compose logs -f
+
+# Stop ScanScribe
+docker-compose down
+
+# Start again later
+docker-compose up -d
+```
+
+### Notes
+- You do **not** need to install FFmpeg manually when using Docker. It is already included in the container.
+- Your databases and files stay in local folders (`./data`, `./logs`, `./audio_storage`) between restarts.
+
 ## Quick Start
 
 ### 1. Clone & configure environment
