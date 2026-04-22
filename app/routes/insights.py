@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, or_
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import date, datetime, timedelta, time
 
 from ..database import get_logs_db
@@ -30,11 +30,16 @@ async def get_live_cpm(
 ):
     """Calls/min card value: count of transcriptions in the previous full minute."""
     minute_start, minute_end = get_last_full_minute_window()
+    prev_start = minute_start - timedelta(minutes=1)
+    prev_end = minute_start
+    prev_count = get_transcription_count_by_created_window(db, prev_start, prev_end)
+    curr_count = get_last_full_minute_transcription_count(db)
     return {
-        "calls_per_minute": get_last_full_minute_transcription_count(db),
+        "calls_per_minute": curr_count,
         "window_minutes": 1,
         "minute_start": minute_start.isoformat(),
         "minute_end": minute_end.isoformat(),
+        "trend": _build_trend(curr_count, prev_count, "vs previous minute"),
     }
 
 
@@ -68,8 +73,10 @@ async def get_insights_stats(
         summary = get_monthly_summary(db, target_date)
     
     # Calls/min card: previous full minute count (independent of selected date)
-    summary["calls_per_minute"] = get_last_full_minute_transcription_count(db)
+    calls_last_minute = get_last_full_minute_transcription_count(db)
+    summary["calls_per_minute"] = calls_last_minute
     summary["calls_per_minute_window"] = 1
+    summary["trends"] = get_summary_trends(db, calls_last_minute)
     
     # Get talkgroup breakdown
     talkgroups = get_talkgroup_breakdown(db, target_date, view)
@@ -178,9 +185,22 @@ def get_last_full_minute_window(now: Optional[datetime] = None) -> tuple[datetim
     return start, end
 
 
+def get_last_full_hour_window(now: Optional[datetime] = None) -> tuple[datetime, datetime]:
+    """Return [start, end) for the previous complete hour in UTC wall-clock time."""
+    now_utc = now or datetime.utcnow()
+    end = now_utc.replace(minute=0, second=0, microsecond=0)
+    start = end - timedelta(hours=1)
+    return start, end
+
+
 def get_last_full_minute_transcription_count(db: Session) -> int:
     """Count transcriptions created in the previous full minute."""
     start, end = get_last_full_minute_window()
+    return get_transcription_count_by_created_window(db, start, end)
+
+
+def get_transcription_count_by_created_window(db: Session, start: datetime, end: datetime) -> int:
+    """Count transcriptions by created_at for [start, end) in UTC naive datetimes."""
     return int(
         db.query(func.count(LogEntry.id)).filter(
             LogEntry.created_at >= start,
@@ -188,6 +208,59 @@ def get_last_full_minute_transcription_count(db: Session) -> int:
             LogEntry.is_deleted == False
         ).scalar() or 0
     )
+
+
+def get_unique_talkgroups_by_created_window(db: Session, start: datetime, end: datetime) -> int:
+    """Count distinct talkgroups by created_at for [start, end)."""
+    return int(
+        db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
+            LogEntry.created_at >= start,
+            LogEntry.created_at < end,
+            LogEntry.is_deleted == False
+        ).scalar() or 0
+    )
+
+
+def _build_trend(current: int, previous: int, basis: str) -> Dict[str, object]:
+    delta = int(current or 0) - int(previous or 0)
+    direction = "up" if delta > 0 else ("down" if delta < 0 else "flat")
+    return {
+        "current": int(current or 0),
+        "previous": int(previous or 0),
+        "delta": delta,
+        "direction": direction,
+        "basis": basis,
+    }
+
+
+def get_summary_trends(db: Session, calls_last_minute: int) -> Dict[str, Dict[str, object]]:
+    """Trend payload for stat cards with requested comparison windows."""
+    # Total transcriptions: last full hour vs previous full hour
+    hour_start, hour_end = get_last_full_hour_window()
+    prev_hour_start = hour_start - timedelta(hours=1)
+    prev_hour_end = hour_start
+    total_hour = get_transcription_count_by_created_window(db, hour_start, hour_end)
+    total_prev_hour = get_transcription_count_by_created_window(db, prev_hour_start, prev_hour_end)
+
+    # Calls last minute: previous full minute vs minute before that
+    min_start, _ = get_last_full_minute_window()
+    prev_min_start = min_start - timedelta(minutes=1)
+    prev_min_end = min_start
+    calls_prev_minute = get_transcription_count_by_created_window(db, prev_min_start, prev_min_end)
+
+    # Unique talkgroups: last 24 hours vs previous 24 hours
+    day_end = datetime.utcnow()
+    day_start = day_end - timedelta(days=1)
+    prev_day_start = day_start - timedelta(days=1)
+    prev_day_end = day_start
+    tg_last_day = get_unique_talkgroups_by_created_window(db, day_start, day_end)
+    tg_prev_day = get_unique_talkgroups_by_created_window(db, prev_day_start, prev_day_end)
+
+    return {
+        "total_transcriptions": _build_trend(total_hour, total_prev_hour, "vs previous hour"),
+        "calls_last_minute": _build_trend(calls_last_minute, calls_prev_minute, "vs previous minute"),
+        "unique_talkgroups": _build_trend(tg_last_day, tg_prev_day, "vs previous 24h"),
+    }
 
 
 def get_daily_summary(db: Session, target_date: date):

@@ -70,6 +70,7 @@ function startLiveCpmPolling() {
             if (r.ok) {
                 const d = await r.json();
                 updateLiveCpm(d.calls_per_minute);
+                if (d.trend) updateTrendIndicator('trend-calls-per-min', d.trend);
             }
         } catch (_) { /* ignore */ }
     };
@@ -182,6 +183,25 @@ function updateLiveCpm(value) {
     if (el) el.textContent = String(Math.max(0, Number.isFinite(Number(value)) ? Math.round(Number(value)) : 0));
 }
 
+function updateTrendIndicator(elementId, trend) {
+    const el = document.getElementById(elementId);
+    if (!el || !trend) return;
+    const delta = Number(trend.delta || 0);
+    let arrow = '→';
+    let cls = 'trend-flat';
+    if (delta > 0) {
+        arrow = '▲';
+        cls = 'trend-up';
+    } else if (delta < 0) {
+        arrow = '▼';
+        cls = 'trend-down';
+    }
+    const absDelta = Math.abs(Math.round(delta));
+    const basis = trend.basis ? ` ${trend.basis}` : '';
+    el.className = `stat-trend ${cls}`;
+    el.textContent = `${arrow} ${absDelta}${basis}`;
+}
+
 // Update stat cards
 function updateStats(summary) {
     if (!summary) return;
@@ -190,6 +210,10 @@ function updateStats(summary) {
     document.getElementById('stat-talkgroups').textContent = summary.unique_talkgroups || 0;
     document.getElementById('stat-avg-duration').textContent = `${(summary.avg_duration || 0).toFixed(1)}s`;
     document.getElementById('stat-peak-hour').textContent = summary.peak_hour || '--';
+    const trends = summary.trends || {};
+    updateTrendIndicator('trend-total', trends.total_transcriptions);
+    updateTrendIndicator('trend-calls-per-min', trends.calls_last_minute);
+    updateTrendIndicator('trend-talkgroups', trends.unique_talkgroups);
 }
 
 // Update activity chart

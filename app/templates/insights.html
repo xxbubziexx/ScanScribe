@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <link rel="stylesheet" href="/static/css/dashboard.css?v=insights2">
-    <link rel="stylesheet" href="/static/css/insights.css?v=2">
+    <link rel="stylesheet" href="/static/css/insights.css?v=3">
     <link rel="stylesheet" href="/static/css/flatpickr-dark.css">
 </head>
 <body class="insights-page">
@@ -60,14 +60,17 @@
                 <div class="stat-card">
                     <div class="text-sm text-gray-400">Total Transcriptions</div>
                     <div class="text-2xl font-bold" id="stat-total">0</div>
+                    <div class="stat-trend" id="trend-total">--</div>
                 </div>
                 <div class="stat-card">
                     <div class="text-sm text-gray-400" title="Total transcriptions that occurred in the previous complete minute">Total Calls Last Minute</div>
                     <div class="text-2xl font-bold" id="stat-calls-per-min">0</div>
+                    <div class="stat-trend" id="trend-calls-per-min">--</div>
                 </div>
                 <div class="stat-card">
                     <div class="text-sm text-gray-400">Unique Talkgroups</div>
                     <div class="text-2xl font-bold" id="stat-talkgroups">0</div>
+                    <div class="stat-trend" id="trend-talkgroups">--</div>
                 </div>
                 <div class="stat-card">
                     <div class="text-sm text-gray-400">Avg Duration</div>
@@ -194,6 +197,6 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="/static/js/insights.js?v=12"></script>
+    <script src="/static/js/insights.js?v=13"></script>
 </body>
 </html>

@@ -23,6 +23,21 @@ body.insights-page .container {
 .stat-card:hover {
     background: rgba(255, 255, 255, 0.05);
 }
+.stat-trend {
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    min-height: 1rem;
+}
+.stat-trend.trend-up {
+    color: #34d399;
+}
+.stat-trend.trend-down {
+    color: #f87171;
+}
+.stat-trend.trend-flat {
+    color: #9ca3af;
+}
 .view-toggle-btn {
     transition: all 0.2s;
 }
