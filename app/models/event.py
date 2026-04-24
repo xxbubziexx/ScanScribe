@@ -83,5 +83,6 @@ class SpanStore(EventsBase):
     persons = Column(Text, nullable=True)
     vehicles = Column(Text, nullable=True)
     plates = Column(Text, nullable=True)
+    time_mentions = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     log_entry_id = Column(Integer, nullable=True, index=True)

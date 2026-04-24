@@ -334,6 +334,7 @@ def _tool_get_recent_spans(
             "persons": r.persons,
             "vehicles": r.vehicles,
             "plates": r.plates,
+            "time_mentions": getattr(r, "time_mentions", None),
             "transcript_preview": (preview[:500] + "…") if len(preview) > 500 else preview,
             "created_at": r.created_at.isoformat() if r.created_at else None,
         })

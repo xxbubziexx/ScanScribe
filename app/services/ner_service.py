@@ -6,8 +6,25 @@ from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# Entity labels from user's model
-ENTITY_LABELS = frozenset({"UNIT", "LOC", "SUBJECT", "DESC", "EVT_TYPE", "ADDRESS", "X_STREET", "AGENCY", "STATUS", "CONTEXT"})
+# Entity labels from the fine-tuned model (BIO tags normalized to type names).
+# LOC: landmarks, street names, intersections (not house numbers — use ADDRESS for those).
+# ADDRESS: house / numbered addresses. STATUS: operational status phrases.
+# TIME: time-of-day or ETA-style phrases (dispatch times, "14:30", "in 10 minutes").
+ENTITY_LABELS = frozenset(
+    {
+        "UNIT",
+        "LOC",
+        "SUBJECT",
+        "DESC",
+        "EVT_TYPE",
+        "ADDRESS",
+        "X_STREET",
+        "AGENCY",
+        "STATUS",
+        "TIME",
+        "CONTEXT",
+    }
+)
 
 _pipeline = None
 

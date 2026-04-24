@@ -120,6 +120,7 @@ def _span_store_from_entities(
         persons=_comma_join_parts(entities.get("SUBJECT", [])),
         vehicles=_comma_join_parts(entities.get("DESC", []) + entities.get("STATUS", [])),
         plates=_comma_join_parts(entities.get("CONTEXT", [])),
+        time_mentions=_comma_join_parts(entities.get("TIME", [])),
         log_entry_id=log_entry_id,
     )
 
@@ -199,7 +200,12 @@ def _build_header_from_entities(entities: Dict[str, List[str]], transcript: str)
     event_type = join_sorted_unique(evt_type_parts) if evt_type_parts else "N/A"
     status_detail = first(entities.get("STATUS", []))
 
-    desc_parts = entities.get("DESC", []) + entities.get("SUBJECT", []) + entities.get("CONTEXT", [])
+    desc_parts = (
+        entities.get("DESC", [])
+        + entities.get("SUBJECT", [])
+        + entities.get("TIME", [])
+        + entities.get("CONTEXT", [])
+    )
     summary = join_sorted_unique(desc_parts) if desc_parts else None
 
     return {
@@ -516,7 +522,11 @@ def process_transcript_for_monitor(
         start_labels = parse_json_list(monitor.keyword_config) or ["EVT_TYPE"]
         start_labels = [s.strip().upper() for s in start_labels if s]
         has_start_label = any(entities.get(lbl) for lbl in start_labels)
-        addresses = entities.get("ADDRESS", []) + entities.get("LOC", []) + entities.get("X_STREET", [])
+        addresses = (
+            entities.get("ADDRESS", [])
+            + entities.get("LOC", [])
+            + entities.get("X_STREET", [])
+        )
         units = entities.get("UNIT", []) + entities.get("AGENCY", [])
         evt_types = entities.get("EVT_TYPE", [])
 

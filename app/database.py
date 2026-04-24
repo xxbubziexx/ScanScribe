@@ -120,3 +120,8 @@ def init_db():
         if "llm_reason" not in link_cols2:
             conn.execute(text("ALTER TABLE event_transcript_links ADD COLUMN llm_reason TEXT"))
             conn.commit()
+        r = conn.execute(text("PRAGMA table_info(span_store)"))
+        span_cols = [row[1] for row in r.fetchall()]
+        if "time_mentions" not in span_cols:
+            conn.execute(text("ALTER TABLE span_store ADD COLUMN time_mentions TEXT"))
+            conn.commit()
