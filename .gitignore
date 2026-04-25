@@ -38,9 +38,9 @@ data/
 logs/
 *.log
 
-# Docker
-.dockerignore
-
+# Docker — example compose in repo; local: docker-compose.yml, optional overrides
+Dockerfile
+docker-compose.override.yml
 # Models (too large for git)
 models/*
 !models/.gitkeep
@@ -71,6 +71,9 @@ Thumbs.db
 *.tmp
 *.bak
 
-# Live compose file — copy docker-compose.yml.example and customize
+# Local-only compose (templates are docker-compose.*.example)
 docker-compose.yml
 client/*
+.dockerignore
+# Local name for pip; start from requirements.cpu.example
+requirements.txt
