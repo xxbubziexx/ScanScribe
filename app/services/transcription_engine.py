@@ -289,8 +289,7 @@ class TranscriptionEngine:
             audio_chunk,
             sampling_rate=16000,
             return_tensors="pt"
-        ).input_features.to(self.device)
-        
+        ).input_features.to(device=self.device, dtype=self.model.dtype)        
         # Generate transcription
         generated_ids = self.model.generate(
             input_features,
