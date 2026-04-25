@@ -1,0 +1,40 @@
+# Copy to `requirements.txt` in the project root (CPU path), then `pip install -r requirements.txt` or build Docker.
+
+# Web Framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+jinja2==3.1.4
+
+# Authentication & Security
+bcrypt==4.0.1
+passlib==1.7.4
+python-jose[cryptography]==3.3.0
+pydantic[email]==2.9.2
+
+# Database
+sqlalchemy==2.0.36
+
+# AI & Transcription (CPU-optimized)
+torch==2.5.1
+torchaudio==2.5.1
+transformers==4.46.3
+accelerate==1.1.1
+
+# Audio Processing
+librosa==0.10.2
+silero-vad>=4.0.0
+mutagen==1.47.0  # Audio metadata extraction
+soundfile==0.12.1
+audioread==3.0.1
+
+# File System Monitoring
+watchdog==5.0.3
+
+# Configuration
+pyyaml==6.0.2
+
+# Utilities
+python-dotenv==1.0.1
+psutil==6.1.0
+numpy==2.2.0

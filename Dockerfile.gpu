@@ -1,7 +1,15 @@
-# ScanScribe — multi-stage: compile wheels in builder, slim runtime with non-root user
+# GPU image (CUDA PyTorch wheels, default cu124).
+# Build: docker build -f Dockerfile.gpu -t scanscribe:gpu .
+# If wheels fail, try: --build-arg PYTORCH_WHL_SUBDIR=cu121
+# See: https://pytorch.org/get-started/locally/
+#
+# Build context must include `requirements.txt` (copy from requirements.cpu.example or .gpu.example).
+# Keep `TORCH_VERSION` in sync with that file (or compose build args).
 ARG PYTHON_VERSION=3.11
 
 FROM python:${PYTHON_VERSION}-slim AS builder
+ARG PYTORCH_WHL_SUBDIR=cu124
+ARG TORCH_VERSION=2.5.1
 
 WORKDIR /build
 
@@ -14,13 +22,17 @@ ENV PATH=/opt/venv/bin:$PATH
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+    && grep -vE '^(torch|torchaudio)==' requirements.txt > /tmp/req_no_torch.txt \
+    && pip install --no-cache-dir -r /tmp/req_no_torch.txt \
+    && pip install --no-cache-dir --force-reinstall \
+        --index-url "https://download.pytorch.org/whl/${PYTORCH_WHL_SUBDIR}" \
+        "torch==${TORCH_VERSION}" "torchaudio==${TORCH_VERSION}"
 
-# --- runtime (repeat ARG so FROM can use PYTHON_VERSION) ---
 ARG PYTHON_VERSION=3.11
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
-LABEL org.opencontainers.image.title="ScanScribe"
+LABEL org.opencontainers.image.title="ScanScribe" \
+    org.opencontainers.image.description="ScanScribe (GPU / CUDA PyTorch wheels)"
 
 WORKDIR /app
 
@@ -42,7 +54,6 @@ RUN mkdir -p /app/ingest /app/audio_storage /app/logs /app/models \
     && chown -R appuser:appuser /app
 
 COPY --chown=appuser:appuser app/ /app/app/
-# Default config (override with bind mount or CONFIG_PATH)
 COPY --chown=appuser:appuser config.yml.example /app/config.yml
 
 USER appuser

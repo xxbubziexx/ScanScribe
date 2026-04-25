@@ -1,3 +1,7 @@
+# Copy to `requirements.txt` in the project root (GPU path), then `pip install -r requirements.txt` and
+# reinstall torch/torchaudio from the CUDA index (see Dockerfile.gpu / PyTorch docs), or build Docker.
+# Keep pins in lockstep with `requirements.cpu.example`.
+
 # Web Framework
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
@@ -13,7 +17,7 @@ pydantic[email]==2.9.2
 # Database
 sqlalchemy==2.0.36
 
-# AI & Transcription (CPU-optimized)
+# AI & Transcription (use CUDA PyTorch wheels — see file header, Dockerfile.gpu)
 torch==2.5.1
 torchaudio==2.5.1
 transformers==4.46.3

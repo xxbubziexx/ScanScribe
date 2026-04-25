@@ -1,0 +1,55 @@
+# GPU (NVIDIA): copy this file to `docker-compose.yml` and `requirements.gpu.example` to `requirements.txt`, then `docker compose up -d --build`. In config.yml: model.device: cuda
+# Needs: NVIDIA driver + https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/
+
+version: "3.8"
+
+services:
+  scanscribe:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+      args:
+        PYTORCH_WHL_SUBDIR: ${PYTORCH_WHL_SUBDIR:-cu124}
+        TORCH_VERSION: ${TORCH_VERSION:-2.5.1}
+    container_name: scanscribe
+    restart: unless-stopped
+    gpus: all
+    ports:
+      - "0.0.0.0:8000:8000"
+
+    volumes:
+      - scanscribe_audio_storage:/app/audio_storage
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./app:/app/app
+      - ./config.yml:/app/config.yml
+      - ./ingest:/app/ingest
+      - ./models:/app/models
+      - /etc/localtime:/etc/localtime:ro
+
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - TZ=${TZ:-America/Chicago}
+      - SECRET_KEY=${SECRET_KEY:-changeme-generate-secret-key}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=1440
+      - INGEST_DIR=/app/ingest
+      - OUTPUT_DIR=/app/audio_storage
+      - LOG_DIR=/app/logs
+      - DB_PATH=/app/data/scanscribe.db
+      - CONFIG_PATH=/app/config.yml
+
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+    networks:
+      - scanscribe_network
+
+volumes:
+  scanscribe_audio_storage:
+    external: true
+
+networks:
+  scanscribe_network:
+    driver: bridge

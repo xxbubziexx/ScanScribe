@@ -1,0 +1,52 @@
+# CPU: copy this file to `docker-compose.yml` and `requirements.cpu.example` to `requirements.txt`, then `docker compose up -d --build`. In config.yml: model.device: cpu
+
+version: '3.8'
+
+services:
+  scanscribe:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+      args:
+        TORCH_VERSION: ${TORCH_VERSION:-2.5.1}
+    container_name: scanscribe
+    restart: unless-stopped
+
+    ports:
+      - "0.0.0.0:8000:8000"
+
+    volumes:
+      - scanscribe_audio_storage:/app/audio_storage
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./app:/app/app
+      - ./config.yml:/app/config.yml
+      - ./ingest:/app/ingest
+      - ./models:/app/models
+      - /etc/localtime:/etc/localtime:ro
+
+    environment:
+      - TZ=${TZ:-America/Chicago}
+      - SECRET_KEY=${SECRET_KEY:-changeme-generate-secret-key}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=1440
+      - INGEST_DIR=/app/ingest
+      - OUTPUT_DIR=/app/audio_storage
+      - LOG_DIR=/app/logs
+      - DB_PATH=/app/data/scanscribe.db
+      - CONFIG_PATH=/app/config.yml
+
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+    networks:
+      - scanscribe_network
+
+volumes:
+  scanscribe_audio_storage:
+    external: true
+
+networks:
+  scanscribe_network:
+    driver: bridge

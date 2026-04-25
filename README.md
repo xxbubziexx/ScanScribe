@@ -73,7 +73,30 @@ Open `config.yml` and confirm:
 - `events_pipeline.enabled` is true/false as you want
 - `incidents_ollama.enabled` and `base_url` are correct if using Ollama
 
-### Step 5: Start ScanScribe
+### Step 5: CPU or GPU (same mode for all of these)
+Pick **one** path—do not mix files from the CPU and GPU examples.
+
+**CPU (typical):**
+
+```powershell
+copy docker-compose.cpu.example docker-compose.yml
+copy requirements.cpu.example requirements.txt
+```
+
+In `config.yml`, set **`model.device: cpu`**.
+
+**GPU (NVIDIA GPU + [Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)):**
+
+```powershell
+copy docker-compose.gpu.example docker-compose.yml
+copy requirements.gpu.example requirements.txt
+```
+
+In `config.yml`, set **`model.device: cuda`**.
+
+**To switch later:** `docker compose down` → copy the *other* pair of examples over `docker-compose.yml` and `requirements.txt` → set **`model.device`** → `docker compose up -d --build`.
+
+### Step 6: Start ScanScribe
 From the project folder:
 
 ```powershell
@@ -82,14 +105,14 @@ docker-compose up -d --build
 
 First build can take a while. This is normal.
 
-### Step 6: Open the app
+### Step 7: Open the app
 Go to:
 
 `http://localhost:8000`
 
 Register your first account.
 
-### Step 7: Basic commands you will use later
+### Step 8: Basic commands you will use later
 ```powershell
 # See running logs
 docker-compose logs -f
@@ -140,7 +163,24 @@ incidents_ollama:
   master_model: "qwen3.5"           # routing + header + summary
 ```
 
-### 3. Build & run
+### 3. CPU or GPU
+
+Copy the matching pair to the working names, then set **`model.device`** in **`config.yml`** (`cpu` or `cuda`):
+
+```bash
+# CPU
+cp docker-compose.cpu.example docker-compose.yml
+cp requirements.cpu.example requirements.txt
+
+# or GPU
+# cp docker-compose.gpu.example docker-compose.yml
+# cp requirements.gpu.example requirements.txt
+# → model.device: cuda  (needs NVIDIA + Container Toolkit)
+```
+
+**To switch later:** `docker compose down` → use the *other* pair of examples → update **`model.device`** → `docker compose up -d --build`.
+
+### 4. Build & run
 
 ```bash
 docker-compose up -d
