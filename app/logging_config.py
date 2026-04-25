@@ -2,6 +2,7 @@
 import logging
 import logging.handlers
 import asyncio
+from datetime import datetime, timezone
 from typing import Optional
 
 from .services.websocket import websocket_manager
@@ -26,6 +27,7 @@ class WebSocketHandler(logging.Handler):
         try:
             # Format the message
             msg = self.format(record)
+            log_ts = datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat()
             
             # Map logging levels to our level names
             level_map = {
@@ -42,13 +44,13 @@ class WebSocketHandler(logging.Handler):
                 loop = asyncio.get_running_loop()
                 # If we're in the event loop, schedule the task
                 asyncio.create_task(
-                    websocket_manager.send_log(msg, level=level)
+                    websocket_manager.send_log(msg, level=level, timestamp=log_ts)
                 )
             except RuntimeError:
                 # No running loop (called from thread), use main loop with threadsafe call
                 if self._main_loop and not self._main_loop.is_closed():
                     asyncio.run_coroutine_threadsafe(
-                        websocket_manager.send_log(msg, level=level),
+                        websocket_manager.send_log(msg, level=level, timestamp=log_ts),
                         self._main_loop
                     )
             

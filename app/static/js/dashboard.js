@@ -69,12 +69,12 @@ function scheduleReconnect() {
 }
 
 function handleWebSocketMessage(data) {
-    const { type, level, message, tag, status, data: msgData } = data;
+    const { type, level, message, tag, status, data: msgData, timestamp } = data;
     
     console.log('WebSocket message received:', type, data); // Debug
     
     if (type === 'log') {
-        addConsoleMessage(`[${tag || 'system'}] ${message}`, level || 'info');
+        addConsoleMessage(`[${tag || 'system'}] ${message}`, level || 'info', timestamp);
     } else if (type === 'status') {
         handleStatusUpdate(status, msgData);
     } else if (type === 'transcription') {
@@ -340,10 +340,18 @@ document.addEventListener('mouseup', () => {
 
 const consoleDiv = document.getElementById('console');
 
-function addConsoleMessage(message, type = 'info') {
+function formatConsoleTimeLabel(isoString) {
+    if (!isoString) {
+        return new Date().toLocaleTimeString();
+    }
+    const d = new Date(isoString);
+    return Number.isNaN(d.getTime()) ? new Date().toLocaleTimeString() : d.toLocaleTimeString();
+}
+
+function addConsoleMessage(message, type = 'info', timeSource = null) {
     const msg = document.createElement('div');
     msg.className = `console-message ${type}`;
-    msg.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    msg.textContent = `[${formatConsoleTimeLabel(timeSource)}] ${message}`;
     
     consoleDiv.appendChild(msg);
     const autoScrollEl = document.getElementById('consoleAutoScroll');

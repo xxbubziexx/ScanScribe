@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Set
 from fastapi import WebSocket
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +55,22 @@ class WebSocketManager:
         for connection in dead_connections:
             self.disconnect(connection)
             
-    async def send_log(self, message: str, level: str = "info", tag: str = None):
+    async def send_log(
+        self,
+        message: str,
+        level: str = "info",
+        tag: str = None,
+        timestamp: str = None,
+    ):
         """Send a log message to all clients."""
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc).isoformat()
         await self.broadcast({
             "type": "log",
             "level": level,
             "message": message,
             "tag": tag,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": timestamp,
         })
         
     async def send_status(self, status: str, data: Dict = None):
