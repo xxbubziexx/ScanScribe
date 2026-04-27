@@ -1,0 +1,145 @@
+@layer components {
+  .ss-metric-grid {
+    @apply mb-4 grid grid-cols-2 gap-3 sm:grid-cols-6;
+  }
+
+  .ss-metric-card {
+    @apply flex min-h-[88px] flex-col items-center justify-center rounded-lg border border-white/10 bg-black/20 p-3 text-center;
+  }
+
+  .ss-metric-label {
+    @apply mb-1 text-center text-sm font-medium text-gray-400;
+  }
+
+  .ss-metric-value {
+    @apply text-2xl font-bold tabular-nums text-white;
+  }
+
+  .ss-glass-panel {
+    @apply mb-4 rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm;
+  }
+
+  .ss-insights-head {
+    @apply mb-4 flex flex-wrap items-center justify-between gap-3;
+  }
+
+  .ss-insights-title {
+    @apply text-sm font-semibold text-gray-200;
+  }
+
+  .ss-insights-date {
+    @apply ml-2 text-xs font-normal text-indigo-400;
+  }
+
+  .ss-seg {
+    @apply flex rounded-lg bg-white/5 p-0.5;
+  }
+
+  .ss-seg-btn {
+    @apply rounded-md px-3 py-1 text-xs font-medium text-gray-400 transition-colors;
+    @apply hover:text-gray-200;
+  }
+
+  .ss-seg-btn--on {
+    @apply bg-indigo-600 text-white;
+  }
+
+  .ss-insights-tabs {
+    @apply rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm;
+  }
+
+  .ss-insights-tabrow {
+    @apply flex border-b border-white/10;
+  }
+
+  .ss-insights-tab {
+    @apply px-4 py-3 text-sm font-medium text-gray-500 transition-colors;
+    @apply hover:text-gray-300;
+  }
+
+  .ss-insights-tab--active {
+    @apply border-b-2 border-indigo-500 text-indigo-300;
+  }
+
+  .ss-insights-tabpanel {
+    @apply p-4;
+  }
+
+  .ss-rec-scroll {
+    @apply max-h-[460px] space-y-1.5 overflow-y-auto pr-1;
+  }
+
+  .ss-tg-row {
+    @apply flex w-full items-center gap-4 text-left;
+  }
+
+  .ss-tg-name {
+    @apply w-28 flex-shrink-0 truncate text-sm text-gray-300;
+  }
+
+  .ss-tg-bar {
+    @apply h-2 rounded-full bg-indigo-500 transition-all;
+  }
+
+  .ss-tg-count {
+    @apply w-12 flex-shrink-0 text-right text-sm text-gray-500;
+  }
+
+  .ss-tg-bar-track {
+    @apply flex-1 overflow-hidden rounded-full bg-white/5;
+  }
+
+  .ss-recent-row {
+    @apply flex items-center gap-3 rounded-lg bg-white/[0.02] px-3 py-2 text-sm;
+  }
+
+  .ss-summaries-card {
+    @apply overflow-hidden rounded-lg border border-white/10 bg-white/[0.02];
+  }
+
+  .ss-md-body {
+    @apply max-w-none border-t border-white/10 px-4 py-3 text-sm text-gray-300;
+  }
+
+  .ss-search-result {
+    @apply flex items-center gap-3 rounded-xl border border-white/12 bg-[#141821] px-3.5 py-2.5;
+    @apply shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors;
+    @apply hover:border-white/20 hover:bg-[#171c26];
+  }
+
+  .ss-icon-btn {
+    @apply text-sm text-gray-400 hover:text-gray-100;
+  }
+
+  .ss-icon-btn--off {
+    @apply cursor-not-allowed text-gray-700;
+  }
+
+  .ss-play {
+    @apply flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full;
+    @apply border transition-colors;
+  }
+
+  .ss-play--idle {
+    @apply border-indigo-500/40 bg-indigo-500/20 text-indigo-300;
+    @apply hover:bg-indigo-500/30;
+  }
+
+  .ss-play--on {
+    @apply border-red-500/60 bg-red-500/20 text-red-300 hover:bg-red-500/30;
+  }
+
+  .ss-play--off {
+    @apply cursor-not-allowed border-white/5 bg-white/5 text-gray-700;
+  }
+
+  .ss-tg-btn {
+    @apply mx-auto block min-w-[100px] flex-shrink-0 rounded-md border border-indigo-400/35 bg-indigo-500/12;
+    @apply px-3 py-1 text-center text-sm font-semibold text-indigo-200 transition-colors;
+    @apply hover:border-indigo-300/50 hover:bg-indigo-500/20;
+  }
+
+  .ss-highlight {
+    @apply rounded bg-yellow-500/30 px-0.5 text-yellow-200;
+  }
+}

@@ -1,0 +1,96 @@
+@layer components {
+  .ss-console-root {
+    @apply flex h-full flex-col bg-black/20 p-4;
+  }
+
+  .ss-console-title {
+    @apply text-sm font-semibold text-gray-200;
+  }
+
+  .ss-console-stream {
+    @apply flex-1 overflow-y-auto font-mono text-xs leading-5;
+  }
+
+  .ss-log-time {
+    @apply text-gray-600;
+  }
+
+  .ss-log--info {
+    @apply text-gray-400;
+  }
+  .ss-log--success {
+    @apply text-green-400;
+  }
+  .ss-log--warning {
+    @apply text-yellow-400;
+  }
+  .ss-log--error {
+    @apply text-red-400;
+  }
+
+  .ss-stat-grid {
+    @apply mb-4 grid grid-cols-3 gap-3 sm:grid-cols-6;
+  }
+
+  .ss-stat-card {
+    @apply flex min-h-[88px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center backdrop-blur-sm;
+  }
+
+  .ss-stat-label {
+    @apply mb-1 text-center text-sm font-medium text-gray-400;
+  }
+
+  .ss-stat-value {
+    @apply text-2xl font-bold tabular-nums text-white;
+  }
+
+  .ss-stat-value-text {
+    @apply w-full truncate text-center text-base font-bold text-white;
+  }
+
+  .ss-control {
+    @apply mb-4 rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm;
+  }
+
+  .ss-control-inner {
+    @apply grid grid-cols-1 gap-4 rounded-lg border border-white/10 bg-black/20 p-3 md:grid-cols-3;
+  }
+
+  .ss-btn-start {
+    @apply rounded-lg border-2 border-amber-500/50 bg-black/50 px-4 py-2 text-sm font-medium text-gray-200;
+    @apply transition-colors hover:border-amber-500/80 hover:bg-zinc-900/60;
+    @apply disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .ss-btn-stop {
+    @apply rounded-lg border border-white/10 bg-black/50 px-4 py-2 text-sm font-medium text-gray-200;
+    @apply transition-colors hover:border-white/18 hover:bg-zinc-900/60;
+    @apply disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .ss-btn-ghost {
+    @apply rounded-lg border border-white/10 px-4 py-2 text-sm font-medium text-gray-300 transition-colors;
+    @apply hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .ss-resource-kv {
+    @apply flex justify-between text-xs text-gray-500;
+  }
+
+  .ss-resource-track {
+    @apply h-1.5 w-full overflow-hidden rounded-full bg-white/10;
+  }
+
+  .ss-status-dot {
+    @apply mt-px h-2.5 w-2.5 shrink-0 rounded-full;
+    @apply shadow-[0_0_6px_2px] shadow-current/40;
+  }
+
+  .ss-rbar {
+    @apply flex flex-col gap-1;
+  }
+
+  .ss-eng-caption {
+    @apply text-xs text-gray-500;
+  }
+}

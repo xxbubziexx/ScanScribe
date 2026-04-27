@@ -1,0 +1,382 @@
+@layer components {
+  .ss-events-hub {
+    @apply flex w-full flex-col gap-6;
+  }
+
+  .ss-events-subnav {
+    @apply flex flex-wrap gap-1 border-b border-white/10 pb-3;
+  }
+
+  .ss-events-page {
+    @apply flex w-full flex-col gap-6;
+  }
+
+  .ss-events-monitor-create {
+    @apply w-fit max-w-full rounded-xl border border-white/10 bg-white/[0.02] p-3;
+  }
+
+  .ss-events-monitor-create-layout {
+    @apply grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(16rem,22rem)] lg:items-start;
+  }
+
+  .ss-events-monitor-form-col {
+    @apply min-w-0 max-w-[22rem] w-full;
+  }
+
+  .ss-events-monitor-today-tg {
+    @apply flex min-h-[min(24rem,70vh)] max-h-[min(42rem,82vh)] w-full flex-col justify-self-start rounded-lg border border-indigo-400/15 bg-indigo-950/20 lg:min-h-[min(28rem,75vh)];
+  }
+
+  .ss-events-monitor-today-tg-head {
+    @apply shrink-0 border-b border-white/10 px-3 py-2;
+  }
+
+  .ss-events-monitor-today-tg-scroll {
+    @apply min-h-0 flex-1 overflow-auto px-3 py-2;
+  }
+
+  .ss-events-monitor-today-tg-list {
+    @apply m-0 flex min-w-max list-none flex-col gap-1.5 p-0;
+  }
+
+  .ss-events-monitor-today-tg-row {
+    @apply flex min-w-full items-center gap-2;
+  }
+
+  .ss-events-monitor-today-tg-text {
+    @apply block whitespace-nowrap rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-gray-200;
+  }
+
+  .ss-events-monitor-today-tg-copy {
+    @apply shrink-0 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-gray-300 transition hover:border-indigo-300/40 hover:text-indigo-100;
+  }
+
+  .ss-events-monitor-board {
+    @apply m-0 grid list-none gap-2.5 p-0 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4;
+  }
+
+  .ss-events-monitor-card {
+    @apply rounded-lg border border-white/10 bg-white/[0.02] p-3;
+  }
+
+  .ss-events-monitor-head {
+    @apply flex flex-wrap items-start justify-between gap-2;
+  }
+
+  .ss-events-monitor-meta {
+    @apply mt-3 flex flex-col gap-2.5 border-t border-white/10 pt-3 sm:flex-row sm:gap-4;
+  }
+
+  .ss-events-monitor-meta-label {
+    @apply mb-1 text-xs uppercase tracking-wide text-gray-500;
+  }
+
+  .ss-events-monitor-meta .ss-events-chip-tg {
+    @apply px-2 py-1 text-xs;
+  }
+
+  .ss-events-monitor-meta .ss-events-low-badge {
+    @apply px-2 py-1 text-sm;
+  }
+
+  .ss-events-debug-controls {
+    @apply flex flex-wrap items-center gap-3;
+  }
+
+  .ss-events-debug-list {
+    @apply m-0 flex list-none flex-col gap-3 p-0;
+  }
+
+  .ss-events-debug-card {
+    @apply rounded-xl border border-white/10 bg-white/[0.02] p-4;
+  }
+
+  .ss-events-debug-preview {
+    @apply mt-3 line-clamp-2 text-xs text-gray-400;
+  }
+
+  .ss-events-debug-body {
+    @apply mt-4 flex flex-col gap-4 border-t border-white/10 pt-4;
+  }
+
+  .ss-events-debug-body .ss-events-section-title {
+    @apply mb-2;
+  }
+
+  .ss-events-pre-block {
+    @apply whitespace-pre-wrap break-words rounded-md border border-white/10 bg-black/30 p-2 font-mono leading-relaxed;
+  }
+
+  .ss-events-topbar {
+    @apply flex flex-wrap items-center justify-between gap-2;
+  }
+
+  .ss-events-title {
+    @apply text-lg font-semibold text-gray-200;
+  }
+
+  .ss-events-sub {
+    @apply text-sm text-gray-500;
+  }
+
+  .ss-events-live {
+    @apply flex flex-wrap items-center gap-2;
+  }
+
+  .ss-events-rate {
+    @apply rounded-md border border-indigo-400/25 bg-indigo-500/10 px-2 py-1 text-xs font-semibold text-indigo-300;
+  }
+
+  .ss-events-pill-tiny {
+    @apply rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-gray-400;
+  }
+
+  .ss-events-filters {
+    @apply grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_11rem_11rem_auto];
+  }
+
+  .ss-events-shell {
+    @apply grid min-h-[32rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,1fr)_minmax(420px,1.2fr)];
+  }
+
+  .ss-events-list-pane,
+  .ss-events-detail-pane {
+    @apply min-h-[24rem] rounded-xl border border-white/10 bg-white/[0.02];
+  }
+
+  .ss-events-list-pane {
+    @apply flex flex-col;
+  }
+
+  .ss-events-pane-head {
+    @apply flex items-center justify-between border-b border-white/10 px-4 py-2.5 text-xs font-medium text-gray-400;
+  }
+
+  .ss-events-pane-head-controls {
+    @apply flex items-center gap-2;
+  }
+
+  .ss-events-pane-head-label {
+    @apply text-[11px] uppercase tracking-wide text-gray-500;
+  }
+
+  .ss-events-list {
+    @apply m-0 min-h-0 list-none flex-1 space-y-1 overflow-y-auto px-4 py-3;
+  }
+
+  .ss-events-row-item {
+    @apply relative block;
+  }
+
+  .ss-events-row-item--active {
+    @apply relative;
+  }
+
+  .ss-events-row {
+    @apply block w-full rounded-xl border border-transparent bg-white/[0.01] p-3 text-left;
+    @apply hover:border-white/10 hover:bg-white/[0.03];
+  }
+
+  .ss-events-row--active {
+    @apply border-indigo-400/35 bg-indigo-500/10;
+  }
+
+  .ss-events-row-head {
+    @apply mb-1 flex flex-wrap items-center justify-end gap-2;
+  }
+
+  .ss-events-status {
+    @apply rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide;
+  }
+
+  .ss-events-status--open {
+    @apply bg-emerald-500/20 text-emerald-300;
+  }
+
+  .ss-events-status--closed {
+    @apply bg-white/10 text-gray-300;
+  }
+
+  .ss-events-eyebrow {
+    @apply mr-auto text-[10px] font-medium text-gray-500;
+  }
+
+  .ss-events-time {
+    @apply text-[11px] text-gray-500;
+  }
+
+  .ss-events-type {
+    @apply mt-3 mb-0.5 block text-[10px] font-mono text-indigo-200/90;
+  }
+
+  .ss-events-row-title {
+    @apply mb-1 inline-flex w-fit max-w-full items-center rounded-md border border-orange-400/35 px-2 py-1 text-xs font-semibold text-orange-100;
+    @apply truncate font-mono tracking-wide;
+    background: linear-gradient(90deg, rgba(249, 115, 22, 0.34) 0%, rgba(249, 115, 22, 0.17) 62%, rgba(249, 115, 22, 0.1) 100%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  }
+
+  .ss-events-row-meta {
+    @apply flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 text-sm text-gray-400;
+  }
+
+  .ss-events-row-units {
+    @apply mt-1 flex min-w-0 flex-wrap items-center gap-1.5;
+  }
+
+  .ss-events-row-locations {
+    @apply mt-1 flex min-w-0 flex-wrap items-center gap-1.5;
+  }
+
+  .ss-events-chip-tg {
+    @apply max-w-full truncate rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-mono text-gray-200;
+  }
+
+  .ss-events-chip-loc {
+    @apply max-w-full truncate rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-100;
+  }
+
+  .ss-events-tabs {
+    @apply flex items-center justify-between gap-2 border-b border-white/10 px-4 py-2.5;
+  }
+
+  .ss-events-tabs-left {
+    @apply flex flex-wrap gap-1;
+  }
+
+  .ss-events-tabs-actions {
+    @apply ml-auto flex items-center gap-1.5;
+  }
+
+  .ss-events-tab {
+    @apply rounded-md px-2 py-1 text-xs text-gray-400 transition;
+    @apply hover:bg-white/5 hover:text-gray-200;
+  }
+
+  .ss-events-tab--active {
+    @apply bg-indigo-500/15 text-indigo-200;
+  }
+
+  .ss-events-detail-grid-badge {
+    @apply rounded-lg border border-indigo-400/30 bg-indigo-500/[0.07] p-3 ring-1 ring-inset ring-white/10;
+  }
+
+  .ss-events-detail-grid {
+    @apply grid gap-4 md:grid-cols-2;
+  }
+
+  .ss-events-thread-wrap {
+    @apply p-4;
+  }
+
+  .ss-events-section-title {
+    @apply mb-3 text-[11px] font-semibold uppercase tracking-wide text-indigo-200/90;
+  }
+
+  .ss-events-spans-list-wrap {
+    @apply mt-1;
+  }
+
+  .ss-events-spans-list {
+    @apply space-y-2;
+  }
+
+  .ss-events-span-item {
+    @apply rounded-md border border-white/10 bg-white/[0.02] p-2.5;
+    font-size: 1.5em;
+    line-height: 1.35;
+  }
+
+  .ss-events-span-item-head {
+    @apply flex items-center justify-between gap-2;
+  }
+
+  .ss-events-span-section {
+    @apply rounded-md border border-white/10 bg-black/35 p-2;
+  }
+
+  .ss-events-span-section--attach {
+    @apply border-blue-400/20;
+  }
+
+  .ss-events-span-section--transcript {
+    @apply border-orange-400/20;
+  }
+
+  .ss-events-talkgroup-badge {
+    @apply inline-flex w-fit rounded-full border border-emerald-400/35 bg-emerald-500/20 px-2.5 py-0.5 text-sm font-semibold text-emerald-200;
+  }
+
+  .ss-events-ner-list {
+    @apply flex flex-wrap gap-1;
+  }
+
+  .ss-events-ner-chip {
+    @apply rounded border border-white/25 bg-indigo-500/15 px-1.5 py-0.5 text-xs font-mono text-indigo-200;
+  }
+
+  .ss-events-span-audio {
+    @apply w-full;
+    min-height: 2.5rem;
+  }
+
+  .ss-events-detail-span {
+    @apply md:col-span-2;
+  }
+
+  .ss-events-k {
+    @apply mb-1 block text-[11px] uppercase tracking-wide text-gray-500;
+  }
+
+  .ss-events-kv {
+    @apply flex items-start gap-3;
+  }
+
+  .ss-events-kv > .ss-events-k {
+    @apply mb-0 mt-0.5 w-32 flex-shrink-0;
+  }
+
+  .ss-events-kv-value {
+    @apply min-w-0 flex-1;
+  }
+
+  .ss-events-kv-badge {
+    @apply inline-flex w-fit max-w-fit items-center rounded-md border border-white/15 bg-white/[0.06] px-2 py-1 text-sm text-gray-200;
+  }
+
+  .ss-events-kv-badge-list {
+    @apply flex flex-wrap gap-1.5;
+  }
+
+  .ss-events-low-badge {
+    @apply inline-flex w-fit max-w-full rounded border border-white/12 bg-white/[0.05] px-1.5 py-0.5 text-xs text-gray-300;
+  }
+
+  .ss-events-pre {
+    @apply m-0 max-h-[24rem] overflow-auto rounded-md border border-white/10 bg-black/30 p-4 text-xs text-gray-200;
+  }
+
+  .ss-events-txt-block {
+    @apply p-4;
+  }
+
+  .ss-events-hint {
+    @apply mb-2 text-xs text-gray-500;
+  }
+
+  .ss-events-body {
+    @apply rounded-md border border-white/10 bg-white/[0.02] p-3 text-sm leading-relaxed text-gray-200;
+  }
+
+  .ss-events-placeholder {
+    @apply mt-2 rounded-md border border-dashed border-white/10 bg-white/[0.01] p-3 text-center text-sm text-gray-500;
+  }
+
+  .ss-events-related {
+    @apply flex flex-wrap gap-1.5 p-3;
+  }
+
+  .ss-events-actions {
+    @apply flex flex-wrap gap-2 p-3;
+  }
+}

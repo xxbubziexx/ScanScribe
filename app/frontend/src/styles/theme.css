@@ -1,0 +1,19 @@
+@theme {
+  /* ScanScribe design tokens — expand as the design system grows */
+  --color-surface: #0f1117;
+  --color-surface-raised: #1a1d27;
+  --color-surface-border: #2a2d3a;
+  --color-accent: #6366f1;
+  --color-accent-hover: #818cf8;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-muted: #6b7280;
+
+  --font-family-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: ui-monospace, "Cascadia Code", monospace;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+}

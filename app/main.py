@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -104,6 +104,13 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 app.mount("/audio_storage", StaticFiles(directory=str(settings.output_dir)), name="audio_storage")
 
+# React SPA — served at /app/* when the dist is built.
+# Run: cd app/frontend && npm run build
+_SPA_DIST = BASE_DIR / "frontend" / "dist"
+_SPA_ASSETS = _SPA_DIST / "assets"
+if _SPA_ASSETS.exists():
+    app.mount("/app/assets", StaticFiles(directory=str(_SPA_ASSETS)), name="spa-assets")
+
 # Include routers
 app.include_router(auth_router)
 app.include_router(settings_router)
@@ -190,3 +197,19 @@ def event_detail_page(request: Request, event_id: str):
     return templates.TemplateResponse("event_detail.html", {"request": request, "event_id": event_id})
 
 
+@app.get("/app/{full_path:path}", response_class=HTMLResponse)
+async def spa_shell(full_path: str):
+    """Serve the React SPA shell for all /app/* routes (HTML5 history routing).
+
+    During migration, legacy Jinja routes remain at their original paths.
+    As each page is ported to React, its legacy route will redirect here.
+    Build the frontend first: cd app/frontend && npm run build
+    """
+    index = _SPA_DIST / "index.html"
+    if index.exists():
+        return FileResponse(index)
+    return HTMLResponse(
+        "<h1 style='font-family:monospace;padding:2rem'>React frontend not built.<br>"
+        "Run: <code>cd app/frontend && npm run build</code></h1>",
+        status_code=503,
+    )

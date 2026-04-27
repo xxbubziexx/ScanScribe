@@ -1,0 +1,7 @@
+@import "./components/base.css";
+@import "./components/layout.css";
+@import "./components/dashboard.css";
+@import "./components/insights.css";
+@import "./components/auth.css";
+@import "./components/database.css";
+@import "./components/events.css";

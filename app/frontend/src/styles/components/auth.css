@@ -1,0 +1,46 @@
+@layer components {
+  .ss-auth-page {
+    @apply flex min-h-screen flex-col items-center justify-center bg-[#0f1117] px-4;
+  }
+
+  .ss-auth-grid {
+    @apply pointer-events-none fixed inset-0 opacity-[0.03];
+  }
+
+  .ss-auth-glow {
+    @apply absolute -top-20 left-1/2 h-40 w-64 -translate-x-1/2 rounded-full;
+    @apply bg-indigo-600/20 blur-3xl;
+  }
+
+  .ss-auth-card {
+    @apply relative rounded-2xl border border-white/10 bg-white/5 p-8;
+    @apply shadow-2xl backdrop-blur-sm;
+  }
+
+  .ss-chart {
+    @apply h-80;
+  }
+
+  .ss-form-label {
+    @apply mb-1.5 block text-xs font-medium text-gray-400;
+  }
+
+  .ss-form-error {
+    @apply rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400;
+  }
+
+  .ss-btn-auth {
+    @apply w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white;
+    @apply shadow transition hover:bg-indigo-500;
+    @apply focus:outline-none focus:ring-2 focus:ring-indigo-500/50;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ss-auth-hint {
+    @apply mt-6 text-center text-xs text-gray-500;
+  }
+
+  .ss-link-auth {
+    @apply text-indigo-400 transition hover:text-indigo-300;
+  }
+}

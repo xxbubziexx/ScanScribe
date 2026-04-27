@@ -1,0 +1,198 @@
+@layer components {
+  .ss-panel {
+    @apply flex overflow-hidden rounded-xl border border-white/10;
+  }
+
+  .ss-resize-col {
+    @apply w-1.5 shrink-0 cursor-col-resize bg-white/5;
+    @apply transition-colors hover:bg-indigo-500/40 active:bg-indigo-500/60;
+  }
+
+  .ss-resize-row {
+    @apply mx-auto mt-8 mb-10 h-2 w-16 cursor-row-resize rounded-full bg-white/10;
+    @apply transition-colors hover:bg-indigo-500/40 active:bg-indigo-500/60;
+  }
+
+  .ss-tcard {
+    @apply rounded-lg border border-white/[0.05] bg-[#0c0e12] p-4;
+    @apply transition-colors hover:border-white/10;
+  }
+
+  .ss-tcard-h {
+    @apply mb-3 flex items-start justify-between gap-2 border-b border-white/5 pb-2;
+  }
+
+  .ss-tname {
+    @apply min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-gray-400;
+  }
+
+  .ss-ttime {
+    @apply shrink-0 text-sm font-medium tabular-nums text-gray-600;
+  }
+
+  .ss-tmeta {
+    @apply mb-2 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-gray-600;
+  }
+
+  .ss-tbar {
+    @apply mb-3 flex flex-wrap items-center gap-2;
+  }
+
+  .ss-pill-tg {
+    @apply rounded-md bg-indigo-500/15 px-2.5 py-1 text-sm font-medium text-indigo-200;
+  }
+
+  .ss-badge-ok {
+    @apply rounded-md bg-green-500/20 px-2.5 py-1 text-sm font-semibold text-green-300;
+  }
+
+  .ss-badge-mid {
+    @apply rounded-md bg-yellow-500/20 px-2.5 py-1 text-sm font-semibold text-yellow-300;
+  }
+
+  .ss-badge-bad {
+    @apply rounded-md bg-red-500/20 px-2.5 py-1 text-sm font-semibold text-red-300;
+  }
+
+  .ss-tbody {
+    @apply border-t border-white/5 pt-3;
+  }
+
+  .ss-transcript {
+    @apply whitespace-pre-wrap break-words text-xl leading-8 text-gray-100;
+  }
+
+  .ss-text-link {
+    @apply inline-flex items-center rounded-md border border-indigo-400/25 bg-indigo-500/10 px-2.5 py-1;
+    @apply text-sm font-semibold text-indigo-300 transition-colors;
+    @apply hover:border-indigo-300/40 hover:bg-indigo-500/20 hover:text-indigo-200;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ss-audio-wrap {
+    @apply mt-4 border-t border-white/5 pt-3;
+  }
+
+  .ss-page-h2 {
+    @apply text-base font-semibold text-gray-200;
+  }
+
+  .ss-page-h2-sub {
+    @apply ml-2 text-sm font-normal text-gray-500;
+  }
+
+  .ss-check {
+    @apply flex cursor-pointer items-center gap-1.5 text-sm text-gray-500;
+  }
+
+  .ss-check-sm {
+    @apply flex cursor-pointer items-center gap-1.5 text-xs text-gray-500;
+  }
+
+  .ss-ghost-sm {
+    @apply rounded px-2 py-0.5 text-sm text-gray-500 transition-colors hover:bg-white/5 hover:text-gray-300;
+  }
+
+  .ss-empty {
+    @apply text-sm italic text-gray-600;
+  }
+
+  .ss-scroll {
+    @apply flex-1 space-y-3 overflow-y-auto pr-1;
+  }
+
+  .ss-input {
+    @apply w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-200;
+    @apply placeholder:text-gray-600 focus:border-indigo-500/50 focus:outline-none;
+  }
+
+  .ss-input-search {
+    @apply min-w-[180px] flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5;
+    @apply text-sm text-gray-200 placeholder:text-gray-600 focus:border-indigo-500/50 focus:outline-none;
+  }
+
+  .ss-select {
+    @apply rounded-lg border border-white/10 bg-[#141821] px-3 py-1.5 text-sm text-gray-200;
+    @apply focus:border-indigo-500/50 focus:outline-none;
+    color-scheme: dark;
+  }
+
+  .ss-select option {
+    background-color: #141821;
+    color: #e5e7eb;
+  }
+
+  /* Compact control: default = native <select>. Calendar pickers also use this on <button> (same look). */
+  .ss-select-sm {
+    @apply flex w-full min-w-[10rem] max-w-md items-center justify-between gap-2;
+    @apply rounded-lg border border-white/10 bg-[#141821] px-3 py-2 text-left text-sm font-medium text-gray-200;
+    @apply transition hover:border-indigo-500/40;
+    @apply focus-visible:border-indigo-500/50 focus-visible:outline-none;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ss-btn-bare {
+    @apply rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-sm text-gray-300;
+    @apply hover:border-white/20 focus:outline-none;
+  }
+
+  .ss-btn-primary {
+    @apply rounded-lg bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white;
+    @apply hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ss-btn-ghost-bright {
+    @apply rounded-lg border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-gray-300;
+    @apply hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ss-btn-danger-soft {
+    @apply rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-1.5 text-sm text-red-400;
+    @apply hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ss-btn-filter-clear {
+    @apply inline-flex cursor-pointer items-center rounded-lg border border-white/10 bg-black/20 px-3 py-1.5;
+    @apply text-sm text-gray-400 transition-colors;
+    @apply hover:border-white/20 hover:bg-white/5 hover:text-gray-200;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/35;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ss-dd-panel {
+    @apply absolute left-0 top-full z-20 mt-1 max-h-56 min-w-[180px] overflow-y-auto;
+    @apply rounded-lg border border-white/10 bg-[#1a1d27] p-2 shadow-xl;
+  }
+
+  .ss-dd-item {
+    @apply flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-gray-300;
+    @apply hover:bg-white/5;
+  }
+
+  .ss-chip {
+    @apply rounded px-2 py-0.5 text-xs;
+  }
+  .ss-chip-kw {
+    @apply bg-indigo-500/20 text-indigo-300;
+  }
+  .ss-chip-tg {
+    @apply bg-green-500/20 text-green-300;
+  }
+  .ss-chip-hr {
+    @apply bg-purple-500/20 text-purple-300;
+  }
+
+  .ss-trend {
+    @apply text-xs font-medium;
+  }
+  .ss-trend--flat {
+    @apply text-gray-500;
+  }
+  .ss-trend--up {
+    @apply text-green-400;
+  }
+  .ss-trend--down {
+    @apply text-red-400;
+  }
+}

@@ -1,0 +1,175 @@
+@layer components {
+  .ss-db-page {
+    @apply w-full;
+  }
+
+  .ss-db-title {
+    @apply mb-4 text-lg font-semibold text-gray-200;
+  }
+
+  .ss-db-filters {
+    @apply mb-4 flex flex-wrap items-end gap-3;
+  }
+
+  .ss-db-table-wrap {
+    @apply overflow-x-auto rounded-xl border border-white/10 bg-white/[0.02];
+  }
+
+  .ss-db-table {
+    @apply w-full min-w-[900px] border-collapse text-left text-sm;
+  }
+
+  .ss-db-th {
+    @apply whitespace-nowrap border-b border-white/10 bg-black/25 px-1.5 py-1.5 text-xs font-medium text-gray-500;
+  }
+
+  .ss-db-td {
+    @apply border-b border-white/5 px-1.5 py-1 align-top text-gray-300;
+  }
+
+  .ss-db-td-clip {
+    @apply max-w-md truncate;
+  }
+
+  .ss-db-filename-clip {
+    @apply max-w-[25rem] truncate;
+  }
+
+  .ss-db-actions {
+    @apply flex flex-wrap justify-end gap-1;
+  }
+
+  .ss-db-actions .ss-text-link {
+    @apply px-1.5 py-0.5 text-xs;
+  }
+
+  .ss-db-actions .ss-btn-filter-clear {
+    @apply px-1.5 py-0.5 text-xs;
+  }
+
+  .ss-db-pager {
+    @apply mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-500;
+  }
+
+  .ss-db-daterange-btn-text {
+    @apply min-w-0 flex-1 truncate;
+  }
+
+  .ss-db-daterange-chev {
+    @apply flex-shrink-0 text-[10px] text-gray-500;
+  }
+
+  .ss-db-daterange-pop {
+    @apply absolute left-1/2 top-full z-50 mt-1 w-[26rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-xl border border-white/10;
+    @apply bg-[#141821] p-4 shadow-2xl;
+  }
+
+  .ss-db-daterange-nav {
+    @apply mb-3 flex items-center justify-between gap-3;
+  }
+
+  .ss-db-daterange-dow {
+    @apply mb-1 grid grid-cols-7 text-center;
+  }
+
+  .ss-db-daterange-dow-c {
+    @apply py-1 text-xs font-medium text-gray-500;
+  }
+
+  .ss-db-daterange-grid {
+    @apply grid grid-cols-7 gap-1;
+  }
+
+  .ss-db-daterange-pad {
+    @apply aspect-square min-h-[2.35rem] min-w-0;
+  }
+
+  .ss-db-daterange-day {
+    @apply relative flex aspect-square min-h-[2.35rem] min-w-0 items-center justify-center rounded-md;
+    @apply text-base text-gray-200 transition;
+    @apply hover:bg-indigo-500/25;
+  }
+
+  .ss-db-daterange-day--inrange {
+    @apply bg-indigo-500/15;
+  }
+
+  .ss-db-daterange-day--edge {
+    @apply bg-indigo-600/35 font-semibold text-white;
+  }
+
+  .ss-db-daterange-day--hasdata {
+    @apply after:absolute after:bottom-0.5 after:left-1/2 after:h-0.5 after:w-0.5;
+    @apply after:-translate-x-1/2 after:rounded-full after:bg-indigo-300;
+  }
+
+  .ss-db-daterange-day:disabled,
+  .ss-db-daterange-day--blocked {
+    @apply cursor-not-allowed opacity-35;
+    @apply hover:bg-transparent;
+  }
+
+  .ss-db-daterange-hint {
+    @apply mt-3 text-sm text-gray-500;
+  }
+
+  .ss-db-daterange-foot {
+    @apply mt-3 flex items-center justify-between border-t border-white/10 pt-3;
+  }
+
+  .ss-db-daterange-legend {
+    @apply flex min-w-0 items-center gap-1.5;
+  }
+
+  .ss-db-daterange-dot {
+    @apply h-1.5 w-1.5 flex-shrink-0 rounded-full bg-indigo-300;
+  }
+
+  .ss-db-row {
+    @apply cursor-pointer;
+  }
+
+  .ss-db-row:hover {
+    @apply bg-white/[0.02];
+  }
+
+  .ss-db-row--expanded {
+    @apply bg-indigo-500/10;
+  }
+
+  .ss-db-expand-icon {
+    @apply inline-block text-[10px] text-gray-600 transition-transform;
+  }
+
+  .ss-db-expand-icon--open {
+    @apply rotate-90;
+  }
+
+  .ss-db-expand {
+    @apply border-t border-white/10 bg-black/20 p-4;
+  }
+
+  .ss-db-expand-grid {
+    @apply mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4;
+  }
+
+  .ss-db-expand-field {
+    @apply min-w-0;
+  }
+
+  .ss-db-expand-label {
+    @apply mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500;
+  }
+
+  .ss-db-expand-value {
+    @apply block break-words text-sm text-gray-300;
+  }
+
+  .ss-db-expand-transcript {
+    @apply max-h-56 overflow-y-auto whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 text-sm text-gray-200;
+  }
+
+  .ss-db-expand-audio {
+    @apply mt-4;
+  }
+}

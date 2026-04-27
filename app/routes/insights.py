@@ -2,9 +2,9 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract, or_
+from sqlalchemy import func, extract, or_, and_
 from typing import Optional, List, Dict
-from datetime import date, datetime, timedelta, time
+from datetime import date, datetime, timedelta
 
 from ..database import get_logs_db
 from ..models.user import User
@@ -14,6 +14,20 @@ from .auth import get_current_active_user
 from ..services.summarization import generate_hour_summary
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
+
+
+def _log_date_eq(d: date):
+    """One calendar day — matches /api/logs date_from == date_to (inclusive) behavior."""
+    return LogEntry.log_date == d.isoformat()
+
+
+def _log_date_between_inclusive(d0: date, d1: date):
+    if d0 > d1:
+        d0, d1 = d1, d0
+    return and_(
+        LogEntry.log_date >= d0.isoformat(),
+        LogEntry.log_date <= d1.isoformat(),
+    )
 
 
 class HourSummaryRequest(BaseModel):
@@ -98,16 +112,12 @@ async def get_insights_stats(
 
 def get_hourly_activity(db: Session, target_date: date):
     """Get hourly activity for a specific day."""
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-    
-    # Query hourly counts
+    # Use log_date like /api/logs (not naive local midnight on timestamp) so Insights matches Database.
     results = db.query(
         extract('hour', LogEntry.timestamp).label('hour'),
         func.count(LogEntry.id).label('count')
     ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False
     ).group_by(
         extract('hour', LogEntry.timestamp)
@@ -134,12 +144,8 @@ def get_daily_activity(db: Session, target_date: date):
     activity = []
     for i in range(7):
         day = start_of_week + timedelta(days=i)
-        start = datetime.combine(day, datetime.min.time())
-        end = datetime.combine(day, datetime.max.time())
-        
         count = db.query(func.count(LogEntry.id)).filter(
-            LogEntry.timestamp >= start,
-            LogEntry.timestamp <= end,
+            _log_date_eq(day),
             LogEntry.is_deleted == False
         ).scalar() or 0
         
@@ -158,13 +164,8 @@ def get_weekly_activity(db: Session, target_date: date):
     for i in range(7, -1, -1):
         week_start = target_date - timedelta(weeks=i, days=target_date.weekday())
         week_end = week_start + timedelta(days=6)
-        
-        start = datetime.combine(week_start, datetime.min.time())
-        end = datetime.combine(week_end, datetime.max.time())
-        
         count = db.query(func.count(LogEntry.id)).filter(
-            LogEntry.timestamp >= start,
-            LogEntry.timestamp <= end,
+            _log_date_between_inclusive(week_start, week_end),
             LogEntry.is_deleted == False
         ).scalar() or 0
         
@@ -265,27 +266,21 @@ def get_summary_trends(db: Session, calls_last_minute: int) -> Dict[str, Dict[st
 
 def get_daily_summary(db: Session, target_date: date):
     """Get summary stats for a specific day."""
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-    
     # Total count
     total = db.query(func.count(LogEntry.id)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
     # Unique talkgroups
     unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
     # Average duration
     avg_duration = db.query(func.avg(LogEntry.duration)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
@@ -294,8 +289,7 @@ def get_daily_summary(db: Session, target_date: date):
         extract('hour', LogEntry.timestamp).label('hour'),
         func.count(LogEntry.id).label('count')
     ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False
     ).group_by(
         extract('hour', LogEntry.timestamp)
@@ -321,24 +315,18 @@ def get_weekly_summary(db: Session, target_date: date):
     start_of_week = target_date - timedelta(days=target_date.weekday())
     end_of_week = start_of_week + timedelta(days=6)
     
-    start = datetime.combine(start_of_week, datetime.min.time())
-    end = datetime.combine(end_of_week, datetime.max.time())
-    
     total = db.query(func.count(LogEntry.id)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_between_inclusive(start_of_week, end_of_week),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
     unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_between_inclusive(start_of_week, end_of_week),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
     avg_duration = db.query(func.avg(LogEntry.duration)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_between_inclusive(start_of_week, end_of_week),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
@@ -362,24 +350,18 @@ def get_monthly_summary(db: Session, target_date: date):
     else:
         end_of_month = target_date.replace(month=target_date.month + 1, day=1) - timedelta(days=1)
     
-    start = datetime.combine(start_of_month, datetime.min.time())
-    end = datetime.combine(end_of_month, datetime.max.time())
-    
     total = db.query(func.count(LogEntry.id)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_between_inclusive(start_of_month, end_of_month),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
     unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_between_inclusive(start_of_month, end_of_month),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
     avg_duration = db.query(func.avg(LogEntry.duration)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_between_inclusive(start_of_month, end_of_month),
         LogEntry.is_deleted == False
     ).scalar() or 0
     
@@ -399,22 +381,20 @@ def get_monthly_summary(db: Session, target_date: date):
 def get_talkgroup_breakdown(db: Session, target_date: date, view: str):
     """Get talkgroup activity breakdown."""
     if view == "hourly":
-        start = datetime.combine(target_date, datetime.min.time())
-        end = datetime.combine(target_date, datetime.max.time())
+        period = _log_date_eq(target_date)
     elif view == "daily":
         start_of_week = target_date - timedelta(days=target_date.weekday())
-        start = datetime.combine(start_of_week, datetime.min.time())
-        end = datetime.combine(start_of_week + timedelta(days=6), datetime.max.time())
+        end_of_week = start_of_week + timedelta(days=6)
+        period = _log_date_between_inclusive(start_of_week, end_of_week)
     else:
-        start = datetime.combine(target_date - timedelta(weeks=4), datetime.min.time())
-        end = datetime.combine(target_date, datetime.max.time())
+        d0 = target_date - timedelta(weeks=4)
+        period = _log_date_between_inclusive(d0, target_date)
     
     results = db.query(
         LogEntry.talkgroup,
         func.count(LogEntry.id).label('count')
     ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        period,
         LogEntry.is_deleted == False,
         LogEntry.talkgroup.isnot(None),
         LogEntry.talkgroup != 'N/A'
@@ -430,22 +410,20 @@ def get_talkgroup_breakdown(db: Session, target_date: date, view: str):
 def get_all_talkgroups(db: Session, target_date: date, view: str):
     """Pull all distinct talkgroups from DB for the period (includes null/empty as N/A)."""
     if view == "hourly":
-        start = datetime.combine(target_date, datetime.min.time())
-        end = datetime.combine(target_date, datetime.max.time())
+        period = _log_date_eq(target_date)
     elif view == "daily":
         start_of_week = target_date - timedelta(days=target_date.weekday())
-        start = datetime.combine(start_of_week, datetime.min.time())
-        end = datetime.combine(start_of_week + timedelta(days=6), datetime.max.time())
+        end_of_week = start_of_week + timedelta(days=6)
+        period = _log_date_between_inclusive(start_of_week, end_of_week)
     else:
-        start = datetime.combine(target_date - timedelta(weeks=4), datetime.min.time())
-        end = datetime.combine(target_date, datetime.max.time())
+        d0 = target_date - timedelta(weeks=4)
+        period = _log_date_between_inclusive(d0, target_date)
     
     results = db.query(
         LogEntry.talkgroup,
         func.count(LogEntry.id).label('count')
     ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        period,
         LogEntry.is_deleted == False
     ).group_by(
         LogEntry.talkgroup
@@ -468,12 +446,8 @@ def get_all_talkgroups(db: Session, target_date: date, view: str):
 
 def get_recent_activity(db: Session, target_date: date, limit: int = 20):
     """Get recent transcriptions for the day."""
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-    
     results = db.query(LogEntry).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False
     ).order_by(
         LogEntry.timestamp.desc()
@@ -510,13 +484,9 @@ async def search_transcriptions(
     else:
         target_date = datetime.now().date()
     
-    # Base query
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-    
+    # Base query — same calendar day as /api/logs (log_date, inclusive)
     query = db.query(LogEntry).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False
     )
     
@@ -609,15 +579,11 @@ async def get_summary_hours(
     else:
         target_date = datetime.now().date()
 
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-
     results = db.query(
         extract("hour", LogEntry.timestamp).label("hour"),
         func.count(LogEntry.id).label("count"),
     ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False,
     ).group_by(
         extract("hour", LogEntry.timestamp)
@@ -703,12 +669,8 @@ async def generate_hour_summary_endpoint(
         }
 
     # Fetch all entries for that hour
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-
     rows = db.query(LogEntry).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
+        _log_date_eq(target_date),
         LogEntry.is_deleted == False,
         extract("hour", LogEntry.timestamp) == payload.hour,
     ).order_by(LogEntry.timestamp.asc()).all()

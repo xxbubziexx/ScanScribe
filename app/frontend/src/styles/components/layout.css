@@ -1,0 +1,60 @@
+@layer components {
+  .ss-top {
+    @apply sticky top-0 z-40 border-b border-white/10;
+    @apply bg-[#0f1117]/90 backdrop-blur-md;
+  }
+
+  .ss-top-inner {
+    @apply mx-auto flex h-14 max-w-screen-2xl items-center gap-6 px-4;
+  }
+
+  .ss-logo {
+    @apply shrink-0 text-lg font-bold tracking-tight text-white;
+  }
+
+  .ss-top-nav {
+    @apply flex items-center gap-1 text-sm;
+  }
+
+  .ss-nav-link {
+    @apply rounded-md px-3 py-1.5 font-medium text-gray-400 transition-colors;
+    @apply hover:bg-white/5 hover:text-white;
+  }
+
+  .ss-nav-link--active {
+    @apply bg-white/10 text-white;
+  }
+
+  .ss-top-user {
+    @apply ml-auto flex items-center gap-4 text-sm;
+  }
+
+  .ss-top-user-text {
+    @apply hidden text-gray-400 sm:block;
+  }
+
+  .ss-pill-admin {
+    @apply ml-1.5 rounded bg-indigo-500/20 px-1.5 py-0.5 text-xs text-indigo-300;
+  }
+
+  .ss-btn-logout {
+    @apply rounded-md border border-white/10 px-3 py-1.5 text-gray-400 transition-colors;
+    @apply hover:border-white/20 hover:text-white;
+  }
+
+  .ss-app {
+    @apply min-h-screen bg-[#0f1117] text-gray-100;
+  }
+
+  .ss-app-main {
+    @apply w-full px-6 py-8 sm:px-10 sm:py-10;
+  }
+
+  .ss-splash {
+    @apply flex min-h-screen items-center justify-center bg-[#0f1117];
+  }
+
+  .ss-splash-text {
+    @apply animate-pulse font-mono text-sm text-gray-500;
+  }
+}

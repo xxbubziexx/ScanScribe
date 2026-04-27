@@ -1,0 +1,5 @@
+@import "tailwindcss";
+@import "./styles/theme.css";
+@import "./styles/scrollbars.css";
+@import "./styles/components.css";
+@import "./styles/audio-player.css";
