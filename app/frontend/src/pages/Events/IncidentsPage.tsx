@@ -194,7 +194,7 @@ export function EventsIncidentsPage() {
   const { addToast } = useToast()
   const [query, setQuery] = useState('')
   const [monitor, setMonitor] = useState<number | 'all'>('all')
-  const [status, setStatus] = useState<'all' | 'open' | 'closed'>('all')
+  const [status, setStatus] = useState<'all' | 'open' | 'closed'>('open')
   const [cardCount, setCardCount] = useState<number>(50)
   const [activeTab, setActiveTab] = useState<DetailTab>('event-thread')
   const [selectedId, setSelectedId] = useState<string>('')
