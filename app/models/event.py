@@ -67,7 +67,11 @@ class PipelineDebugLog(EventsBase):
 
 
 class SpanStore(EventsBase):
-    """Per-span NER extract + transcript; Worker reads rows with evt_type for triage; Master uses recent rows for context."""
+    """Per-span NER extract + transcript. Worker reads rows with evt_type for triage; Master uses recent rows for context.
+
+    Labels mirror the NER model set: UNIT, LOC, EVT_TYPE, ADDRESS, STATUS, TIME.
+    Comma-joined raw NER strings for fast tool reads; canonical/normalized values live in entity_observations.
+    """
 
     __tablename__ = "span_store"
 
@@ -79,10 +83,33 @@ class SpanStore(EventsBase):
     units = Column(Text, nullable=True)
     locations = Column(Text, nullable=True)
     addresses = Column(Text, nullable=True)
-    cross_streets = Column(Text, nullable=True)
-    persons = Column(Text, nullable=True)
-    vehicles = Column(Text, nullable=True)
-    plates = Column(Text, nullable=True)
+    status = Column(Text, nullable=True)
     time_mentions = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     log_entry_id = Column(Integer, nullable=True, index=True)
+
+
+class EntityObservation(EventsBase):
+    """One canonicalized NER entity occurrence. Written synchronously with SpanStore.
+
+    Source of truth for entity-level analytics (top-N by label, time series, by talkgroup).
+    canonical is the normalize_entity() output; raw preserves the original NER span.
+    """
+
+    __tablename__ = "entity_observations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    span_store_id = Column(Integer, ForeignKey("span_store.id"), nullable=False, index=True)
+    monitor_id = Column(Integer, ForeignKey("monitors.id"), nullable=False, index=True)
+    talkgroup = Column(String(255), nullable=True, index=True)
+    log_entry_id = Column(Integer, nullable=True, index=True)
+    ts = Column(DateTime(timezone=True), default=utcnow, index=True)
+    label = Column(String(32), nullable=False, index=True)
+    canonical = Column(String(500), nullable=False, index=True)
+    raw = Column(String(500), nullable=False)
+
+    __table_args__ = (
+        Index("idx_entobs_label_ts", "label", "ts"),
+        Index("idx_entobs_monitor_label_ts", "monitor_id", "label", "ts"),
+        Index("idx_entobs_canonical_label", "canonical", "label"),
+    )

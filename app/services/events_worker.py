@@ -11,8 +11,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..config import get_settings
 from ..database import EventsSessionLocal
-from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore
+from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore, EntityObservation
 from .events_common import event_work_lock, parse_json_list
+from .entity_normalize import normalize_entity, supported_labels as _entity_supported_labels
 from .ner_service import (
     extract_entities,
     normalize_span_for_ner,
@@ -61,7 +62,6 @@ def _use_master_header_normalize() -> bool:
     return (
         getattr(pipe, "master_header_normalize", True)
         and io_cfg is not None
-        and getattr(io_cfg, "enabled", False)
     )
 
 
@@ -107,22 +107,53 @@ def _span_store_from_entities(
     log_entry_id: int,
     entities: Dict[str, List[str]],
 ) -> SpanStore:
-    evt = entities.get("EVT_TYPE", [])
     return SpanStore(
         monitor_id=monitor_id,
         talkgroup=talkgroup or None,
         transcript=transcript,
-        evt_type=_comma_join_parts(evt),
-        units=_comma_join_parts(entities.get("UNIT", []) + entities.get("AGENCY", [])),
+        evt_type=_comma_join_parts(entities.get("EVT_TYPE", [])),
+        units=_comma_join_parts(entities.get("UNIT", [])),
         locations=_comma_join_parts(entities.get("LOC", [])),
         addresses=_comma_join_parts(entities.get("ADDRESS", [])),
-        cross_streets=_comma_join_parts(entities.get("X_STREET", [])),
-        persons=_comma_join_parts(entities.get("SUBJECT", [])),
-        vehicles=_comma_join_parts(entities.get("DESC", []) + entities.get("STATUS", [])),
-        plates=_comma_join_parts(entities.get("CONTEXT", [])),
+        status=_comma_join_parts(entities.get("STATUS", [])),
         time_mentions=_comma_join_parts(entities.get("TIME", [])),
         log_entry_id=log_entry_id,
     )
+
+
+def _entity_observations_from_entities(
+    span_store_id: int,
+    monitor_id: int,
+    talkgroup: str,
+    log_entry_id: int,
+    entities: Dict[str, List[str]],
+    ts: Optional[datetime] = None,
+) -> List[EntityObservation]:
+    """One EntityObservation row per (label, raw entity). Canonicalized for analytics grouping."""
+    out: List[EntityObservation] = []
+    supported = _entity_supported_labels()
+    for label, values in entities.items():
+        if not values or label not in supported:
+            continue
+        for raw in values:
+            if not raw:
+                continue
+            canonical = normalize_entity(label, raw)
+            if not canonical:
+                continue
+            out.append(
+                EntityObservation(
+                    span_store_id=span_store_id,
+                    monitor_id=monitor_id,
+                    talkgroup=talkgroup or None,
+                    log_entry_id=log_entry_id,
+                    ts=ts or datetime.now(timezone.utc),
+                    label=label,
+                    canonical=canonical[:500],
+                    raw=raw[:500],
+                )
+            )
+    return out
 
 
 _monitor_index_lock = threading.Lock()
@@ -188,25 +219,20 @@ def _build_header_from_entities(entities: Dict[str, List[str]], transcript: str)
                 out.append(x)
         return ", ".join(_sort_entities_together(out)) if out else "N/A"
 
-    location_parts = []
-    for k in ("ADDRESS", "LOC", "X_STREET"):
-        location_parts.extend(entities.get(k, []))
-    location = join_sorted_unique(location_parts)
+    # ADDRESS (numbered houses) is the strongest location signal; fall back to LOC
+    # (streets, intersections, businesses) when no ADDRESS exists. Merging both would
+    # blur "1521 Maple Ave" with "Walmart" into one cell.
+    addresses = entities.get("ADDRESS", [])
+    if addresses:
+        location = join_sorted_unique(addresses)
+    else:
+        location = join_sorted_unique(entities.get("LOC", []))
 
-    unit_parts = entities.get("UNIT", []) + entities.get("AGENCY", [])
-    units = join_sorted_unique(unit_parts)
+    units = join_sorted_unique(entities.get("UNIT", []))
 
     evt_type_parts = entities.get("EVT_TYPE", [])
     event_type = join_sorted_unique(evt_type_parts) if evt_type_parts else "N/A"
     status_detail = first(entities.get("STATUS", []))
-
-    desc_parts = (
-        entities.get("DESC", [])
-        + entities.get("SUBJECT", [])
-        + entities.get("TIME", [])
-        + entities.get("CONTEXT", [])
-    )
-    summary = join_sorted_unique(desc_parts) if desc_parts else None
 
     return {
         "event_type": event_type,
@@ -214,7 +240,7 @@ def _build_header_from_entities(entities: Dict[str, List[str]], transcript: str)
         "units": units,
         "status_detail": status_detail,
         "original_transcription": transcript,
-        "summary": summary,
+        "summary": None,
     }
 
 
@@ -499,15 +525,28 @@ def process_transcript_for_monitor(
         )
 
         io_cfg = getattr(settings.config, "incidents_ollama", None)
-        llm_on = bool(
-            getattr(cfg, "llm_routing", False)
-            and io_cfg is not None
-            and getattr(io_cfg, "enabled", False)
-        )
+        llm_on = io_cfg is not None
 
         # Persist every span to span_store so get_recent_spans reflects full monitor activity,
         # including VAD_REJECTED / NER-empty spans (NER columns blank).
-        events_db.add(_span_store_from_entities(monitor_id, talkgroup or "", transcript, log_entry_id, entities))
+        span_row = _span_store_from_entities(monitor_id, talkgroup or "", transcript, log_entry_id, entities)
+        events_db.add(span_row)
+        events_db.flush()  # need span_row.id for FK on entity_observations
+        # Mirror canonicalized entities into entity_observations (analytics source of truth).
+        # Failures are logged but don't break ingest; SpanStore is the raw fallback.
+        try:
+            obs_rows = _entity_observations_from_entities(
+                span_store_id=span_row.id,
+                monitor_id=monitor_id,
+                talkgroup=talkgroup or "",
+                log_entry_id=log_entry_id,
+                entities=entities,
+                ts=log_timestamp if isinstance(log_timestamp, datetime) else None,
+            )
+            if obs_rows:
+                events_db.add_all(obs_rows)
+        except Exception as ex:
+            logger.warning("entity_observations write failed log_entry_id=%s: %s", log_entry_id, ex)
         events_db.commit()
 
         if not entities:
@@ -522,12 +561,10 @@ def process_transcript_for_monitor(
         start_labels = parse_json_list(monitor.keyword_config) or ["EVT_TYPE"]
         start_labels = [s.strip().upper() for s in start_labels if s]
         has_start_label = any(entities.get(lbl) for lbl in start_labels)
-        addresses = (
-            entities.get("ADDRESS", [])
-            + entities.get("LOC", [])
-            + entities.get("X_STREET", [])
-        )
-        units = entities.get("UNIT", []) + entities.get("AGENCY", [])
+        # ADDRESS (numbered) preferred for legacy attach-merge location; LOC fills in
+        # when no numbered address is present so we don't lose street/landmark mentions.
+        ner_addresses = entities.get("ADDRESS", []) or entities.get("LOC", [])
+        units = entities.get("UNIT", [])
         evt_types = entities.get("EVT_TYPE", [])
 
         open_summary = [
@@ -540,7 +577,7 @@ def process_transcript_for_monitor(
             if not llm_on:
                 debug_append_ner(
                     monitor_id, log_entry_id, "master_needs_ollama", "", duration_ms, entities,
-                    "set incidents_ollama.enabled and events_pipeline.llm_routing",
+                    "configure incidents_ollama and enable events_pipeline.enabled",
                     raw_output, transcript,
                 )
                 return
@@ -653,8 +690,8 @@ def process_transcript_for_monitor(
                         if not use_master_header:
                             if units:
                                 ev.units = _merge_list_field(ev.units, units)
-                            if addresses:
-                                ev.location = _merge_list_field(ev.location, addresses)
+                            if ner_addresses:
+                                ev.location = _merge_list_field(ev.location, ner_addresses)
                         ev.master_last_run_at = datetime.now(timezone.utc)
                         events_db.commit()
                     if use_master_header and _should_normalize_on_attach(events_db, ev.id):
@@ -695,8 +732,8 @@ def process_transcript_for_monitor(
                         if not use_master_header:
                             if units:
                                 ev.units = _merge_list_field(ev.units, units)
-                            if addresses:
-                                ev.location = _merge_list_field(ev.location, addresses)
+                            if ner_addresses:
+                                ev.location = _merge_list_field(ev.location, ner_addresses)
                         ev.status = "closed"
                         ev.closed_at = datetime.now(timezone.utc)
                         ev.master_last_run_at = datetime.now(timezone.utc)
@@ -726,7 +763,7 @@ def process_transcript_for_monitor(
         if not llm_on:
             debug_append_ner(
                 monitor_id, log_entry_id, "worker_needs_ollama", "", duration_ms, entities,
-                "set incidents_ollama.enabled and events_pipeline.llm_routing",
+                "configure incidents_ollama and enable events_pipeline.enabled",
                 raw_output, transcript,
             )
             return

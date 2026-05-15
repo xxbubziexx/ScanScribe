@@ -7,22 +7,20 @@ from typing import Dict, List, Optional
 logger = logging.getLogger(__name__)
 
 # Entity labels from the fine-tuned model (BIO tags normalized to type names).
-# LOC: landmarks, street names, intersections (not house numbers — use ADDRESS for those).
-# ADDRESS: house / numbered addresses. STATUS: operational status phrases.
-# TIME: time-of-day or ETA-style phrases (dispatch times, "14:30", "in 10 minutes").
+# UNIT:     radio unit / call sign (e.g. "Engine 4", "12U-1771").
+# LOC:      streets, intersections, and named places (Walmart, Dollar General). NOT numbered houses.
+# ADDRESS:  numbered house / structured addresses only (e.g. "1521 Maple Avenue").
+# EVT_TYPE: incident type (structure fire, traffic stop, MVA).
+# STATUS:   operational status phrases ("en route", "on scene", "clear").
+# TIME:     24-hour time-of-day mentions ("14:30", "1430 hours").
 ENTITY_LABELS = frozenset(
     {
         "UNIT",
         "LOC",
-        "SUBJECT",
-        "DESC",
         "EVT_TYPE",
         "ADDRESS",
-        "X_STREET",
-        "AGENCY",
         "STATUS",
         "TIME",
-        "CONTEXT",
     }
 )
 

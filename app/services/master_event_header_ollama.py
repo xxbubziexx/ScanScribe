@@ -19,6 +19,7 @@ from .ollama_event_routing import (
     _ollama_native_chat_request,
     _ollama_openai_completions_request,
     _prepare_assistant_text_for_json,
+    _resolve_provider_ctx,
     _resolve_reasoning_effort,
     _resolve_timeout,
     _routing_response_message,
@@ -51,10 +52,13 @@ def _aggregate_ner_hints(links: List[EventTranscriptLink]) -> str:
 
 
 def _run_master_header_normalize(event_db_id: int, cfg: Any, pipe: Any) -> None:
-    base_url = (cfg.base_url or "http://localhost:11434").rstrip("/")
+    provider_ctx = _resolve_provider_ctx(cfg)
+    base_url = provider_ctx.base_url
     model = incidents_ollama_master_model(cfg)
     timeout = _resolve_timeout(cfg)
     use_openai_api = bool(getattr(pipe, "llm_routing_openai_api", True))
+    if not provider_ctx.supports_native_chat and not use_openai_api:
+        use_openai_api = True
     reasoning_effort = _resolve_reasoning_effort(pipe)
     max_tok = getattr(pipe, "llm_routing_max_tokens", None)
     try:
@@ -69,8 +73,11 @@ def _run_master_header_normalize(event_db_id: int, cfg: Any, pipe: Any) -> None:
         "the first non-whitespace character must be '{'.\n"
         "Output ONLY a single JSON object (no markdown, no commentary) with exactly these string keys:\n"
         '  "event_type" — 2–6 words, Title Case incident noun phrase (e.g. Structure Fire, Traffic Stop).\n'
-        '  "location" — primary street address or named place; deduplicate; empty string if unknown.\n'
-        '  "units" — comma-separated units/agencies as heard (e.g. Engine 4, 12U-1771); empty string if unknown.\n'
+        '  "location" — primary location for this incident. Prefer the numbered house ADDRESS '
+        '(e.g. "1521 Maple Avenue") when present in the transcripts; otherwise use the LOC '
+        'value (street, intersection, or named place like Walmart, Dollar General). '
+        'Deduplicate; empty string if unknown.\n'
+        '  "units" — comma-separated units as heard (e.g. Engine 4, 12U-1771); empty string if unknown.\n'
         '  "status_detail" — short operational status (e.g. En Route, On Scene, Clear); empty string if unknown.\n'
         "Use transcript lines as the source of truth. A separate NER hints block may be noisy — use it only to "
         "disambiguate when it agrees with audio. Do not invent facts.\n"
@@ -169,14 +176,16 @@ def _run_master_header_normalize(event_db_id: int, cfg: Any, pipe: Any) -> None:
                     max_tokens=max_tokens,
                     reasoning_effort=reasoning_effort,
                     omit_response_format=True,
+                    provider_ctx=provider_ctx,
                 )
             else:
                 data = _ollama_native_chat_request(
                     base_url, model, messages, None, timeout, max_tokens=max_tokens, format_json=True,
+                    provider_ctx=provider_ctx,
                 )
 
         if not data:
-            logger.warning("Master header: no Ollama response event_db_id=%s", event_db_id)
+            logger.warning("Master header: no LLM response event_db_id=%s", event_db_id)
         else:
             msg = _routing_response_message(data, use_openai_api)
             raw = _message_text_for_decision(msg).strip()
@@ -318,7 +327,7 @@ def schedule_master_header_normalize(event_db_id: int) -> None:
     settings = get_settings()
     cfg = getattr(settings.config, "incidents_ollama", None)
     pipe = settings.config.events_pipeline
-    if not cfg or not getattr(cfg, "enabled", False):
+    if not cfg or not getattr(pipe, "enabled", False):
         return
     if not getattr(pipe, "master_header_normalize", True):
         return

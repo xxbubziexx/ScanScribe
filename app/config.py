@@ -120,9 +120,15 @@ class TimestampConfig(BaseModel):
 
 
 class IncidentsOllamaConfig(BaseModel):
-    """Ollama for Worker (cheap triage), Master (routing + tools, header fields, incident summaries)."""
-    enabled: bool = False
+    """LLM backend for Worker (cheap triage), Master (routing + tools, header fields, incident summaries).
+
+    Section name kept as `incidents_ollama` for backward compatibility; `provider` selects the wire backend.
+    """
+    # provider: ollama (local /v1 + native /api/chat) or deepseek (OpenAI-compatible cloud, requires api_key)
+    provider: Literal["ollama", "deepseek"] = "ollama"
     base_url: str = "http://localhost:11434"
+    # DeepSeek API key (Bearer). Env var DEEPSEEK_API_KEY overrides this if set.
+    api_key: str = ""
     # Default when worker_model / master_model omitted (legacy single-model setups).
     model: str = "llama3.2:3b"
     # Small/cheap model: should this EVT_TYPE span open a new incident?
@@ -130,6 +136,11 @@ class IncidentsOllamaConfig(BaseModel):
     # Stronger model: Master routing (attach/skip/close) + event summaries.
     master_model: str = ""
     timeout_seconds: int = 60
+
+
+# DeepSeek defaults
+DEEPSEEK_DEFAULT_BASE_URL = "https://api.deepseek.com"
+_OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434"
 
 
 def incidents_ollama_master_model(cfg: IncidentsOllamaConfig) -> str:
@@ -140,6 +151,28 @@ def incidents_ollama_master_model(cfg: IncidentsOllamaConfig) -> str:
 def incidents_ollama_worker_model(cfg: IncidentsOllamaConfig) -> str:
     w = (cfg.worker_model or "").strip()
     return w if w else (cfg.model or "llama3.2:3b")
+
+
+def incidents_ollama_api_key(cfg: IncidentsOllamaConfig) -> str:
+    """DEEPSEEK_API_KEY env wins over config.api_key. Empty string if neither set."""
+    env = (os.getenv("DEEPSEEK_API_KEY") or "").strip()
+    if env:
+        return env
+    return (cfg.api_key or "").strip()
+
+
+def incidents_ollama_base_url(cfg: IncidentsOllamaConfig) -> str:
+    """Effective base URL for the selected provider.
+
+    DeepSeek: if base_url left at the Ollama default, switch to the DeepSeek public endpoint.
+    Honor any non-default user-set base_url (e.g. proxy).
+    """
+    raw = (cfg.base_url or "").strip().rstrip("/")
+    if cfg.provider == "deepseek":
+        if not raw or raw == _OLLAMA_DEFAULT_BASE_URL:
+            return DEEPSEEK_DEFAULT_BASE_URL
+        return raw
+    return raw or _OLLAMA_DEFAULT_BASE_URL
 
 
 class EventsPipelineConfig(BaseModel):
@@ -153,8 +186,6 @@ class EventsPipelineConfig(BaseModel):
     ner_strip_commas: bool = True
     # Minimum per-span confidence score (0.0–1.0) to keep an NER entity. 0.0 = disabled.
     ner_confidence_threshold: float = 0.85
-    # Master LLM routing (requires incidents_ollama + llm_routing). NER rule fallback removed.
-    llm_routing: bool = False
     llm_routing_max_tool_rounds: int = 12
     # Log full Ollama JSON (per round) + final assistant text at INFO (noisy; for debugging)
     llm_routing_log_raw: bool = False
@@ -179,7 +210,7 @@ class EventsPipelineConfig(BaseModel):
     # Run header normalizer every N total attached spans (1 = every attach, 5 = 1st/5th/10th…). 0 = every attach.
     normalize_every_n_spans: int = 5
     # Master LLM fills event_type, location, units, status_detail from transcripts (not raw NER in the header).
-    # Requires incidents_ollama.enabled. false = legacy NER-built header + merge on attach.
+    # false = legacy NER-built header + merge on attach.
     master_header_normalize: bool = True
 
 

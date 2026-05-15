@@ -1,6 +1,7 @@
 """Worker LLM: create vs skip for new incidents (EVT_TYPE spans).
 
-Uses Ollama with tools: get_recent_spans + list_open_events, then JSON decision.
+Uses the configured incidents LLM (Ollama or DeepSeek) with tools:
+get_recent_spans + list_open_events, then a JSON decision.
 """
 from __future__ import annotations
 
@@ -24,7 +25,9 @@ from .ollama_event_routing import (
     _ollama_native_chat_request,
     _ollama_openai_completions_request,
     _prepare_assistant_text_for_json,
+    _provider_supports_tools_for_model,
     _resolve_max_tokens,
+    _resolve_provider_ctx,
     _resolve_reasoning_effort,
     _resolve_timeout,
     _routing_response_message,
@@ -128,8 +131,8 @@ def worker_should_create_event(
     settings = get_settings()
     ollama_cfg = getattr(settings.config, "incidents_ollama", None)
     pipe = settings.config.events_pipeline
-    if not ollama_cfg or not getattr(ollama_cfg, "enabled", False):
-        err = "incidents_ollama is disabled in config"
+    if not ollama_cfg:
+        err = "incidents_ollama is missing in config"
         logger.warning("Worker: %s (monitor_id=%s log_entry_id=%s)", err, monitor_id, log_entry_id)
         return (None, err, "", None, None)
 
@@ -160,11 +163,22 @@ def _worker_tool_loop_path(
     ollama_cfg: Any,
     pipe: Any,
 ) -> Tuple[Optional[bool], str, str, Optional[str], Optional[str]]:
-    base_url = (ollama_cfg.base_url or "http://localhost:11434").rstrip("/")
+    provider_ctx = _resolve_provider_ctx(ollama_cfg)
+    base_url = provider_ctx.base_url
     model = incidents_ollama_worker_model(ollama_cfg)
+    ok, why = _provider_supports_tools_for_model(provider_ctx, model)
+    if not ok:
+        logger.warning("Worker: %s", why)
+        return (None, why, "", None, None)
     timeout = _resolve_timeout(ollama_cfg)
     max_rounds = int(getattr(pipe, "llm_routing_max_tool_rounds", 12) or 12)
     use_openai_api = bool(getattr(pipe, "llm_routing_openai_api", True))
+    if not provider_ctx.supports_native_chat and not use_openai_api:
+        logger.info(
+            "Worker: provider=%s does not support native /api/chat; forcing OpenAI-compatible path",
+            provider_ctx.provider,
+        )
+        use_openai_api = True
     routing_max_tokens = _resolve_max_tokens(pipe)
     routing_reasoning_effort = _resolve_reasoning_effort(pipe)
     log_raw = bool(getattr(pipe, "llm_routing_log_raw", False))
@@ -195,6 +209,10 @@ def _worker_tool_loop_path(
         "if transcript is VAD_REJECTED (or equivalent system/VAD marker): always skip.\n"
         "skip if: duplicate dispatch, continuation of open incident, "
         "test traffic, or ambiguous.\n"
+        "NER label semantics in the user payload: ADDRESS = numbered house/structured addresses; "
+        "LOC = streets, intersections, and named places (Walmart, Dollar General); "
+        "UNIT = radio unit; EVT_TYPE = incident type; STATUS = operational status; "
+        "TIME = 24h time-of-day. Use these as hints only.\n"
         "Do not narrate. Do not explain. Do not repeat monitor/transcript fields. "
         "Output only that JSON after tools."
     )
@@ -251,15 +269,17 @@ def _worker_tool_loop_path(
                 max_tokens=routing_max_tokens,
                 reasoning_effort=routing_reasoning_effort,
                 tool_choice="auto" if _conversation_has_tool_results(messages) else "required",
+                provider_ctx=provider_ctx,
             )
         else:
             data = _ollama_native_chat_request(
                 base_url, model, messages, WORKER_TOOLS, timeout, max_tokens=routing_max_tokens,
+                provider_ctx=provider_ctx,
             )
         if not data:
             err = (
-                f"Ollama returned no response (timeout or unreachable); "
-                f"model={model!r} base={base_url!r} round={round_i}"
+                f"LLM returned no response (HTTP error, timeout, or unreachable); "
+                f"provider={provider_ctx.provider} model={model!r} base={base_url!r} round={round_i}"
             )
             logger.warning("Worker: %s monitor_id=%s log_entry_id=%s", err, monitor_id, log_entry_id)
             return (None, err, "", None, None)

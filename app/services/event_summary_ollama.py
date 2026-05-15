@@ -1,4 +1,4 @@
-"""Event summary via the same Ollama stack as the Master LLM (chat completions or native /api/chat).
+"""Event summary via the same LLM backend as the Master router (Ollama or DeepSeek).
 
 Runs in background when attached spans >= summary_trigger_spans.
 """
@@ -13,6 +13,7 @@ from ..models.log_entry import LogEntry
 from .ollama_event_routing import (
     _call_master_chat_plain,
     _message_text_for_decision,
+    _resolve_provider_ctx,
     _resolve_reasoning_effort,
     _resolve_timeout,
     _routing_response_message,
@@ -50,10 +51,13 @@ def _build_event_summary_user_content(
 
 
 def _run_event_summary(event_db_id: int, cfg: Any, pipe: Any) -> None:
-    base_url = (cfg.base_url or "http://localhost:11434").rstrip("/")
+    provider_ctx = _resolve_provider_ctx(cfg)
+    base_url = provider_ctx.base_url
     model = incidents_ollama_master_model(cfg)
     timeout = _resolve_timeout(cfg)
     use_openai_api = bool(getattr(pipe, "llm_routing_openai_api", True))
+    if not provider_ctx.supports_native_chat and not use_openai_api:
+        use_openai_api = True
     reasoning_effort = _resolve_reasoning_effort(pipe)
     max_tok = getattr(pipe, "llm_routing_max_tokens", None)
     try:
@@ -126,9 +130,10 @@ def _run_event_summary(event_db_id: int, cfg: Any, pipe: Any) -> None:
             max_tokens=max_tokens,
             use_openai_api=use_openai_api,
             reasoning_effort=reasoning_effort,
+            provider_ctx=provider_ctx,
         )
         if not data:
-            logger.debug("Event summary: no response from Ollama (Master path) event_db_id=%s", event_db_id)
+            logger.debug("Event summary: no response from LLM (Master path) event_db_id=%s", event_db_id)
             return
 
         msg = _routing_response_message(data, use_openai_api)
@@ -148,7 +153,7 @@ def _run_event_summary(event_db_id: int, cfg: Any, pipe: Any) -> None:
                 ev.event_id, recommend_close,
             )
     except Exception as e:
-        logger.warning("Events: Ollama summary failed for event_db_id=%s: %s", event_db_id, e)
+        logger.warning("Events: LLM summary failed for event_db_id=%s: %s", event_db_id, e)
     finally:
         events_db.close()
         logs_db.close()
@@ -172,10 +177,10 @@ def _maybe_run_summary(event_db_id: int, cfg: Any, pipe: Any) -> None:
 
 
 def schedule_event_summary(event_db_id: int) -> None:
-    """Schedule background summary for event. No-op if Ollama disabled."""
+    """Schedule background summary for event. No-op if the events pipeline is disabled."""
     settings = get_settings()
     cfg = getattr(settings.config, "incidents_ollama", None)
     pipe = settings.config.events_pipeline
-    if not cfg or not getattr(cfg, "enabled", False):
+    if not cfg or not getattr(pipe, "enabled", False):
         return
     threading.Thread(target=_run_event_summary, args=(event_db_id, cfg, pipe), daemon=True).start()

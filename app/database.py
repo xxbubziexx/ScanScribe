@@ -120,8 +120,15 @@ def init_db():
         if "llm_reason" not in link_cols2:
             conn.execute(text("ALTER TABLE event_transcript_links ADD COLUMN llm_reason TEXT"))
             conn.commit()
+        # span_store schema changed (dropped legacy label columns, added 'status').
+        # Wipe + recreate when the legacy columns are present — user opted-in to a clean slate
+        # for entity observations (no backfill). Safe: SpanStore is regenerated from new ingest.
         r = conn.execute(text("PRAGMA table_info(span_store)"))
-        span_cols = [row[1] for row in r.fetchall()]
-        if "time_mentions" not in span_cols:
-            conn.execute(text("ALTER TABLE span_store ADD COLUMN time_mentions TEXT"))
+        span_cols = {row[1] for row in r.fetchall()}
+        _LEGACY_SPAN_COLS = {"cross_streets", "persons", "vehicles", "plates"}
+        if span_cols & _LEGACY_SPAN_COLS:
+            conn.execute(text("DROP TABLE IF EXISTS span_store"))
             conn.commit()
+            # Recreate via SQLAlchemy metadata so new schema is applied.
+            from .models.event import SpanStore as _SpanStore
+            _SpanStore.__table__.create(bind=events_engine, checkfirst=True)
