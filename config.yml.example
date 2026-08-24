@@ -11,11 +11,11 @@
 # ==================== MODEL SETTINGS ====================
 model:
   # Whisper model folder name (must match directory inside ./models/)
-  name: whisper-small
+  name: whisper-public-safety-latest2
   # Model directory path (use /app/models in Docker)
   path: /app/models
   # Parallel transcription worker threads (0 = all CPU cores)
-  workers: 4
+  workers: 16
   # Device: cpu or cuda (GPU requires NVIDIA Docker runtime)
   device: cpu
 
@@ -58,7 +58,7 @@ storage:
 # ==================== TRANSCRIPTION SETTINGS ====================
 # English-only transcription.
 transcription:
-  beam_size: 5
+  beam_size: 10
   vad_enabled: true
   vad_threshold: 0.5
   vad_speech_pad_ms: 150
@@ -67,12 +67,12 @@ transcription:
   vad_chunking_mode: silence
   vad_chunking_enabled: true
   # Save trimmed audio to storage instead of original
-  vad_save_speech_only: false
-  vad_segment_pad_s: 0.2
+  vad_save_speech_only: true
+  vad_segment_pad_s: 0.5
   # Silence-removal tuning (vad_chunking_mode: silence)
-  silence_threshold: 0.015   # RMS below this = silence (tune to your noise floor: 0.01–0.03)
+  silence_threshold: 0.006   # RMS below this = silence (tune to your noise floor: 0.01–0.03)
   min_silence_duration_s: 0.5
-  silence_gap_s: 0.1
+  silence_gap_s: 0.5
 
 # ==================== QUEUE SETTINGS ====================
 queue:
@@ -81,21 +81,19 @@ queue:
   fifo_order: true   # true = oldest first
 
 # ==================== EVENTS PIPELINE ====================
-# NER → SpanStore → Worker LLM (opens incidents) → Master LLM (attach/skip/close)
-#   → Header normalizer → Summary generator → Cleanup sweep
 events_pipeline:
-  enabled: false
+  enabled: true
   # Path to NER model folder (model.safetensors, config.json, tokenizer)
-  ner_model_path: ""  # e.g. ./models/incident_ner_v1
+  ner_model_path: "./models/incident_ner_full_syn_junk"  # e.g. ./models/incident_ner_v1
   # Strip commas from span text before NER (recommended: true)
   ner_strip_commas: true
   # Minimum NER confidence to keep an entity (0.0 = disabled)
   ner_confidence_threshold: 0.85
 
   # Auto-close events whose last radio transmission is older than this (seconds). 0 = disabled.
-  auto_close_stale_seconds: 0
+  auto_close_stale_seconds: 3600
   # How often the background cleanup sweep runs (seconds). 0 = disabled.
-  cleanup_interval_seconds: 0
+  cleanup_interval_seconds: 1800
 
 # ==================== OPENROUTER (Events Pipeline Router) ====================
 # Single-pass LLM router backend for emergency event classification and updates.
@@ -109,25 +107,17 @@ openrouter:
 # ==================== HOURLY SUMMARIES API ====================
 # Used by Insights hour summaries (manual generate + auto worker).
 hourly_summaries:
-  enabled: false
+  enabled: true
   # gemini | openrouter
-  provider: gemini
+  provider: openrouter
   # Gemini: set GEMINI_API_KEY. OpenRouter: set OPENROUTER_API_KEY (or put key here).
   api_key: ""
   # Gemini: gemini-2.5-flash
   # OpenRouter: e.g. google/gemini-2.5-flash or openai/gpt-4o-mini
-  model: gemini-2.5-flash
+  model: openrouter/auto
   # OpenRouter only (optional). Defaults to https://openrouter.ai/api
   base_url: ""
   max_output_tokens: 8192
-
-# OpenRouter example (uncomment / switch provider):
-# hourly_summaries:
-#   enabled: true
-#   provider: openrouter
-#   api_key: ""   # or set OPENROUTER_API_KEY
-#   model: "google/gemini-2.5-flash"
-#   max_output_tokens: 8192
 
 # ==================== HOUR SUMMARIES SCHEDULE ====================
 summaries:
