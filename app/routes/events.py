@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_events_db, get_logs_db
-from ..models.event import Monitor, Event, EventTranscriptLink
+from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore
 from ..models.log_entry import LogEntry
 from ..models.user import User
 from ..services.events_common import parse_json_list
@@ -120,6 +120,7 @@ class MonitorCreate(BaseModel):
     name: str = Field(..., min_length=1)
     talkgroup_ids: List[str] = Field(default_factory=list)
     start_event_labels: List[str] = Field(default_factory=lambda: ["EVT_TYPE"])
+    geo_region: Optional[str] = None
 
 
 class MonitorUpdate(BaseModel):
@@ -127,6 +128,7 @@ class MonitorUpdate(BaseModel):
     enabled: Optional[bool] = None
     talkgroup_ids: Optional[List[str]] = None
     start_event_labels: Optional[List[str]] = None
+    geo_region: Optional[str] = None
 
 
 class MonitorResponse(BaseModel):
@@ -135,6 +137,28 @@ class MonitorResponse(BaseModel):
     enabled: bool
     talkgroup_ids: List[str]
     start_event_labels: List[str]
+    geo_region: Optional[str] = None
+
+
+class SpanStoreItem(BaseModel):
+    id: int
+    monitor_id: int
+    talkgroup: Optional[str] = None
+    log_entry_id: Optional[int] = None
+    transcript: Optional[str] = None
+    evt_type: Optional[str] = None
+    units: Optional[str] = None
+    locations: Optional[str] = None
+    addresses: Optional[str] = None
+    status: Optional[str] = None
+    time_mentions: Optional[str] = None
+    created_at: Optional[str] = None
+    attached_event_ids: List[str] = Field(default_factory=list)
+
+
+class SpanStoreListResponse(BaseModel):
+    items: List[SpanStoreItem]
+    total: int
 
 
 class EventResponse(BaseModel):
@@ -145,11 +169,13 @@ class EventResponse(BaseModel):
     event_type: Optional[str]
     broadcast_type: Optional[str] = None
     location: Optional[str]
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    resolved_address: Optional[str] = None
     units: Optional[str]
     status_detail: Optional[str]
     original_transcription: Optional[str]
     summary: Optional[str]
-    close_recommendation: Optional[bool] = None
     # System: when the event row was created (processing time).
     created_at: Optional[str]
     # Earliest linked span LogEntry.timestamp (from audio-derived time stored in logs DB).
@@ -167,7 +193,14 @@ async def list_monitors(
     """List all monitors (departments)."""
     monitors = db.query(Monitor).order_by(Monitor.name).all()
     return [
-        MonitorResponse(id=m.id, name=m.name, enabled=m.enabled, talkgroup_ids=parse_json_list(m.talkgroup_ids), start_event_labels=_start_labels(m.keyword_config))
+        MonitorResponse(
+            id=m.id,
+            name=m.name,
+            enabled=m.enabled,
+            talkgroup_ids=parse_json_list(m.talkgroup_ids),
+            start_event_labels=_start_labels(m.keyword_config),
+            geo_region=m.geo_region,
+        )
         for m in monitors
     ]
 
@@ -183,13 +216,21 @@ async def create_monitor(
     m = Monitor(
         name=body.name,
         enabled=True,
+        geo_region=(body.geo_region or "").strip() or None,
         talkgroup_ids=json.dumps(body.talkgroup_ids),
         keyword_config=json.dumps(labels),
     )
     db.add(m)
     db.commit()
     db.refresh(m)
-    return MonitorResponse(id=m.id, name=m.name, enabled=m.enabled, talkgroup_ids=body.talkgroup_ids, start_event_labels=labels)
+    return MonitorResponse(
+        id=m.id,
+        name=m.name,
+        enabled=m.enabled,
+        talkgroup_ids=body.talkgroup_ids,
+        start_event_labels=labels,
+        geo_region=m.geo_region,
+    )
 
 
 @router.patch("/monitors/{monitor_id}", response_model=MonitorResponse)
@@ -199,7 +240,7 @@ async def update_monitor(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_events_db),
 ):
-    """Update a monitor (name, enabled, talkgroup_ids, start_event_labels)."""
+    """Update a monitor (name, enabled, talkgroup_ids, start_event_labels, geo_region)."""
     m = db.query(Monitor).filter(Monitor.id == monitor_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Monitor not found")
@@ -207,6 +248,8 @@ async def update_monitor(
         m.name = body.name
     if body.enabled is not None:
         m.enabled = body.enabled
+    if body.geo_region is not None:
+        m.geo_region = body.geo_region.strip() or None
     if body.talkgroup_ids is not None:
         m.talkgroup_ids = json.dumps(body.talkgroup_ids)
     if body.start_event_labels is not None:
@@ -214,7 +257,14 @@ async def update_monitor(
     db.add(m)
     db.commit()
     db.refresh(m)
-    return MonitorResponse(id=m.id, name=m.name, enabled=m.enabled, talkgroup_ids=parse_json_list(m.talkgroup_ids), start_event_labels=_start_labels(m.keyword_config))
+    return MonitorResponse(
+        id=m.id,
+        name=m.name,
+        enabled=m.enabled,
+        talkgroup_ids=parse_json_list(m.talkgroup_ids),
+        start_event_labels=_start_labels(m.keyword_config),
+        geo_region=m.geo_region,
+    )
 
 
 @router.delete("/monitors/{monitor_id}")
@@ -233,6 +283,68 @@ async def delete_monitor(
     db.delete(m)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/span-store", response_model=SpanStoreListResponse)
+async def list_span_store(
+    monitor_id: Optional[int] = Query(None, ge=1),
+    talkgroup: Optional[str] = Query(None, max_length=255),
+    log_entry_id: Optional[int] = Query(None, ge=1),
+    q: Optional[str] = Query(None, max_length=500, description="Substring search in transcript"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_events_db),
+):
+    """Browse span_store rows (NER + transcript per ingest). Newest first."""
+    qry = db.query(SpanStore)
+    if monitor_id is not None:
+        qry = qry.filter(SpanStore.monitor_id == monitor_id)
+    if talkgroup and talkgroup.strip():
+        qry = qry.filter(SpanStore.talkgroup.ilike(f"%{talkgroup.strip()}%"))
+    if log_entry_id is not None:
+        qry = qry.filter(SpanStore.log_entry_id == log_entry_id)
+    if q and q.strip():
+        qry = qry.filter(SpanStore.transcript.ilike(f"%{q.strip()}%"))
+    total = qry.count()
+    rows = (
+        qry.order_by(SpanStore.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    log_ids = sorted({r.log_entry_id for r in rows if r.log_entry_id is not None})
+    attached_by_log: Dict[int, List[str]] = defaultdict(list)
+    if log_ids:
+        for lid, eid in (
+            db.query(EventTranscriptLink.log_entry_id, Event.event_id)
+            .join(Event, Event.id == EventTranscriptLink.event_id)
+            .filter(EventTranscriptLink.log_entry_id.in_(log_ids))
+            .all()
+        ):
+            if lid is not None and eid:
+                attached_by_log[int(lid)].append(eid)
+    items: List[SpanStoreItem] = []
+    for r in rows:
+        lid = r.log_entry_id
+        items.append(
+            SpanStoreItem(
+                id=r.id,
+                monitor_id=r.monitor_id,
+                talkgroup=r.talkgroup,
+                log_entry_id=lid,
+                transcript=r.transcript,
+                evt_type=r.evt_type,
+                units=r.units,
+                locations=r.locations,
+                addresses=r.addresses,
+                status=r.status,
+                time_mentions=r.time_mentions,
+                created_at=_iso_utc(r.created_at, assume_utc=True),
+                attached_event_ids=sorted(set(attached_by_log.get(lid, []))) if lid else [],
+            )
+        )
+    return SpanStoreListResponse(items=items, total=total)
 
 
 @router.get("/events")
@@ -270,11 +382,13 @@ async def list_events(
             event_type=e.event_type,
             broadcast_type=getattr(e, "broadcast_type", None),
             location=e.location,
+            latitude=e.latitude,
+            longitude=e.longitude,
+            resolved_address=e.resolved_address,
             units=e.units,
             status_detail=e.status_detail,
             original_transcription=e.original_transcription,
             summary=e.summary,
-            close_recommendation=getattr(e, "close_recommendation", None),
             created_at=_iso_utc(e.created_at, assume_utc=True),
             incident_at=_iso_utc(incident_at) if incident_at else None,
             closed_at=_iso_utc(e.closed_at, assume_utc=True),
@@ -318,6 +432,9 @@ async def export_events_normalized_headers(
             "broadcast_type",
             "type_display",
             "location",
+            "latitude",
+            "longitude",
+            "resolved_address",
             "units",
             "status_detail",
             "summary",
@@ -340,6 +457,9 @@ async def export_events_normalized_headers(
                 (getattr(e, "broadcast_type", None) or "").strip(),
                 _event_type_csv_display(e),
                 (e.location or "").strip(),
+                e.latitude if e.latitude is not None else "",
+                e.longitude if e.longitude is not None else "",
+                (e.resolved_address or "").strip(),
                 (e.units or "").strip(),
                 (e.status_detail or "").strip(),
                 (e.summary or "").replace("\r\n", " ").replace("\n", " ").strip(),
@@ -418,16 +538,65 @@ async def get_event_detail(
             "event_type": event.event_type,
             "broadcast_type": getattr(event, "broadcast_type", None),
             "location": event.location,
+            "latitude": event.latitude,
+            "longitude": event.longitude,
+            "resolved_address": event.resolved_address,
             "units": event.units,
             "status_detail": event.status_detail,
             "original_transcription": event.original_transcription,
             "summary": event.summary,
-            "close_recommendation": getattr(event, "close_recommendation", None),
             "created_at": _iso_utc(event.created_at, assume_utc=True),
             "incident_at": _iso_utc(incident_at) if incident_at else None,
             "closed_at": _iso_utc(event.closed_at, assume_utc=True),
         },
         "transcripts": transcripts,
+    }
+
+
+@router.post("/events/{event_id}/geocode")
+async def geocode_event(
+    event_id: str,
+    current_user: User = Depends(get_current_active_user),
+    events_db: Session = Depends(get_events_db),
+):
+    """Manually trigger / refresh geocoding for an event."""
+    event = events_db.query(Event).filter(Event.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not event.location or not event.location.strip() or event.location.strip() == "N/A":
+        return {"ok": False, "message": "Event has no valid location"}
+
+    monitor = events_db.query(Monitor).filter(Monitor.id == event.monitor_id).first()
+    geo_region = monitor.geo_region if monitor else None
+
+    from ..services.geocoder_service import resolve_address_sync
+    res = resolve_address_sync(event.location, geo_region)
+    if not res:
+        return {"ok": False, "message": "Address could not be geocoded"}
+
+    event.latitude = res.latitude
+    event.longitude = res.longitude
+    event.resolved_address = res.resolved_address
+    events_db.commit()
+
+    from ..services.websocket import websocket_manager
+    websocket_manager.broadcast_sync({
+        "type": "event_geocoded",
+        "data": {
+            "event_id": event_id,
+            "monitor_id": event.monitor_id,
+            "location": event.location,
+            "latitude": res.latitude,
+            "longitude": res.longitude,
+            "resolved_address": res.resolved_address,
+        }
+    })
+
+    return {
+        "ok": True,
+        "latitude": res.latitude,
+        "longitude": res.longitude,
+        "resolved_address": res.resolved_address,
     }
 
 

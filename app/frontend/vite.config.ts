@@ -33,4 +33,8 @@ export default defineConfig({
     emptyOutDir: true,
   },
 
+  optimizeDeps: {
+    include: ['monaco-editor'],
+  },
+
 })

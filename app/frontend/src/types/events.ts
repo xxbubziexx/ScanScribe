@@ -4,12 +4,14 @@ export interface MonitorResponse {
   enabled: boolean
   talkgroup_ids: string[]
   start_event_labels: string[]
+  geo_region?: string | null
 }
 
 export interface MonitorCreate {
   name: string
   talkgroup_ids: string[]
   start_event_labels: string[]
+  geo_region?: string | null
 }
 
 export interface MonitorUpdate {
@@ -17,6 +19,7 @@ export interface MonitorUpdate {
   enabled?: boolean
   talkgroup_ids?: string[]
   start_event_labels?: string[]
+  geo_region?: string | null
 }
 
 export interface NerLabelsResponse {
@@ -48,11 +51,13 @@ export interface EventListItem {
   event_type: string | null
   broadcast_type: string | null
   location: string | null
+  latitude: number | null
+  longitude: number | null
+  resolved_address: string | null
   units: string | null
   status_detail: string | null
   original_transcription: string | null
   summary: string | null
-  close_recommendation: boolean | null
   created_at: string | null
   incident_at: string | null
   closed_at: string | null
@@ -73,11 +78,13 @@ export interface EventDetailHeader {
   event_type: string | null
   broadcast_type: string | null
   location: string | null
+  latitude: number | null
+  longitude: number | null
+  resolved_address: string | null
   units: string | null
   status_detail: string | null
   original_transcription: string | null
   summary: string | null
-  close_recommendation: boolean | null
   created_at: string | null
   incident_at: string | null
   closed_at: string | null
@@ -98,4 +105,25 @@ export interface EventTranscript {
 export interface EventDetailResponse {
   event: EventDetailHeader
   transcripts: EventTranscript[]
+}
+
+export interface SpanStoreRow {
+  id: number
+  monitor_id: number
+  talkgroup: string | null
+  log_entry_id: number | null
+  transcript: string | null
+  evt_type: string | null
+  units: string | null
+  locations: string | null
+  addresses: string | null
+  status: string | null
+  time_mentions: string | null
+  created_at: string | null
+  attached_event_ids: string[]
+}
+
+export interface SpanStoreListResponse {
+  items: SpanStoreRow[]
+  total: number
 }

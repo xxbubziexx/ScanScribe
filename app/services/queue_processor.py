@@ -79,6 +79,32 @@ def parse_timestamp_from_filename(filename: str) -> Optional[datetime]:
     return None
 
 
+async def _dispatch_events_pipeline(
+    talkgroup: str,
+    transcript_text: str,
+    log_entry_id: int,
+    timestamp: datetime,
+) -> None:
+    """Run events pipeline routing asynchronously in background so audio ingestion loop is never blocked."""
+    try:
+        events_db = EventsSessionLocal()
+        try:
+            monitor_ids = get_matching_monitor_ids(events_db, talkgroup)
+        finally:
+            events_db.close()
+        for mid in monitor_ids:
+            await asyncio.to_thread(
+                process_transcript_for_monitor,
+                mid,
+                talkgroup,
+                transcript_text,
+                log_entry_id,
+                timestamp,
+            )
+    except Exception as e:
+        logger.warning("Events pipeline background task failed: %s", e)
+
+
 class QueueProcessor:
     """Processes audio files from the queue directory."""
     
@@ -320,27 +346,18 @@ class QueueProcessor:
             
             logger.info(f"✅ Saved to database (ID: {log_entry.id})")
 
-            # Events pipeline: Worker LLM per matching monitor
+            # Events pipeline: dispatch asynchronously in background so audio ingestion is not blocked
             settings = get_settings()
             if getattr(settings.config, "events_pipeline", None) and settings.config.events_pipeline.enabled:
-                try:
-                    events_db = EventsSessionLocal()
-                    try:
-                        monitor_ids = get_matching_monitor_ids(events_db, talkgroup)
-                    finally:
-                        events_db.close()
-                    transcript_text = result.get("transcript") or ""
-                    for mid in monitor_ids:
-                        await asyncio.to_thread(
-                            process_transcript_for_monitor,
-                            mid,
-                            talkgroup,
-                            transcript_text,
-                            log_entry.id,
-                            timestamp,
-                        )
-                except Exception as e:
-                    logger.warning("Events pipeline skipped: %s", e)
+                transcript_text = result.get("transcript") or ""
+                asyncio.create_task(
+                    _dispatch_events_pipeline(
+                        talkgroup=talkgroup,
+                        transcript_text=transcript_text,
+                        log_entry_id=log_entry.id,
+                        timestamp=timestamp,
+                    )
+                )
 
             # Increment processed counter
             watcher_service = get_watcher_service()

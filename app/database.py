@@ -100,16 +100,30 @@ def init_db():
 
     # Migrations
     with events_engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(monitors)"))
+        m_cols = [row[1] for row in r.fetchall()]
+        if "geo_region" not in m_cols:
+            conn.execute(text("ALTER TABLE monitors ADD COLUMN geo_region VARCHAR(255)"))
+            conn.commit()
+
         r = conn.execute(text("PRAGMA table_info(events)"))
         cols = [row[1] for row in r.fetchall()]
         if "close_recommendation" not in cols:
             conn.execute(text("ALTER TABLE events ADD COLUMN close_recommendation BOOLEAN"))
             conn.commit()
-        r = conn.execute(text("PRAGMA table_info(events)"))
-        cols = [row[1] for row in r.fetchall()]
         if "broadcast_type" not in cols:
             conn.execute(text("ALTER TABLE events ADD COLUMN broadcast_type VARCHAR(64)"))
             conn.commit()
+        if "latitude" not in cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN latitude FLOAT"))
+            conn.commit()
+        if "longitude" not in cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN longitude FLOAT"))
+            conn.commit()
+        if "resolved_address" not in cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN resolved_address VARCHAR(500)"))
+            conn.commit()
+
         r = conn.execute(text("PRAGMA table_info(event_transcript_links)"))
         link_cols = [row[1] for row in r.fetchall()]
         if "entities_json" not in link_cols:

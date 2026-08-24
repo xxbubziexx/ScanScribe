@@ -10,7 +10,7 @@ import type {
   MonitorResponse,
 } from '../../types/events'
 
-type PipelineEvent = {
+export type PipelineEvent = {
   id: number
   eventId: string
   monitorId: number
@@ -19,21 +19,23 @@ type PipelineEvent = {
   eventType: string | null
   broadcastType: string | null
   location: string | null
+  latitude?: number | null
+  longitude?: number | null
+  resolvedAddress?: string | null
   units: string | null
   statusDetail: string | null
   talkgroup: string
   originalTranscription: string | null
   summary: string | null
-  closeRecommendation: boolean | null
   createdAt: string
   incidentAt: string | null
   closedAt: string | null
   spansAttached: number
 }
 
-type DetailTab = 'event-thread' | 'transcription' | 'raw'
+export type DetailTab = 'event-thread' | 'transcription' | 'raw'
 
-function typeDisplayFor(event: Pick<PipelineEvent, 'eventType' | 'broadcastType'>): string {
+export function typeDisplayFor(event: Pick<PipelineEvent, 'eventType' | 'broadcastType'>): string {
   const bt = (event.broadcastType || '').trim()
   if (bt) return `BROADCAST:${bt}`
   const t = (event.eventType || '').trim()
@@ -41,28 +43,28 @@ function typeDisplayFor(event: Pick<PipelineEvent, 'eventType' | 'broadcastType'
   return t || '—'
 }
 
-function formatTime(iso: string | null | undefined) {
+export function formatTime(iso: string | null | undefined) {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 }
 
-function formatTimeLong(iso: string | null | undefined) {
+export function formatTimeLong(iso: string | null | undefined) {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString()
 }
 
-function formatTimeOnly(iso: string | null | undefined) {
+export function formatTimeOnly(iso: string | null | undefined) {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' })
 }
 
-function splitBadgeEntries(value: string | null | undefined): string[] {
+export function splitBadgeEntries(value: string | null | undefined): string[] {
   if (!value) return []
   return value
     .split(',')
@@ -70,7 +72,7 @@ function splitBadgeEntries(value: string | null | undefined): string[] {
     .filter((v) => v.length > 0)
 }
 
-function EventListCard({
+export function EventListCard({
   event,
   active,
   onSelect,
@@ -132,7 +134,7 @@ function EventListCard({
   )
 }
 
-function toPipelineEvent(item: EventListItem): PipelineEvent {
+export function toPipelineEvent(item: EventListItem): PipelineEvent {
   return {
     id: item.id,
     eventId: item.event_id,
@@ -142,12 +144,14 @@ function toPipelineEvent(item: EventListItem): PipelineEvent {
     eventType: item.event_type,
     broadcastType: item.broadcast_type,
     location: item.location,
+    latitude: item.latitude,
+    longitude: item.longitude,
+    resolvedAddress: item.resolved_address,
     units: item.units,
     statusDetail: item.status_detail,
     talkgroup: item.talkgroup || '',
     originalTranscription: item.original_transcription,
     summary: item.summary,
-    closeRecommendation: item.close_recommendation,
     createdAt: item.created_at || '',
     incidentAt: item.incident_at,
     closedAt: item.closed_at,
@@ -155,7 +159,7 @@ function toPipelineEvent(item: EventListItem): PipelineEvent {
   }
 }
 
-function toDetailEvent(detail: EventDetailResponse, listEvent: PipelineEvent | null): PipelineEvent {
+export function toDetailEvent(detail: EventDetailResponse, listEvent: PipelineEvent | null): PipelineEvent {
   const e = detail.event
   return {
     id: listEvent?.id ?? 0,
@@ -166,12 +170,14 @@ function toDetailEvent(detail: EventDetailResponse, listEvent: PipelineEvent | n
     eventType: e.event_type,
     broadcastType: e.broadcast_type,
     location: e.location,
+    latitude: e.latitude,
+    longitude: e.longitude,
+    resolvedAddress: e.resolved_address,
     units: e.units,
     statusDetail: e.status_detail,
     talkgroup: listEvent?.talkgroup || '',
     originalTranscription: e.original_transcription,
     summary: e.summary,
-    closeRecommendation: e.close_recommendation,
     createdAt: e.created_at || '',
     incidentAt: e.incident_at,
     closedAt: e.closed_at,
@@ -498,16 +504,6 @@ export function EventsIncidentsPage() {
                     <p className="capitalize text-gray-200">{selected.status}</p>
                     {selected.statusDetail ? <p className="ss-events-low-badge mt-1">{selected.statusDetail}</p> : null}
                   </div>
-                </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Close recommendation</span>
-                  <p className="ss-events-kv-value text-sm text-gray-200">
-                    {selected.closeRecommendation == null
-                      ? '—'
-                      : selected.closeRecommendation
-                        ? 'Yes (pipeline hint)'
-                        : 'No'}
-                  </p>
                 </div>
                 <div className="ss-events-kv">
                   <span className="ss-events-k">Monitor (department)</span>

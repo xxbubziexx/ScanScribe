@@ -3,6 +3,14 @@
     @apply flex overflow-hidden rounded-xl border border-white/10;
   }
 
+  .ss-panel--stacked {
+    @apply flex-col;
+  }
+
+  .ss-panel-pane {
+    @apply flex h-[min(55vh,28rem)] flex-col overflow-hidden border-b border-white/10 last:border-b-0;
+  }
+
   .ss-resize-col {
     @apply w-1.5 shrink-0 cursor-col-resize bg-white/5;
     @apply transition-colors hover:bg-indigo-500/40 active:bg-indigo-500/60;
@@ -59,7 +67,7 @@
   }
 
   .ss-transcript {
-    @apply whitespace-pre-wrap break-words text-xl leading-8 text-gray-100;
+    @apply whitespace-pre-wrap break-words text-base leading-7 text-gray-100 sm:text-xl sm:leading-8;
   }
 
   .ss-text-link {
@@ -108,8 +116,9 @@
   }
 
   .ss-input-search {
-    @apply min-w-[180px] flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5;
+    @apply min-w-0 w-full flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5;
     @apply text-sm text-gray-200 placeholder:text-gray-600 focus:border-indigo-500/50 focus:outline-none;
+    @apply sm:min-w-[180px];
   }
 
   .ss-select {

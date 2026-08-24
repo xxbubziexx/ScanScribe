@@ -8,7 +8,11 @@ interface ResizableSplitProps {
   minLeftPct?: number
   maxLeftPct?: number
   minHeight?: number
+  /** When false, fixed size and no drag handles. */
+  resizable?: boolean
 }
+
+const MOBILE_MQ = '(max-width: 767px)'
 
 export function ResizableSplit({
   left,
@@ -18,27 +22,49 @@ export function ResizableSplit({
   minLeftPct = 20,
   maxLeftPct = 80,
   minHeight = 300,
+  resizable = true,
 }: ResizableSplitProps) {
   const [leftPct, setLeftPct] = useState(defaultLeftPct)
   const [height, setHeight] = useState(defaultHeight)
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia(MOBILE_MQ).matches : false,
+  )
 
   const containerRef = useRef<HTMLDivElement>(null)
   const draggingCol = useRef(false)
   const draggingRow = useRef(false)
 
-  const onColDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    draggingCol.current = true
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE_MQ)
+    const onChange = () => setIsMobile(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
   }, [])
 
-  const onRowDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    draggingRow.current = true
-    document.body.style.cursor = 'row-resize'
-    document.body.style.userSelect = 'none'
-  }, [])
+  const canResize = resizable && !isMobile
+
+  const onColDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!canResize) return
+      e.preventDefault()
+      draggingCol.current = true
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+    },
+    [canResize],
+  )
+
+  const onRowDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (!canResize) return
+      e.preventDefault()
+      draggingRow.current = true
+      document.body.style.cursor = 'row-resize'
+      document.body.style.userSelect = 'none'
+    },
+    [canResize],
+  )
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -52,8 +78,6 @@ export function ResizableSplit({
         if (!parent) return
         const rect = parent.getBoundingClientRect()
         const newH = e.clientY - rect.top
-        // newH is parent-relative; do not cap with window.innerHeight - N alone — that
-        // rejects all drags when defaultHeight is already >= that (slider appears "dead").
         if (newH > minHeight) setHeight(newH)
       }
     }
@@ -75,26 +99,35 @@ export function ResizableSplit({
     }
   }, [minLeftPct, maxLeftPct, minHeight])
 
+  if (isMobile) {
+    return (
+      <div className="ss-panel ss-panel--stacked">
+        <div className="ss-panel-pane">{left}</div>
+        <div className="ss-panel-pane">{right}</div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col">
-      {/* Horizontal split */}
       <div ref={containerRef} className="ss-panel" style={{ height }}>
-        {/* Left pane */}
         <div className="flex flex-col overflow-hidden" style={{ width: `${leftPct}%`, flexShrink: 0 }}>
           {left}
         </div>
 
-        {/* Column drag handle */}
-        <div onMouseDown={onColDown} className="ss-resize-col" role="separator" />
+        {canResize && (
+          <div onMouseDown={onColDown} className="ss-resize-col" role="separator" />
+        )}
+        {!canResize && <div className="w-px shrink-0 bg-white/10" aria-hidden />}
 
-        {/* Right pane */}
         <div className="flex flex-col overflow-hidden" style={{ flex: 1 }}>
           {right}
         </div>
       </div>
 
-      {/* Row drag handle (height resizer) */}
-      <div onMouseDown={onRowDown} className="ss-resize-row" role="separator" />
+      {canResize && (
+        <div onMouseDown={onRowDown} className="ss-resize-row" role="separator" />
+      )}
     </div>
   )
 }

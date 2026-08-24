@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { watcher } from '@/lib/watcher'
 import { useToast } from '@/context/ToastContext'
+import { useAuth } from '@/context/AuthContext'
 import type { ConsoleEntry, TranscriptionCard, WatcherStatus, WsMessage } from '@/types/watcher'
 import { StatsGrid } from './StatsGrid'
 import { ControlPanel } from './ControlPanel'
@@ -34,6 +35,8 @@ const WS_URL = (() => {
 
 export function DashboardPage() {
   const { addToast } = useToast()
+  const { user } = useAuth()
+  const viewOnly = user?.is_admin !== true
   const [watcherStatus, setWatcherStatus] = useState<WatcherStatus | null>(null)
   const [watcherState, setWatcherState] = useState<WatcherState>('stopped')
   const [model, setModel] = useState('')
@@ -160,13 +163,16 @@ export function DashboardPage() {
         onStop={handleStop}
         onTogglePause={handleTogglePause}
         loading={actionLoading}
+        readOnly={viewOnly}
       />
 
       <ResizableSplit
+        resizable={!viewOnly}
         left={
           <TranscriptionsPane
             cards={transcriptions}
             onClear={() => setTranscriptions([])}
+            viewOnly={viewOnly}
           />
         }
         right={
@@ -175,6 +181,7 @@ export function DashboardPage() {
             onClear={() =>
               setConsoleEntries([makeEntry('Console cleared', 'info')])
             }
+            readOnly={viewOnly}
           />
         }
       />

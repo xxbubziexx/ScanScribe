@@ -17,10 +17,6 @@
     @apply shadow-2xl backdrop-blur-sm;
   }
 
-  .ss-chart {
-    @apply h-80;
-  }
-
   .ss-form-label {
     @apply mb-1.5 block text-xs font-medium text-gray-400;
   }

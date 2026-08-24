@@ -10,9 +10,10 @@ function hourToLabel(h: number) {
 
 interface SummariesTabProps {
   date: string
+  viewOnly?: boolean
 }
 
-export function SummariesTab({ date }: SummariesTabProps) {
+export function SummariesTab({ date, viewOnly = false }: SummariesTabProps) {
   const [hours, setHours] = useState<HourActivityEntry[]>([])
   const [summaries, setSummaries] = useState<HourSummary[]>([])
   const [selectedHour, setSelectedHour] = useState<string>('')
@@ -98,10 +99,13 @@ export function SummariesTab({ date }: SummariesTabProps) {
     <div>
       {/* Controls row */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-medium text-gray-300">Hour Summary</p>
-        <p className="text-xs text-gray-500">{status}</p>
+        <p className="text-sm font-medium text-gray-300">
+          {viewOnly ? 'Saved summaries' : 'Hour Summary'}
+        </p>
+        {!viewOnly && <p className="text-xs text-gray-500">{status}</p>}
       </div>
 
+      {!viewOnly && (
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <select
           value={selectedHour}
@@ -138,6 +142,7 @@ export function SummariesTab({ date }: SummariesTabProps) {
           Delete
         </button>
       </div>
+      )}
 
       {/* Summaries list */}
       {summaries.length === 0 ? (

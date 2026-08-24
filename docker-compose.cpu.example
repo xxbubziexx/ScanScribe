@@ -1,7 +1,5 @@
 # CPU: copy this file to `docker-compose.yml` and `requirements.cpu.example` to `requirements.txt`, then `docker compose up -d --build`. In config.yml: model.device: cpu
 
-version: '3.8'
-
 services:
   scanscribe:
     build:
@@ -29,6 +27,9 @@ services:
       - TZ=${TZ:-America/Chicago}
       - SECRET_KEY=${SECRET_KEY:-changeme-generate-secret-key}
       - ACCESS_TOKEN_EXPIRE_MINUTES=1440
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      - OPENROUTER_MODEL=${OPENROUTER_MODEL:-google/gemini-2.5-flash}
       - INGEST_DIR=/app/ingest
       - OUTPUT_DIR=/app/audio_storage
       - LOG_DIR=/app/logs

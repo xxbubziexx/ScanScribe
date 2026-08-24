@@ -90,6 +90,33 @@ class WebSocketManager:
             "timestamp": datetime.now().isoformat()
         })
 
+    async def send_event(self, event_type: str, data: Dict):
+        """Send an incident event update to all clients."""
+        await self.broadcast({
+            "type": "event",
+            "event_type": event_type,
+            "data": data,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+
+    def broadcast_sync(self, message: Dict):
+        """Thread-safe synchronous broadcast dispatch."""
+        try:
+            import asyncio
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(self.broadcast(message))
+        except RuntimeError:
+            try:
+                import asyncio
+                from ..logging_config import WebSocketHandler
+                if WebSocketHandler._main_loop and not WebSocketHandler._main_loop.is_closed():
+                    asyncio.run_coroutine_threadsafe(
+                        self.broadcast(message),
+                        WebSocketHandler._main_loop
+                    )
+            except Exception as exc:
+                logger.debug("broadcast_sync failed: %s", exc)
+
 
 # Global instance
 websocket_manager = WebSocketManager()

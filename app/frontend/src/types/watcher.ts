@@ -37,6 +37,19 @@ export type WsMessage =
   | { type: 'log'; level: string; message: string; tag?: string; timestamp: string }
   | { type: 'status'; status: string; data?: Partial<WatcherStatus> }
   | { type: 'transcription'; data: TranscriptionCard }
+  | { type: 'event_update'; action: 'create' | 'attach' | 'close'; data: any; timestamp?: string }
+  | {
+      type: 'event_geocoded'
+      data: {
+        event_id: string
+        monitor_id?: number
+        location?: string
+        latitude: number
+        longitude: number
+        resolved_address: string
+      }
+      timestamp?: string
+    }
 
 export interface WatcherActionResponse {
   success: boolean

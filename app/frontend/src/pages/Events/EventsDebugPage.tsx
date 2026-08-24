@@ -5,6 +5,17 @@ import { errorMessage } from '../../types/api'
 import { useToast } from '../../context/ToastContext'
 import type { PipelineDebugEntry } from '../../types/events'
 
+/** Actions where `error` is a real failure (not the normal LLM reason string). */
+function isPipelineDebugFailure(entry: PipelineDebugEntry): boolean {
+  const a = (entry.action || '').trim().toLowerCase()
+  return a.endsWith('_fail') || a.endsWith('_invalid')
+}
+
+function isPipelineDebugConfigWarning(entry: PipelineDebugEntry): boolean {
+  const a = (entry.action || '').trim().toLowerCase()
+  return a === 'master_needs_ollama' || a === 'worker_needs_ollama'
+}
+
 function fmtTs(ts: number | undefined) {
   if (ts == null || Number.isNaN(ts)) return '—'
   return new Date(ts * 1000).toLocaleString()
@@ -32,7 +43,10 @@ export function EventsDebugPage() {
 
   const entries = debugQuery.data ?? []
 
-  const withErrors = useMemo(() => entries.filter((e) => (e.error || '').trim().length > 0).length, [entries])
+  const withErrors = useMemo(
+    () => entries.filter((e) => isPipelineDebugFailure(e) && (e.error || '').trim().length > 0).length,
+    [entries],
+  )
 
   return (
     <div className="ss-events-page">
@@ -83,8 +97,8 @@ export function EventsDebugPage() {
         </select>
         <span className="ss-events-pill-tiny">{entries.length} loaded</span>
         {withErrors > 0 ? (
-          <span className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-200">
-            {withErrors} with error
+          <span className="rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-200">
+            {withErrors} failure{withErrors === 1 ? '' : 's'}
           </span>
         ) : null}
       </div>
@@ -113,6 +127,11 @@ export function EventsDebugPage() {
 function DebugEntryCard({ entry, index }: { entry: PipelineDebugEntry; index: number }) {
   const [open, setOpen] = useState(false)
   const err = (entry.error || '').trim()
+  const isFail = isPipelineDebugFailure(entry)
+  const isConfigWarn = isPipelineDebugConfigWarning(entry)
+  const showReasonBlock = err.length > 0 && !isFail && !isConfigWarn
+  const showFailBlock = err.length > 0 && isFail
+  const showConfigBlock = err.length > 0 && isConfigWarn
 
   return (
     <article className="ss-events-debug-card">
@@ -137,9 +156,14 @@ function DebugEntryCard({ entry, index }: { entry: PipelineDebugEntry; index: nu
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {err ? (
-            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-200">
+          {showFailBlock ? (
+            <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-200">
               Error
+            </span>
+          ) : null}
+          {showConfigBlock ? (
+            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-200">
+              Setup
             </span>
           ) : null}
           <span className="text-[11px] text-gray-500">{open ? '▼' : '▶'}</span>
@@ -152,12 +176,26 @@ function DebugEntryCard({ entry, index }: { entry: PipelineDebugEntry; index: nu
 
       {open ? (
         <div className="ss-events-debug-body">
-          {err ? (
+          {showFailBlock ? (
             <div>
               <p className="ss-events-section-title mb-1">Error</p>
+              <pre className="ss-events-pre-block overflow-x-auto rounded-md border border-red-500/25 bg-black/40 p-2 text-xs text-red-100">
+                {err}
+              </pre>
+            </div>
+          ) : null}
+          {showConfigBlock ? (
+            <div>
+              <p className="ss-events-section-title mb-1">Configuration</p>
               <pre className="ss-events-pre-block overflow-x-auto rounded-md border border-amber-500/20 bg-black/40 p-2 text-xs text-amber-100">
                 {err}
               </pre>
+            </div>
+          ) : null}
+          {showReasonBlock ? (
+            <div>
+              <p className="ss-events-section-title mb-1">LLM reason</p>
+              <pre className="ss-events-pre-block max-h-48 overflow-auto text-xs text-gray-300">{err}</pre>
             </div>
           ) : null}
           {entry.transcript ? (

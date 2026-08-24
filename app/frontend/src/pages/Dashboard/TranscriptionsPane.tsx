@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import type { TranscriptionCard } from '@/types/watcher'
 
 function formatBytes(bytes: number): string {
@@ -20,16 +20,20 @@ function truncate(s: string, max: number): string {
 interface TranscriptionsPaneProps {
   cards: TranscriptionCard[]
   onClear: () => void
+  /** Hide list controls; audio `<audio controls>` stays interactive. */
+  viewOnly?: boolean
 }
 
 function TranscriptionItem({
   card,
   pinned,
   onPin,
+  viewOnly,
 }: {
   card: TranscriptionCard
   pinned: boolean
   onPin: (id: TranscriptionCard['id']) => void
+  viewOnly?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [canToggle, setCanToggle] = useState(false)
@@ -48,16 +52,20 @@ function TranscriptionItem({
 
   return (
     <article
-      className={`ss-tcard ${pinned ? 'ring-1 ring-amber-400/70' : ''}`}
-      onClick={() => onPin(card.id)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault()
-          onPin(card.id)
-        }
-      }}
+      className={`ss-tcard ${pinned && !viewOnly ? 'ring-1 ring-amber-400/70' : ''}`}
+      onClick={viewOnly ? undefined : () => onPin(card.id)}
+      role={viewOnly ? undefined : 'button'}
+      tabIndex={viewOnly ? undefined : 0}
+      onKeyDown={
+        viewOnly
+          ? undefined
+          : (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onPin(card.id)
+              }
+            }
+      }
     >
       <div className="ss-tcard-h">
         <span className="ss-tname" title={card.filename}>
@@ -86,11 +94,11 @@ function TranscriptionItem({
         <div className="ss-tbody">
           <p
             ref={transcriptRef}
-            className={`ss-transcript ${!expanded ? 'line-clamp-4' : ''}`}
+            className={`ss-transcript ${!expanded && !viewOnly ? 'line-clamp-4' : viewOnly ? 'line-clamp-6' : ''}`}
           >
             {t}
           </p>
-          {canToggle && (
+          {canToggle && !viewOnly && (
             <button
               type="button"
               onClick={() => setExpanded((e) => !e)}
@@ -113,48 +121,76 @@ function TranscriptionItem({
   )
 }
 
-export function TranscriptionsPane({ cards, onClear }: TranscriptionsPaneProps) {
+const FOLLOW_TOP_THRESHOLD_PX = 48
+
+export function TranscriptionsPane({ cards, onClear, viewOnly = false }: TranscriptionsPaneProps) {
   const [autoScroll, setAutoScroll] = useState(true)
   const [pinnedCardId, setPinnedCardId] = useState<TranscriptionCard['id'] | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  /** User turned off auto-follow via checkbox; don't re-enable from scroll alone. */
+  const pausedByUserRef = useRef(false)
 
-  useEffect(() => {
-    if (!autoScroll || !scrollRef.current) return
-    const el = scrollRef.current
-    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  // Newest cards are at the top — keep the viewport pinned there when following live.
+  useLayoutEffect(() => {
+    if (!autoScroll || !scrollRef.current || cards.length === 0) return
+    scrollRef.current.scrollTo({ top: 0, behavior: 'auto' })
   }, [cards, autoScroll])
 
   const handlePin = useCallback((id: TranscriptionCard['id']) => {
     setPinnedCardId(id)
     setAutoScroll(false)
+    pausedByUserRef.current = true
   }, [])
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
-    setAutoScroll(atBottom)
+    const atTop = el.scrollTop <= FOLLOW_TOP_THRESHOLD_PX
+    if (atTop && !pausedByUserRef.current) {
+      setAutoScroll(true)
+    } else if (!atTop) {
+      setAutoScroll(false)
+    }
   }, [])
+
+  const onAutoScrollCheckbox = useCallback((checked: boolean) => {
+    pausedByUserRef.current = !checked
+    setAutoScroll(checked)
+    if (checked) {
+      scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }, [])
+
+  const handleClearClick = useCallback(() => {
+    setPinnedCardId(null)
+    pausedByUserRef.current = false
+    setAutoScroll(true)
+    onClear()
+  }, [onClear])
 
   return (
     <div className="flex h-full flex-col p-4">
-      <div className="mb-3 flex shrink-0 items-center justify-between">
+      <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <h2 className="ss-page-h2">
           Transcriptions
           <span className="ss-page-h2-sub">{cards.length} items</span>
         </h2>
-        <div className="flex items-center gap-3">
-          <label className="ss-check">
-            <input
-              type="checkbox"
-              checked={autoScroll}
-              onChange={(e) => setAutoScroll(e.target.checked)}
-              className="accent-indigo-500"
-            />
-            Auto-scroll
-          </label>
-          <button onClick={onClear} className="ss-ghost-sm" type="button">
-            Clear
-          </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {!viewOnly && (
+            <>
+              <label className="ss-check">
+                <input
+                  type="checkbox"
+                  checked={autoScroll}
+                  onChange={(e) => onAutoScrollCheckbox(e.target.checked)}
+                  className="accent-indigo-500"
+                />
+                Follow newest
+              </label>
+              <button onClick={handleClearClick} className="ss-ghost-sm" type="button">
+                Clear
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -164,8 +200,9 @@ export function TranscriptionsPane({ cards, onClear }: TranscriptionsPaneProps) 
           <TranscriptionItem
             key={card.id}
             card={card}
-            pinned={card.id === pinnedCardId}
+            pinned={!viewOnly && card.id === pinnedCardId}
             onPin={handlePin}
+            viewOnly={viewOnly}
           />
         ))}
       </div>

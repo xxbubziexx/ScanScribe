@@ -1,4 +1,6 @@
-"""Events pipeline: NER → span_store; Worker (EVT_TYPE) opens incidents; Master routes until close."""
+"""Events pipeline: NER entity extraction → Single-pass OpenRouter LLM router."""
+from __future__ import annotations
+
 import json
 import logging
 import re
@@ -6,12 +8,13 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
+from zoneinfo import ZoneInfo
 
 from ..config import get_settings
-from ..database import EventsSessionLocal
+from ..database import EventsSessionLocal, LogsSessionLocal
 from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore, EntityObservation
+from ..models.log_entry import LogEntry
 from .events_common import event_work_lock, parse_json_list
 from .entity_normalize import normalize_entity, supported_labels as _entity_supported_labels
 from .ner_service import (
@@ -20,17 +23,62 @@ from .ner_service import (
     parse_list_field,
     load_ner_model,
 )
-from .events_debug import append_ner as debug_append_ner
-from .event_summary_ollama import schedule_event_summary
-from .master_event_header_ollama import schedule_master_header_normalize
-from .ollama_event_routing import route_transcript_with_llm
-from .ollama_worker import (
+from .events_debug import append_pipeline_debug, append_ner as debug_append_ner
+from .events_router_engine import (
+    EventsRouter,
     BROADCAST_TYPE_SLUGS,
     WORKER_BROADCAST_EVENT_TYPE,
-    worker_should_create_event,
 )
+from .websocket import websocket_manager
 
 logger = logging.getLogger(__name__)
+
+
+def _dispatch_geocoding_for_event(event_id: str, location: Optional[str], monitor_id: int) -> None:
+    """Asynchronously geocode location for an event and broadcast coordinate update."""
+    if not location or not location.strip() or location.strip().upper() == "N/A":
+        return
+
+    def _worker():
+        try:
+            geo_region = None
+            ev_db = EventsSessionLocal()
+            try:
+                mon = ev_db.query(Monitor).filter(Monitor.id == monitor_id).first()
+                if mon:
+                    geo_region = mon.geo_region
+            finally:
+                ev_db.close()
+
+            from .geocoder_service import resolve_address_sync
+            res = resolve_address_sync(location, geo_region)
+            if res:
+                ev_db = EventsSessionLocal()
+                try:
+                    ev = ev_db.query(Event).filter(Event.event_id == event_id).first()
+                    if ev:
+                        ev.latitude = res.latitude
+                        ev.longitude = res.longitude
+                        ev.resolved_address = res.resolved_address
+                        ev_db.commit()
+                        logger.info("Geocoded event_id=%s -> (%f, %f) %s", event_id, res.latitude, res.longitude, res.resolved_address)
+                        websocket_manager.broadcast_sync({
+                            "type": "event_geocoded",
+                            "data": {
+                                "event_id": event_id,
+                                "monitor_id": monitor_id,
+                                "location": location,
+                                "latitude": res.latitude,
+                                "longitude": res.longitude,
+                                "resolved_address": res.resolved_address,
+                            }
+                        })
+                finally:
+                    ev_db.close()
+        except Exception as exc:
+            logger.warning("Background geocoding failed for event_id=%s: %s", event_id, exc)
+
+    threading.Thread(target=_worker, daemon=True, name=f"geocode-{event_id}").start()
 
 
 def _utc_from_log_timestamp(dt: datetime, iana_tz: str) -> datetime:
@@ -55,16 +103,6 @@ def _utc_from_event_created(dt: datetime) -> datetime:
     return dt.replace(tzinfo=timezone.utc)
 
 
-def _use_master_header_normalize() -> bool:
-    settings = get_settings()
-    pipe = settings.config.events_pipeline
-    io_cfg = getattr(settings.config, "incidents_ollama", None)
-    return (
-        getattr(pipe, "master_header_normalize", True)
-        and io_cfg is not None
-    )
-
-
 def _entities_json(entities: Dict[str, List[str]]) -> Optional[str]:
     if not entities:
         return None
@@ -80,7 +118,7 @@ def _comma_join_parts(parts: List[str]) -> Optional[str]:
 
 
 def _infer_broadcast_slug_from_transcript(transcript: str) -> Optional[str]:
-    """If Worker returns BROADCAST without broadcast_type, infer category from transcript text."""
+    """If router returns BROADCAST without broadcast_type, infer category from transcript text."""
     if not (transcript or "").strip():
         return None
     t = transcript.lower()
@@ -219,9 +257,6 @@ def _build_header_from_entities(entities: Dict[str, List[str]], transcript: str)
                 out.append(x)
         return ", ".join(_sort_entities_together(out)) if out else "N/A"
 
-    # ADDRESS (numbered houses) is the strongest location signal; fall back to LOC
-    # (streets, intersections, businesses) when no ADDRESS exists. Merging both would
-    # blur "1521 Maple Ave" with "Walmart" into one cell.
     addresses = entities.get("ADDRESS", [])
     if addresses:
         location = join_sorted_unique(addresses)
@@ -229,7 +264,6 @@ def _build_header_from_entities(entities: Dict[str, List[str]], transcript: str)
         location = join_sorted_unique(entities.get("LOC", []))
 
     units = join_sorted_unique(entities.get("UNIT", []))
-
     evt_type_parts = entities.get("EVT_TYPE", [])
     event_type = join_sorted_unique(evt_type_parts) if evt_type_parts else "N/A"
     status_detail = first(entities.get("STATUS", []))
@@ -257,41 +291,10 @@ def _merge_list_field(existing_raw: Optional[str], new_values: List[str]) -> str
     return ", ".join(_sort_entities_together(out)) if out else "N/A"
 
 
-def _should_normalize_on_attach(events_db, event_db_id: int) -> bool:
-    """Return True if total link count triggers a normalization run (every N spans)."""
-    from sqlalchemy import func
-    n = int(getattr(get_settings().config.events_pipeline, "normalize_every_n_spans", 5) or 0)
-    if n <= 1:
-        return True
-    count = events_db.query(func.count(EventTranscriptLink.id)).filter(
-        EventTranscriptLink.event_id == event_db_id
-    ).scalar() or 0
-    return count % n == 0
-
-
-def _maybe_schedule_event_summary(events_db, event_db_id: int) -> None:
-    cfg = get_settings().config.events_pipeline
-    trigger = getattr(cfg, "summary_trigger_spans", 0) or 0
-    if trigger <= 0:
-        return
-    from sqlalchemy import func
-    count = events_db.query(func.count(EventTranscriptLink.id)).filter(
-        EventTranscriptLink.event_id == event_db_id
-    ).scalar() or 0
-    if count >= trigger:
-        schedule_event_summary(event_db_id)
-
-
 def _auto_close_stale_events(events_db, stale_seconds: int) -> None:
-    """Close open events whose last linked log entry timestamp is older than stale_seconds.
-
-    Uses actual incident time (LogEntry.timestamp) rather than system/link timestamps.
-    Naive log timestamps are interpreted as local wall time (config or host TZ), not UTC.
-    """
+    """Close open events whose last linked log entry timestamp is older than stale_seconds."""
     if stale_seconds <= 0:
         return
-    from ..database import LogsSessionLocal
-    from ..models.log_entry import LogEntry
     from sqlalchemy import func as sa_func
 
     pipe = get_settings().config.events_pipeline
@@ -389,11 +392,13 @@ def _create_event_full(
     debug_action: str = "create",
     debug_reason: str = "",
     debug_llm_output: str = "",
-    worker_event_type: Optional[str] = None,
+    event_type: Optional[str] = None,
     broadcast_type_slug: Optional[str] = None,
-    use_master_header: bool = False,
+    location: Optional[str] = None,
+    units: Optional[List[str]] = None,
+    status_detail: Optional[str] = None,
+    is_broadcast: bool = False,
 ) -> str:
-    is_broadcast = (worker_event_type or "").upper() == WORKER_BROADCAST_EVENT_TYPE
     bt_slug = None
     if is_broadcast:
         if broadcast_type_slug:
@@ -403,10 +408,8 @@ def _create_event_full(
             inferred = _infer_broadcast_slug_from_transcript(transcript)
             if inferred:
                 bt_slug = inferred
-                logger.info(
-                    "Events: inferred broadcast_type=%r (Worker omitted valid slug)",
-                    bt_slug,
-                )
+
+    ner_hdr = _build_header_from_entities(entities, transcript)
 
     if is_broadcast:
         header = {
@@ -419,19 +422,15 @@ def _create_event_full(
         }
         ev_status = "closed"
         closed_at = datetime.now(timezone.utc)
-    elif use_master_header:
+    else:
         header = {
-            "event_type": None,
-            "location": None,
-            "units": None,
-            "status_detail": None,
+            "event_type": (event_type or "").strip() or (ner_hdr.get("event_type") if ner_hdr.get("event_type") != "N/A" else "Incident"),
+            "location": (location or "").strip() or (ner_hdr.get("location") if ner_hdr.get("location") != "N/A" else None),
+            "units": (", ".join(units) if units else None) or (ner_hdr.get("units") if ner_hdr.get("units") != "N/A" else None),
+            "status_detail": (status_detail or "").strip() or (ner_hdr.get("status_detail") if ner_hdr.get("status_detail") != "N/A" else "Active"),
             "original_transcription": transcript,
             "summary": None,
         }
-        ev_status = "open"
-        closed_at = None
-    else:
-        header = _build_header_from_entities(entities, transcript)
         ev_status = "open"
         closed_at = None
 
@@ -447,7 +446,7 @@ def _create_event_full(
         status_detail=header["status_detail"] or None,
         original_transcription=header["original_transcription"],
         summary=header["summary"],
-        master_last_run_at=None,
+        master_last_run_at=datetime.now(timezone.utc),
         closed_at=closed_at,
     )
     events_db.add(event)
@@ -461,28 +460,54 @@ def _create_event_full(
         )
     )
     events_db.commit()
-    debug_append_ner(
-        monitor_id,
-        log_entry_id,
-        debug_action,
-        event_id,
-        duration_ms,
-        entities,
-        (debug_reason or "")[:500],
-        raw_output,
-        transcript,
-        debug_llm_output,
+
+    _dispatch_geocoding_for_event(event_id, header.get("location"), monitor_id)
+
+    websocket_manager.broadcast_sync({
+        "type": "event_update",
+        "action": "create",
+        "data": {
+            "id": event.id,
+            "event_id": event_id,
+            "monitor_id": monitor_id,
+            "status": ev_status,
+            "event_type": header["event_type"],
+            "broadcast_type": bt_slug if is_broadcast else None,
+            "location": header["location"],
+            "latitude": event.latitude,
+            "longitude": event.longitude,
+            "resolved_address": event.resolved_address,
+            "units": header["units"],
+            "status_detail": header["status_detail"],
+            "original_transcription": header["original_transcription"],
+            "summary": header["summary"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "closed_at": closed_at.isoformat() if closed_at else None,
+            "spans_attached": 1,
+            "talkgroup": talkgroup,
+        }
+    })
+
+    append_pipeline_debug(
+        monitor_id=monitor_id,
+        log_entry_id=log_entry_id,
+        action=debug_action,
+        event_id=event_id,
+        duration_ms=duration_ms,
+        entities=entities,
+        error="",
+        raw_output=raw_output,
+        transcript=transcript,
+        llm_output=debug_llm_output,
     )
     logger.info(
-        "Events: created event_id=%s (evt_type=%s) monitor_id=%s log_entry_id=%s closed=%s",
+        "Events: created event_id=%s (type=%s) monitor_id=%s log_entry_id=%s closed=%s",
         event_id,
-        header.get("event_type") or "(pending Master header)",
+        header.get("event_type"),
         monitor_id,
         log_entry_id,
         is_broadcast,
     )
-    if use_master_header and not is_broadcast:
-        schedule_master_header_normalize(event.id)
     return event_id
 
 
@@ -494,46 +519,37 @@ def process_transcript_for_monitor(
     log_timestamp=None,
 ) -> None:
     """
-    NER → span_store (if any entities).
-    Idle + EVT_TYPE → Worker may create first incident.
-    Open incident(s) + EVT_TYPE → Worker may create an additional incident; else Master routes.
-    Open incident(s), no EVT_TYPE → Master only (attach/skip/close).
+    Single-pass OpenRouter LLM router pipeline:
+    1. Extract NER entities & persist to SpanStore / EntityObservation.
+    2. Pre-flight check: if idle and no trigger entities, exit early.
+    3. Query active open events + context for this monitor.
+    4. Call EventsRouter.route_transcript (single pass).
+    5. Handle CREATE, ATTACH, CLOSE, BROADCAST, or SKIP.
     """
     settings = get_settings()
-    cfg = settings.config.events_pipeline
-    if not cfg.enabled or not cfg.ner_model_path:
+    cfg = getattr(settings.config, "events_pipeline", None)
+    if not cfg or not cfg.enabled or not cfg.ner_model_path:
         return
 
-    use_master_header = _use_master_header_normalize()
     events_db = EventsSessionLocal()
+    logs_db = LogsSessionLocal()
     try:
         monitor = events_db.query(Monitor).filter(Monitor.id == monitor_id, Monitor.enabled == True).first()
         if not monitor:
             return
+
         strip_commas = getattr(cfg, "ner_strip_commas", True)
         ner_threshold = float(getattr(cfg, "ner_confidence_threshold", 0.0) or 0.0)
         ner_text = normalize_span_for_ner(transcript, strip_commas)
         t0 = time.perf_counter()
         entities, raw_output = extract_entities(ner_text, threshold=ner_threshold)
-        duration_ms = (time.perf_counter() - t0) * 1000
+        ner_duration_ms = (time.perf_counter() - t0) * 1000
 
-        open_events = list(
-            events_db.query(Event)
-            .filter(Event.monitor_id == monitor_id, Event.status == "open")
-            .order_by(Event.created_at.desc())
-            .all()
-        )
-
-        io_cfg = getattr(settings.config, "incidents_ollama", None)
-        llm_on = io_cfg is not None
-
-        # Persist every span to span_store so get_recent_spans reflects full monitor activity,
-        # including VAD_REJECTED / NER-empty spans (NER columns blank).
+        # Persist every span to span_store so history reflects full activity
         span_row = _span_store_from_entities(monitor_id, talkgroup or "", transcript, log_entry_id, entities)
         events_db.add(span_row)
-        events_db.flush()  # need span_row.id for FK on entity_observations
-        # Mirror canonicalized entities into entity_observations (analytics source of truth).
-        # Failures are logged but don't break ingest; SpanStore is the raw fallback.
+        events_db.flush()
+
         try:
             obs_rows = _entity_observations_from_entities(
                 span_store_id=span_row.id,
@@ -549,274 +565,327 @@ def process_transcript_for_monitor(
             logger.warning("entity_observations write failed log_entry_id=%s: %s", log_entry_id, ex)
         events_db.commit()
 
-        if not entities:
-            if not open_events or not llm_on:
-                # Idle monitor or LLM off — nothing to route, drop span.
-                debug_append_ner(
-                    monitor_id, log_entry_id, "ner_empty", "", duration_ms, {}, "", raw_output, transcript,
-                )
-                return
-            # Open incident exists — pass raw transcript to Master for continuity routing.
+        open_events = list(
+            events_db.query(Event)
+            .filter(Event.monitor_id == monitor_id, Event.status == "open")
+            .order_by(Event.created_at.desc())
+            .all()
+        )
 
         start_labels = parse_json_list(monitor.keyword_config) or ["EVT_TYPE"]
         start_labels = [s.strip().upper() for s in start_labels if s]
         has_start_label = any(entities.get(lbl) for lbl in start_labels)
-        # ADDRESS (numbered) preferred for legacy attach-merge location; LOC fills in
-        # when no numbered address is present so we don't lose street/landmark mentions.
-        ner_addresses = entities.get("ADDRESS", []) or entities.get("LOC", [])
-        units = entities.get("UNIT", [])
-        evt_types = entities.get("EVT_TYPE", [])
 
-        open_summary = [
-            {"event_id": e.event_id, "event_type": e.event_type, "location": e.location}
-            for e in open_events
-        ]
-
-        # --- Open incident(s): optional stacked Worker (EVT_TYPE) then Master ---
-        if open_events:
-            if not llm_on:
+        # Pre-flight early exits when monitor is idle
+        if not open_events:
+            if not entities:
                 debug_append_ner(
-                    monitor_id, log_entry_id, "master_needs_ollama", "", duration_ms, entities,
-                    "configure incidents_ollama and enable events_pipeline.enabled",
-                    raw_output, transcript,
+                    monitor_id, log_entry_id, "ner_empty", "", ner_duration_ms, {}, "", raw_output, transcript,
                 )
                 return
-            if evt_types:
-                wr_create, wr_reason_raw, wr_llm_output, wr_et, wr_bt = worker_should_create_event(
-                    events_db=events_db,
-                    monitor_id=monitor_id,
-                    monitor_name=monitor.name or "",
-                    talkgroup=talkgroup or "",
-                    transcript=transcript,
-                    entities=entities,
-                    log_entry_id=log_entry_id,
-                    open_incidents=open_summary,
+            if not has_start_label:
+                debug_append_ner(
+                    monitor_id, log_entry_id, "idle_no_evt_type", "", ner_duration_ms, entities, "", raw_output, transcript,
                 )
-                if wr_create is None:
-                    err = (wr_reason_raw or "Worker LLM error").strip()[:500]
-                    debug_append_ner(
-                        monitor_id, log_entry_id, "worker_fail", "", duration_ms, entities,
-                        err, raw_output, transcript, wr_llm_output,
-                    )
-                elif wr_create:
-                    wr_reason = (wr_reason_raw or "").strip()[:500]
-                    stacked_action = (
-                        "worker_create_stacked_broadcast"
-                        if wr_et == WORKER_BROADCAST_EVENT_TYPE
-                        else "worker_create_stacked"
-                    )
-                    _create_event_full(
-                        events_db,
-                        monitor_id,
-                        talkgroup or "",
-                        transcript,
-                        entities,
-                        log_entry_id,
-                        log_timestamp,
-                        duration_ms,
-                        raw_output,
-                        debug_action=stacked_action,
-                        debug_reason=wr_reason or "Worker approved new incident while others open",
-                        debug_llm_output=wr_llm_output,
-                        worker_event_type=wr_et,
-                        broadcast_type_slug=wr_bt,
-                        use_master_header=use_master_header,
-                    )
-                    return
-                else:
-                    debug_append_ner(
-                        monitor_id,
-                        log_entry_id,
-                        "worker_defer_master",
-                        "",
-                        duration_ms,
-                        entities,
-                        (wr_reason_raw or "").strip()[:500],
-                        raw_output,
-                        transcript,
-                        wr_llm_output,
-                    )
+                return
 
-            decision = route_transcript_with_llm(
+        # Fetch recent linked transcripts for open events to provide rich context to LLM
+        open_incidents_payload: List[Dict[str, Any]] = []
+        for ev in open_events:
+            link_log_ids = [
+                lid for (lid,) in events_db.query(EventTranscriptLink.log_entry_id)
+                .filter(EventTranscriptLink.event_id == ev.id)
+                .order_by(EventTranscriptLink.id.desc())
+                .limit(3)
+                .all()
+                if lid is not None
+            ]
+            recent_t_texts: List[str] = []
+            if link_log_ids:
+                log_rows = logs_db.query(LogEntry.transcript).filter(LogEntry.id.in_(link_log_ids)).all()
+                recent_t_texts = [r[0] for r in log_rows if r and r[0]]
+
+            open_incidents_payload.append({
+                "event_id": ev.event_id,
+                "event_type": ev.event_type,
+                "location": ev.location,
+                "units": ev.units,
+                "status_detail": ev.status_detail,
+                "recent_transcripts": recent_t_texts,
+            })
+
+        # Fetch recent channel spans for conversational context
+        recent_spans_rows = (
+            events_db.query(SpanStore.transcript)
+            .filter(SpanStore.monitor_id == monitor_id, SpanStore.id < span_row.id)
+            .order_by(SpanStore.id.desc())
+            .limit(3)
+            .all()
+        )
+        recent_spans = [r[0] for r in reversed(recent_spans_rows) if r and r[0]]
+
+        # Call the single-pass OpenRouter LLM
+        decision = EventsRouter.route_transcript(
+            monitor_name=monitor.name or "",
+            talkgroup=talkgroup or "",
+            transcript=transcript,
+            entities=entities,
+            open_incidents=open_incidents_payload,
+            recent_spans=recent_spans,
+        )
+
+        action = decision.get("action", "SKIP")
+        reason = decision.get("reason", "")
+        llm_output = decision.get("raw_llm_output", "")
+        total_duration_ms = ner_duration_ms + float(decision.get("duration_ms", 0.0))
+
+        if action == "SKIP":
+            append_pipeline_debug(
                 monitor_id=monitor_id,
-                monitor_name=monitor.name or "",
+                log_entry_id=log_entry_id,
+                action="router_skip",
+                event_id="",
+                duration_ms=total_duration_ms,
+                entities=entities,
+                error=decision.get("error") or "",
+                raw_output=raw_output,
+                transcript=transcript,
+                llm_output=llm_output,
+            )
+            return
+
+        if action == "CREATE":
+            _create_event_full(
+                events_db=events_db,
+                monitor_id=monitor_id,
                 talkgroup=talkgroup or "",
                 transcript=transcript,
                 entities=entities,
                 log_entry_id=log_entry_id,
                 log_timestamp=log_timestamp,
-                has_start_label=has_start_label,
-                start_labels=start_labels,
+                duration_ms=total_duration_ms,
+                raw_output=raw_output,
+                debug_action="router_create",
+                debug_reason=reason,
+                debug_llm_output=llm_output,
+                event_type=decision.get("event_type"),
+                broadcast_type_slug=decision.get("broadcast_type"),
+                location=decision.get("location"),
+                units=decision.get("units"),
+                status_detail=decision.get("status_detail"),
+                is_broadcast=False,
+            )
+            return
+
+        if action == "BROADCAST":
+            _create_event_full(
                 events_db=events_db,
-                worker_deferred=bool(evt_types),
-                primary_event_id=open_events[0].event_id if open_events else None,
+                monitor_id=monitor_id,
+                talkgroup=talkgroup or "",
+                transcript=transcript,
+                entities=entities,
+                log_entry_id=log_entry_id,
+                log_timestamp=log_timestamp,
+                duration_ms=total_duration_ms,
+                raw_output=raw_output,
+                debug_action="router_broadcast",
+                debug_reason=reason,
+                debug_llm_output=llm_output,
+                broadcast_type_slug=decision.get("broadcast_type"),
+                is_broadcast=True,
             )
-            if not decision:
-                debug_append_ner(
-                    monitor_id, log_entry_id, "master_fail", "", duration_ms, entities,
-                    "no valid LLM decision", raw_output, transcript,
-                )
-                return
-            act = decision.get("action")
-            reason = (decision.get("reason") or "")[:500]
-            llm_output = (decision.get("_llm_output") or "")[:12000]
-            if act == "skip":
-                debug_append_ner(
-                    monitor_id, log_entry_id, "master_skip", "", duration_ms, entities, reason, raw_output, transcript, llm_output,
-                )
-                return
-            if act == "attach":
-                eid = decision.get("event_id") or ""
-                ev = events_db.query(Event).filter(
-                    Event.event_id == eid,
+            return
+
+        if action == "ATTACH":
+            target_eid = decision.get("event_id")
+            target_ev = None
+            if target_eid:
+                target_ev = events_db.query(Event).filter(
+                    Event.event_id == target_eid,
                     Event.monitor_id == monitor_id,
                     Event.status == "open",
                 ).first()
-                if ev:
-                    with event_work_lock(ev.id):
-                        already_linked = events_db.query(EventTranscriptLink).filter(
-                            EventTranscriptLink.event_id == ev.id,
-                            EventTranscriptLink.log_entry_id == log_entry_id,
-                        ).first()
-                        if not already_linked:
-                            events_db.add(
-                                EventTranscriptLink(
-                                    event_id=ev.id,
-                                    log_entry_id=log_entry_id,
-                                    entities_json=_entities_json(entities),
-                                    llm_reason=(reason or "").strip()[:2000] or None,
-                                )
+
+            # Fallback if single open event
+            if not target_ev and len(open_events) == 1:
+                target_ev = open_events[0]
+
+            if target_ev:
+                with event_work_lock(target_ev.id):
+                    already_linked = events_db.query(EventTranscriptLink).filter(
+                        EventTranscriptLink.event_id == target_ev.id,
+                        EventTranscriptLink.log_entry_id == log_entry_id,
+                    ).first()
+                    if not already_linked:
+                        events_db.add(
+                            EventTranscriptLink(
+                                event_id=target_ev.id,
+                                log_entry_id=log_entry_id,
+                                entities_json=_entities_json(entities),
+                                llm_reason=(reason or "").strip()[:2000] or None,
                             )
-                        if not use_master_header:
-                            if units:
-                                ev.units = _merge_list_field(ev.units, units)
-                            if ner_addresses:
-                                ev.location = _merge_list_field(ev.location, ner_addresses)
-                        ev.master_last_run_at = datetime.now(timezone.utc)
-                        events_db.commit()
-                    if use_master_header and _should_normalize_on_attach(events_db, ev.id):
-                        schedule_master_header_normalize(ev.id)
-                    debug_append_ner(
-                        monitor_id, log_entry_id, "master_attach", ev.event_id, duration_ms, entities, reason, raw_output, transcript, llm_output,
-                    )
-                    logger.info("Events Master: attached log_entry_id=%s to event_id=%s", log_entry_id, ev.event_id)
-                else:
-                    debug_append_ner(
-                        monitor_id, log_entry_id, "master_attach_invalid", eid, duration_ms, entities, reason, raw_output, transcript, llm_output,
-                    )
-                return
-            if act == "close":
-                eid = decision.get("event_id") or ""
-                ev = events_db.query(Event).filter(
-                    Event.event_id == eid,
+                        )
+
+                    # Update event header from LLM decision & NER
+                    new_units = decision.get("units") or entities.get("UNIT", [])
+                    if new_units:
+                        target_ev.units = _merge_list_field(target_ev.units, new_units)
+
+                    old_loc = target_ev.location
+                    dec_loc = decision.get("location")
+                    loc_changed = False
+                    if dec_loc and (not target_ev.location or target_ev.location == "N/A" or len(dec_loc) > len(target_ev.location or "")):
+                        if dec_loc != old_loc:
+                            target_ev.location = dec_loc
+                            loc_changed = True
+
+                    dec_status = decision.get("status_detail")
+                    if dec_status:
+                        target_ev.status_detail = dec_status
+
+                    dec_etype = decision.get("event_type")
+                    if dec_etype and (not target_ev.event_type or target_ev.event_type == "N/A"):
+                        target_ev.event_type = dec_etype
+
+                    target_ev.master_last_run_at = datetime.now(timezone.utc)
+                    events_db.commit()
+
+                    if loc_changed and target_ev.location:
+                        _dispatch_geocoding_for_event(target_ev.event_id, target_ev.location, monitor_id)
+
+                    websocket_manager.broadcast_sync({
+                        "type": "event_update",
+                        "action": "attach",
+                        "data": {
+                            "id": target_ev.id,
+                            "event_id": target_ev.event_id,
+                            "monitor_id": target_ev.monitor_id,
+                            "status": target_ev.status,
+                            "event_type": target_ev.event_type,
+                            "broadcast_type": target_ev.broadcast_type,
+                            "location": target_ev.location,
+                            "latitude": target_ev.latitude,
+                            "longitude": target_ev.longitude,
+                            "resolved_address": target_ev.resolved_address,
+                            "units": target_ev.units,
+                            "status_detail": target_ev.status_detail,
+                            "original_transcription": target_ev.original_transcription,
+                            "summary": target_ev.summary,
+                            "talkgroup": talkgroup,
+                        }
+                    })
+
+                append_pipeline_debug(
+                    monitor_id=monitor_id,
+                    log_entry_id=log_entry_id,
+                    action="router_attach",
+                    event_id=target_ev.event_id,
+                    duration_ms=total_duration_ms,
+                    entities=entities,
+                    error="",
+                    raw_output=raw_output,
+                    transcript=transcript,
+                    llm_output=llm_output,
+                )
+                logger.info("Events: attached log_entry_id=%s to event_id=%s", log_entry_id, target_ev.event_id)
+            else:
+                append_pipeline_debug(
+                    monitor_id=monitor_id,
+                    log_entry_id=log_entry_id,
+                    action="router_attach_invalid",
+                    event_id=target_eid or "",
+                    duration_ms=total_duration_ms,
+                    entities=entities,
+                    error=f"No matching open event found for event_id={target_eid}",
+                    raw_output=raw_output,
+                    transcript=transcript,
+                    llm_output=llm_output,
+                )
+            return
+
+        if action == "CLOSE":
+            target_eid = decision.get("event_id")
+            target_ev = None
+            if target_eid:
+                target_ev = events_db.query(Event).filter(
+                    Event.event_id == target_eid,
                     Event.monitor_id == monitor_id,
                     Event.status == "open",
                 ).first()
-                if ev:
-                    with event_work_lock(ev.id):
-                        existing = events_db.query(EventTranscriptLink).filter(
-                            EventTranscriptLink.event_id == ev.id,
-                            EventTranscriptLink.log_entry_id == log_entry_id,
-                        ).first()
-                        if not existing:
-                            events_db.add(
-                                EventTranscriptLink(
-                                    event_id=ev.id,
-                                    log_entry_id=log_entry_id,
-                                    entities_json=_entities_json(entities),
-                                    llm_reason=(reason or "").strip()[:2000] or None,
-                                )
+
+            if not target_ev and len(open_events) == 1:
+                target_ev = open_events[0]
+
+            if target_ev:
+                with event_work_lock(target_ev.id):
+                    already_linked = events_db.query(EventTranscriptLink).filter(
+                        EventTranscriptLink.event_id == target_ev.id,
+                        EventTranscriptLink.log_entry_id == log_entry_id,
+                    ).first()
+                    if not already_linked:
+                        events_db.add(
+                            EventTranscriptLink(
+                                event_id=target_ev.id,
+                                log_entry_id=log_entry_id,
+                                entities_json=_entities_json(entities),
+                                llm_reason=(reason or "").strip()[:2000] or None,
                             )
-                        elif (reason or "").strip():
-                            existing.llm_reason = (reason or "").strip()[:2000]
-                        if not use_master_header:
-                            if units:
-                                ev.units = _merge_list_field(ev.units, units)
-                            if ner_addresses:
-                                ev.location = _merge_list_field(ev.location, ner_addresses)
-                        ev.status = "closed"
-                        ev.closed_at = datetime.now(timezone.utc)
-                        ev.master_last_run_at = datetime.now(timezone.utc)
-                        events_db.commit()
-                    if use_master_header:
-                        schedule_master_header_normalize(ev.id)
-                    else:
-                        _maybe_schedule_event_summary(events_db, ev.id)
-                    debug_append_ner(
-                        monitor_id, log_entry_id, "master_close", ev.event_id, duration_ms, entities, reason, raw_output, transcript, llm_output,
-                    )
-                    logger.info("Events Master: closed event_id=%s with log_entry_id=%s", ev.event_id, log_entry_id)
-                else:
-                    debug_append_ner(
-                        monitor_id, log_entry_id, "master_close_invalid", eid, duration_ms, entities, reason, raw_output, transcript, llm_output,
-                    )
-                return
+                        )
+
+                    new_units = decision.get("units") or entities.get("UNIT", [])
+                    if new_units:
+                        target_ev.units = _merge_list_field(target_ev.units, new_units)
+
+                    dec_status = decision.get("status_detail") or "Closed"
+                    target_ev.status_detail = dec_status
+                    target_ev.status = "closed"
+                    target_ev.closed_at = datetime.now(timezone.utc)
+                    target_ev.master_last_run_at = datetime.now(timezone.utc)
+                    events_db.commit()
+
+                    websocket_manager.broadcast_sync({
+                        "type": "event_update",
+                        "action": "close",
+                        "data": {
+                            "id": target_ev.id,
+                            "event_id": target_ev.event_id,
+                            "monitor_id": target_ev.monitor_id,
+                            "status": "closed",
+                            "closed_at": target_ev.closed_at.isoformat() if target_ev.closed_at else None,
+                        }
+                    })
+
+                append_pipeline_debug(
+                    monitor_id=monitor_id,
+                    log_entry_id=log_entry_id,
+                    action="router_close",
+                    event_id=target_ev.event_id,
+                    duration_ms=total_duration_ms,
+                    entities=entities,
+                    error="",
+                    raw_output=raw_output,
+                    transcript=transcript,
+                    llm_output=llm_output,
+                )
+                logger.info("Events: closed event_id=%s with log_entry_id=%s", target_ev.event_id, log_entry_id)
+            else:
+                append_pipeline_debug(
+                    monitor_id=monitor_id,
+                    log_entry_id=log_entry_id,
+                    action="router_close_invalid",
+                    event_id=target_eid or "",
+                    duration_ms=total_duration_ms,
+                    entities=entities,
+                    error=f"No matching open event found for event_id={target_eid}",
+                    raw_output=raw_output,
+                    transcript=transcript,
+                    llm_output=llm_output,
+                )
             return
 
-        # --- Idle: no open incident ---
-        if not evt_types:
-            debug_append_ner(
-                monitor_id, log_entry_id, "idle_no_evt_type", "", duration_ms, entities, "", raw_output, transcript,
-            )
-            return
-
-        if not llm_on:
-            debug_append_ner(
-                monitor_id, log_entry_id, "worker_needs_ollama", "", duration_ms, entities,
-                "configure incidents_ollama and enable events_pipeline.enabled",
-                raw_output, transcript,
-            )
-            return
-
-        wr_create, wr_reason_raw, wr_llm_output, wr_et, wr_bt = worker_should_create_event(
-            events_db=events_db,
-            monitor_id=monitor_id,
-            monitor_name=monitor.name or "",
-            talkgroup=talkgroup or "",
-            transcript=transcript,
-            entities=entities,
-            log_entry_id=log_entry_id,
-            open_incidents=[],
-        )
-        if wr_create is None:
-            err = (wr_reason_raw or "Worker LLM error").strip()[:500]
-            debug_append_ner(
-                monitor_id, log_entry_id, "worker_fail", "", duration_ms, entities,
-                err, raw_output, transcript, wr_llm_output,
-            )
-            return
-        worker_reason = (wr_reason_raw or "").strip()[:500]
-        if not wr_create:
-            debug_append_ner(
-                monitor_id, log_entry_id, "worker_reject", "", duration_ms, entities,
-                worker_reason, raw_output, transcript, wr_llm_output,
-            )
-            return
-
-        idle_action = (
-            "worker_create_broadcast"
-            if wr_et == WORKER_BROADCAST_EVENT_TYPE
-            else "worker_create"
-        )
-        _create_event_full(
-            events_db,
-            monitor_id,
-            talkgroup or "",
-            transcript,
-            entities,
-            log_entry_id,
-            log_timestamp,
-            duration_ms,
-            raw_output,
-            debug_action=idle_action,
-            debug_reason=worker_reason or "Worker approved create",
-            debug_llm_output=wr_llm_output,
-            worker_event_type=wr_et,
-            broadcast_type_slug=wr_bt,
-            use_master_header=use_master_header,
-        )
     finally:
         events_db.close()
+        logs_db.close()
 
 
 def ensure_ner_model_loaded() -> bool:

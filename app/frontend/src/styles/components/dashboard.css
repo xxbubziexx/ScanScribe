@@ -29,19 +29,19 @@
   }
 
   .ss-stat-grid {
-    @apply mb-4 grid grid-cols-3 gap-3 sm:grid-cols-6;
+    @apply mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6;
   }
 
   .ss-stat-card {
-    @apply flex min-h-[88px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center backdrop-blur-sm;
+    @apply flex min-h-[72px] flex-col items-center justify-center rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-center backdrop-blur-sm sm:min-h-[88px] sm:px-4 sm:py-3;
   }
 
   .ss-stat-label {
-    @apply mb-1 text-center text-sm font-medium text-gray-400;
+    @apply mb-1 text-center text-xs font-medium text-gray-400 sm:text-sm;
   }
 
   .ss-stat-value {
-    @apply text-2xl font-bold tabular-nums text-white;
+    @apply text-xl font-bold tabular-nums text-white sm:text-2xl;
   }
 
   .ss-stat-value-text {

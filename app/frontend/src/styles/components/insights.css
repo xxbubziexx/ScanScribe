@@ -1,26 +1,30 @@
 @layer components {
   .ss-metric-grid {
-    @apply mb-4 grid grid-cols-2 gap-3 sm:grid-cols-6;
+    @apply mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6;
   }
 
   .ss-metric-card {
-    @apply flex min-h-[88px] flex-col items-center justify-center rounded-lg border border-white/10 bg-black/20 p-3 text-center;
+    @apply flex min-h-[72px] flex-col items-center justify-center rounded-lg border border-white/10 bg-black/20 p-2.5 text-center sm:min-h-[88px] sm:p-3;
   }
 
   .ss-metric-label {
-    @apply mb-1 text-center text-sm font-medium text-gray-400;
+    @apply mb-1 text-center text-xs font-medium text-gray-400 sm:text-sm;
   }
 
   .ss-metric-value {
-    @apply text-2xl font-bold tabular-nums text-white;
+    @apply text-xl font-bold tabular-nums text-white sm:text-2xl;
   }
 
   .ss-glass-panel {
-    @apply mb-4 rounded-xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm;
+    @apply mb-4 rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm sm:p-4;
   }
 
   .ss-insights-head {
-    @apply mb-4 flex flex-wrap items-center justify-between gap-3;
+    @apply mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between;
+  }
+
+  .ss-insights-controls {
+    @apply flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3;
   }
 
   .ss-insights-title {
@@ -49,11 +53,15 @@
   }
 
   .ss-insights-tabrow {
-    @apply flex border-b border-white/10;
+    @apply flex overflow-x-auto border-b border-white/10 [-ms-overflow-style:none] [scrollbar-width:none];
+  }
+
+  .ss-insights-tabrow::-webkit-scrollbar {
+    display: none;
   }
 
   .ss-insights-tab {
-    @apply px-4 py-3 text-sm font-medium text-gray-500 transition-colors;
+    @apply shrink-0 px-3 py-2.5 text-sm font-medium text-gray-500 transition-colors sm:px-4 sm:py-3;
     @apply hover:text-gray-300;
   }
 
@@ -62,7 +70,11 @@
   }
 
   .ss-insights-tabpanel {
-    @apply p-4;
+    @apply p-3 sm:p-4;
+  }
+
+  .ss-chart {
+    @apply h-52 sm:h-80;
   }
 
   .ss-rec-scroll {
@@ -70,11 +82,11 @@
   }
 
   .ss-tg-row {
-    @apply flex w-full items-center gap-4 text-left;
+    @apply flex w-full items-center gap-2 text-left sm:gap-4;
   }
 
   .ss-tg-name {
-    @apply w-28 flex-shrink-0 truncate text-sm text-gray-300;
+    @apply w-20 flex-shrink-0 truncate text-sm text-gray-300 sm:w-28;
   }
 
   .ss-tg-bar {
@@ -82,7 +94,7 @@
   }
 
   .ss-tg-count {
-    @apply w-12 flex-shrink-0 text-right text-sm text-gray-500;
+    @apply w-10 flex-shrink-0 text-right text-sm text-gray-500 sm:w-12;
   }
 
   .ss-tg-bar-track {
@@ -90,7 +102,7 @@
   }
 
   .ss-recent-row {
-    @apply flex items-center gap-3 rounded-lg bg-white/[0.02] px-3 py-2 text-sm;
+    @apply flex flex-col gap-1 rounded-lg bg-white/[0.02] px-3 py-2 text-sm sm:flex-row sm:items-center sm:gap-3;
   }
 
   .ss-summaries-card {
@@ -98,13 +110,18 @@
   }
 
   .ss-md-body {
-    @apply max-w-none border-t border-white/10 px-4 py-3 text-sm text-gray-300;
+    @apply max-w-none border-t border-white/10 px-3 py-3 text-sm text-gray-300 sm:px-4;
   }
 
   .ss-search-result {
-    @apply flex items-center gap-3 rounded-xl border border-white/12 bg-[#141821] px-3.5 py-2.5;
+    @apply flex flex-col gap-2 rounded-xl border border-white/12 bg-[#141821] px-3 py-2.5;
     @apply shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors;
     @apply hover:border-white/20 hover:bg-[#171c26];
+    @apply sm:flex-row sm:items-center sm:gap-3 sm:px-3.5;
+  }
+
+  .ss-search-result-main {
+    @apply flex min-w-0 flex-1 items-start gap-3 sm:items-center;
   }
 
   .ss-icon-btn {
@@ -116,7 +133,7 @@
   }
 
   .ss-play {
-    @apply flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full;
+    @apply flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full sm:h-7 sm:w-7;
     @apply border transition-colors;
   }
 
@@ -134,8 +151,8 @@
   }
 
   .ss-tg-btn {
-    @apply mx-auto block min-w-[100px] flex-shrink-0 rounded-md border border-indigo-400/35 bg-indigo-500/12;
-    @apply px-3 py-1 text-center text-sm font-semibold text-indigo-200 transition-colors;
+    @apply block min-w-[88px] max-w-[40%] flex-shrink-0 truncate rounded-md border border-indigo-400/35 bg-indigo-500/12;
+    @apply px-2.5 py-1 text-center text-sm font-semibold text-indigo-200 transition-colors sm:mx-auto sm:min-w-[100px] sm:max-w-none sm:px-3;
     @apply hover:border-indigo-300/50 hover:bg-indigo-500/20;
   }
 

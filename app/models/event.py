@@ -1,5 +1,5 @@
 """Events pipeline models (Worker/Master LLM per monitor)."""
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Float, Index
 
 from ..database import EventsBase, utcnow
 
@@ -11,6 +11,8 @@ class Monitor(EventsBase):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     enabled = Column(Boolean, default=True, index=True)
+    # Geo region / default jurisdiction (e.g. "Cook County, IL" or "Springfield, IL")
+    geo_region = Column(String(255), nullable=True)
     # JSON list of talkgroup names (strip + case-insensitive match to log_entry.talkgroup)
     talkgroup_ids = Column(Text, nullable=False, default="[]")
     # JSON list of NER labels that trigger event creation (e.g. ["EVT_TYPE"]). Stored in keyword_config.
@@ -32,11 +34,14 @@ class Event(EventsBase):
     # Worker tool classify_broadcast: storm_warning | cni_drivers | road_debris | attempt_to_locate
     broadcast_type = Column(String(64), nullable=True)
     location = Column(String(500), nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    resolved_address = Column(String(500), nullable=True)
     units = Column(Text, nullable=True)  # JSON array or comma-separated
     status_detail = Column(String(255), nullable=True)  # e.g. "en route", "on scene"
     original_transcription = Column(Text, nullable=True)  # Trigger transcript (always set by Worker)
     summary = Column(Text, nullable=True)
-    close_recommendation = Column(Boolean, nullable=True)  # Ollama suggests close; human/rule does actual close
+    close_recommendation = Column(Boolean, nullable=True)  # legacy; no longer set by pipeline
     created_at = Column(DateTime(timezone=True), default=utcnow)
     closed_at = Column(DateTime(timezone=True), nullable=True)
     # Master run: last time Master updated this event (for min_transcripts trigger)

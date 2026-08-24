@@ -43,6 +43,8 @@ interface SearchTabProps {
   filters: SearchFilters
   onFiltersChange: (f: SearchFilters) => void
   onTalkgroupFilter: (tg: string) => void
+  /** Hide copy / download / extra filters; keep play. */
+  viewOnly?: boolean
 }
 
 export function SearchTab({
@@ -51,6 +53,7 @@ export function SearchTab({
   filters,
   onFiltersChange,
   onTalkgroupFilter,
+  viewOnly = false,
 }: SearchTabProps) {
   const [results, setResults] = useState<LogEntry[]>([])
   const [total, setTotal] = useState(0)
@@ -184,6 +187,7 @@ export function SearchTab({
   return (
     <div>
       {/* Filter row */}
+      {!viewOnly && (
       <div className="mb-3 flex flex-wrap items-center gap-3">
         {/* Keyword */}
         <input
@@ -262,9 +266,10 @@ export function SearchTab({
           Clear
         </button>
       </div>
+      )}
 
       {/* Active filter chips */}
-      {hasFilters && (
+      {!viewOnly && hasFilters && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-gray-500">Active:</span>
           {filters.keyword && (
@@ -294,7 +299,11 @@ export function SearchTab({
       <div className="ss-rec-scroll">
         {results.length === 0 && !loading && (
           <p className="text-sm text-gray-500">
-            {hasFilters ? 'No results found.' : 'Enter search criteria or click a chart bar to filter…'}
+            {hasFilters
+              ? 'No results found.'
+              : viewOnly
+                ? 'No transcriptions for this day.'
+                : 'Enter search criteria or click a chart bar to filter…'}
           </p>
         )}
         {results.map((entry) => {
@@ -306,63 +315,70 @@ export function SearchTab({
               key={entry.id}
               className="ss-search-result"
             >
-              {/* Play btn */}
-              <button
-                disabled={!hasAudio}
-                onClick={() => toggleAudio(entry.id, entry.audio_path)}
-                title={hasAudio ? (isPlaying ? 'Stop' : 'Play') : 'No audio saved'}
-                className={`ss-play ${
-                    hasAudio
-                      ? isPlaying
-                        ? 'ss-play--on'
-                        : 'ss-play--idle'
-                      : 'ss-play--off'
-                  }`}
-              >
-                <span className="text-xs text-white">{isPlaying ? '■' : '▶'}</span>
-              </button>
+              <div className="ss-search-result-main">
+                <button
+                  disabled={!hasAudio}
+                  onClick={() => toggleAudio(entry.id, entry.audio_path)}
+                  title={hasAudio ? (isPlaying ? 'Stop' : 'Play') : 'No audio saved'}
+                  className={`ss-play ${
+                      hasAudio
+                        ? isPlaying
+                          ? 'ss-play--on'
+                          : 'ss-play--idle'
+                        : 'ss-play--off'
+                    }`}
+                >
+                  <span className="text-xs text-white">{isPlaying ? '■' : '▶'}</span>
+                </button>
 
-              {/* Timestamp */}
-              <div className="min-w-[60px] flex-shrink-0">
-                <p className="text-xs text-gray-500">{formatTime(entry.timestamp)}</p>
-                <p className="text-xs text-gray-700">{formatDateShort(entry.timestamp)}</p>
+                <div className="min-w-[52px] flex-shrink-0 sm:min-w-[60px]">
+                  <p className="text-xs text-gray-500">{formatTime(entry.timestamp)}</p>
+                  <p className="text-xs text-gray-700">{formatDateShort(entry.timestamp)}</p>
+                </div>
+
+                {viewOnly ? (
+                  <span className="ss-tg-btn cursor-default opacity-90">
+                    {entry.talkgroup || 'N/A'}
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => addTg(entry.talkgroup || 'N/A')}
+                    title="Add as filter"
+                    className="ss-tg-btn"
+                  >
+                    {entry.talkgroup || 'N/A'}
+                  </button>
+                )}
+
+                <p className="min-w-0 flex-1 leading-snug text-gray-300">
+                  {highlight(entry.transcript || '', filters.keyword)}
+                </p>
               </div>
 
-              {/* Talkgroup chip */}
-              <button
-                onClick={() => addTg(entry.talkgroup || 'N/A')}
-                title="Add as filter"
-                className="ss-tg-btn"
-              >
-                {entry.talkgroup || 'N/A'}
-              </button>
-
-              {/* Transcript */}
-              <p className="min-w-0 flex-1 leading-snug text-gray-300">
-                {highlight(entry.transcript || '', filters.keyword)}
-              </p>
-
-              {/* Meta + actions */}
-              <div className="flex flex-shrink-0 flex-col items-end gap-1 text-right">
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => copyResult(entry.talkgroup || 'N/A', entry.transcript || '')}
-                    title="Copy"
-                    className="ss-icon-btn"
-                  >
-                    📋
-                  </button>
-                  <button
-                    disabled={!hasAudio}
-                    onClick={() => downloadAudio(entry.audio_path, entry.id)}
-                    title={hasAudio ? 'Download audio' : 'No audio'}
-                    className={hasAudio ? 'ss-icon-btn' : 'ss-icon-btn--off'}
-                  >
-                    💾
-                  </button>
+              <div className="flex flex-shrink-0 items-center justify-between gap-2 sm:flex-col sm:items-end sm:gap-1 sm:text-right">
+                {!viewOnly && (
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => copyResult(entry.talkgroup || 'N/A', entry.transcript || '')}
+                      title="Copy"
+                      className="ss-icon-btn"
+                    >
+                      📋
+                    </button>
+                    <button
+                      disabled={!hasAudio}
+                      onClick={() => downloadAudio(entry.audio_path, entry.id)}
+                      title={hasAudio ? 'Download audio' : 'No audio'}
+                      className={hasAudio ? 'ss-icon-btn' : 'ss-icon-btn--off'}
+                    >
+                      💾
+                    </button>
+                  </div>
+                )}
+                <div className="flex gap-2 text-xs text-gray-500 sm:flex-col sm:gap-1 sm:items-end">
+                  <span>{(entry.duration || 0).toFixed(1)}s</span>
+                  <span className="text-gray-600">{formatBytes(entry.file_size || 0)}</span>
                 </div>
-                <span className="text-xs text-gray-500">{(entry.duration || 0).toFixed(1)}s</span>
-                <span className="text-xs text-gray-600">{formatBytes(entry.file_size || 0)}</span>
               </div>
             </div>
           )

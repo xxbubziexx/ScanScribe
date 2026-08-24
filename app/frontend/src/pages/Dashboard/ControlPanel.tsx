@@ -11,6 +11,8 @@ interface ControlPanelProps {
   onStop: () => void
   onTogglePause: () => void
   loading: boolean
+  /** Hide watcher control buttons (view-only status + resources). */
+  readOnly?: boolean
 }
 
 function ResourceBar({
@@ -54,14 +56,15 @@ export function ControlPanel({
   onStop,
   onTogglePause,
   loading,
+  readOnly = false,
 }: ControlPanelProps) {
   const cfg = STATUS_CONFIG[watcherState]
   const isPaused = watcherState === 'paused'
 
   return (
     <div className="ss-control">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex gap-2">
+      {!readOnly && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <button
             onClick={onStart}
             disabled={loading || watcherState === 'running'}
@@ -87,7 +90,7 @@ export function ControlPanel({
             {isPaused ? 'Resume' : 'Pause'}
           </button>
         </div>
-      </div>
+      )}
 
       <div className="ss-control-inner">
         <div className="flex items-center gap-3">

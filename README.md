@@ -14,7 +14,7 @@ An open source AI powered transcription system designed for public safety radio 
 ## Features
 
 - **Whisper transcription** — multi-worker, VAD-filtered, CPU or GPU
-- **Real-time Web UI** — WebSocket live updates, modern dark web interface
+- **Real-time Web UI** — React SPA at `/app/` (Vite build in `app/frontend/`); live dashboard via WebSocket. Legacy Jinja UI is archived under `archive/legacy-ui/`.
 - **Search and Playback** - Search for specific words in the database. Playback any transcriptions.
 - **Insights** — Daily activity statistics with interactable graph. Counts how many transcriptions per hour and logs talkgroups.
 - **Multi-user auth** — JWT-based login, user management
@@ -152,15 +152,14 @@ model:
 events_pipeline:
   enabled: false
   ner_model_path: ./models/incident_ner_<version>
-  llm_routing: true
   auto_close_stale_seconds: 3600    # close events idle > 1 hour
   cleanup_interval_seconds: 300     # sweep every 5 min
 
-incidents_ollama:
-  enabled: false
-  base_url: "http://<ollama-host>:11434"
-  worker_model: "gemma4:latest"     # cheap triage model
-  master_model: "qwen3.5"           # routing + header + summary
+openrouter:
+  api_key: "sk-or-v1-..."           # or set OPENROUTER_API_KEY env var
+  base_url: "https://openrouter.ai/api/v1"
+  model_name: "google/gemini-2.5-flash"
+  timeout_seconds: 30
 ```
 
 ### 3. CPU or GPU
@@ -256,7 +255,7 @@ All runtime settings live in **`config.yml`**. Environment variables in **`.env`
 | `transcription` | VAD, beam size, silence removal |
 | `events_pipeline` | NER path, LLM routing, auto-close, normalize interval |
 | `incidents_ollama` | Ollama URL, worker/master model names, timeout |
-| `gemini` | Gemini API key and model for hour summaries |
+| `hourly_summaries` | Hourly Summaries API (`provider`: gemini \| openrouter), key, model |
 | `summaries` | Auto-generation schedule |
 | `storage` | Audio retention, cleanup hour |
 | `logging` | Log level, rotation |
@@ -316,6 +315,8 @@ cp .env.example .env
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+Build the React UI once (`cd app/frontend && npm ci && npm run build`), then open **`http://localhost:8000/app/`** (legacy paths like `/login` redirect into the SPA).
+
 ## Project Structure
 
 ```
@@ -335,19 +336,18 @@ scanscribe/
 │   │   ├── events.py              # Events pipeline API
 │   │   ├── insights.py, settings.py, maintenance.py, watcher.py
 │   ├── services/                  # Business logic
-│   │   ├── events_worker.py       # NER → Worker → Master pipeline
-│   │   ├── ollama_event_routing.py # Master LLM routing
-│   │   ├── master_event_header_ollama.py
-│   │   ├── event_summary_ollama.py
-│   │   ├── ollama_worker.py       # Worker LLM triage
-│   │   ├── ner_service.py
+│   │   ├── events_worker.py       # NER pre-filter & pipeline orchestration
+│   │   ├── events_router_engine.py # Single-pass OpenRouter LLM router
+│   │   ├── ner_service.py         # Local NER entity extraction
 │   │   ├── events_common.py, events_debug.py
 │   │   ├── transcription_engine.py
 │   │   ├── queue_processor.py
 │   │   ├── watcher.py
 │   │   └── summaries_auto.py
-│   ├── templates/                 # Jinja2 HTML pages
-│   └── static/                    # CSS + JS
+│   ├── frontend/                  # React SPA (Vite); `dist/` served at /app/
+│   └── ...
+├── archive/
+│   └── legacy-ui/                 # Archived Jinja templates + old static assets
 ├── models/                        # Whisper + NER model weights
 ├── data/                          # SQLite databases (persistent)
 ├── logs/                          # Application logs
@@ -360,9 +360,7 @@ scanscribe/
 
 ## Troubleshooting
 
-**Events not routing** — check `incidents_ollama.enabled: true` and `llm_routing: true` in `config.yml`. Verify Ollama is reachable at `base_url`.
-
-**Header never fills** — check pipeline activity log on the Events page. Confirm `master_header_normalize: true` and the master model is loaded in Ollama.
+**Events not routing** — check `events_pipeline.enabled: true` in `config.yml`. Verify `OPENROUTER_API_KEY` is set in `.env` or `openrouter.api_key` in `config.yml`.
 
 **Stale events not closing** — both `auto_close_stale_seconds` and `cleanup_interval_seconds` must be > 0.
 

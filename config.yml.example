@@ -92,52 +92,44 @@ events_pipeline:
   # Minimum NER confidence to keep an entity (0.0 = disabled)
   ner_confidence_threshold: 0.85
 
-  # Master LLM routing (requires incidents_ollama.enabled = true)
-  llm_routing: false
-  llm_routing_max_tool_rounds: 8
-  llm_routing_openai_api: true   # false = native /api/chat; true = /v1/chat/completions
-  # llm_routing_max_tokens: 1536  # cap tokens per routing call (thinking + output share budget)
-  # llm_routing_reasoning_effort: low  # none | low | medium | high (Ollama reasoning models)
-  # llm_routing_log_raw: false    # log full Ollama JSON per round (noisy; for debugging)
-
-  # Lower Master attach confidence when an event's last span is older than this (seconds). 0 = disable.
-  master_llm_stale_seconds: 3600
-
-  # Master LLM fills event_type/location/units/status_detail from transcripts. false = legacy NER header.
-  master_header_normalize: true
-  # Run header normalizer every N total attached spans (1 = every attach). 0 = every attach.
-  normalize_every_n_spans: 5
-
-  # Run summary after this many spans are attached (0 = disabled)
-  summary_trigger_spans: 5
-
   # Auto-close events whose last radio transmission is older than this (seconds). 0 = disabled.
   auto_close_stale_seconds: 0
   # How often the background cleanup sweep runs (seconds). 0 = disabled.
   cleanup_interval_seconds: 0
 
-# ==================== INCIDENTS OLLAMA ====================
-# Ollama instance for Worker (cheap triage), Master (routing + header + summary).
-incidents_ollama:
-  enabled: false
-  base_url: "http://localhost:11434"
-  # Fallback model when worker_model / master_model are not set
-  model: "llama3.2:3b"
-  # Small/cheap model: should this EVT_TYPE span open a new incident?
-  worker_model: ""
-  # Stronger model: routing (attach/skip/close) + header normalization + summaries
-  master_model: ""
-  timeout_seconds: 60
-
-# ==================== GEMINI API (OPTIONAL) ====================
-gemini:
-  enabled: false
-  # Get a key at https://aistudio.google.com/app/apikey
-  # Recommended: set via GEMINI_API_KEY environment variable instead of storing here
+# ==================== OPENROUTER (Events Pipeline Router) ====================
+# Single-pass LLM router backend for emergency event classification and updates.
+openrouter:
+  # OpenRouter API key (sk-or-v1-...). Can also be set via OPENROUTER_API_KEY environment variable.
   api_key: ""
-  model: gemini-2.5-flash
+  base_url: "https://openrouter.ai/api/v1"
+  model_name: "google/gemini-2.5-flash"
+  timeout_seconds: 30
 
-# ==================== HOUR SUMMARIES ====================
+# ==================== HOURLY SUMMARIES API ====================
+# Used by Insights hour summaries (manual generate + auto worker).
+hourly_summaries:
+  enabled: false
+  # gemini | openrouter
+  provider: gemini
+  # Gemini: set GEMINI_API_KEY. OpenRouter: set OPENROUTER_API_KEY (or put key here).
+  api_key: ""
+  # Gemini: gemini-2.5-flash
+  # OpenRouter: e.g. google/gemini-2.5-flash or openai/gpt-4o-mini
+  model: gemini-2.5-flash
+  # OpenRouter only (optional). Defaults to https://openrouter.ai/api
+  base_url: ""
+  max_output_tokens: 8192
+
+# OpenRouter example (uncomment / switch provider):
+# hourly_summaries:
+#   enabled: true
+#   provider: openrouter
+#   api_key: ""   # or set OPENROUTER_API_KEY
+#   model: "google/gemini-2.5-flash"
+#   max_output_tokens: 8192
+
+# ==================== HOUR SUMMARIES SCHEDULE ====================
 summaries:
   # Automatically generate per-hour summaries in the background
   auto_generate_enabled: false

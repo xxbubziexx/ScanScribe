@@ -8,9 +8,12 @@ import type {
   MonitorUpdate,
   NerLabelsResponse,
   PipelineDebugEntry,
+  SpanStoreListResponse,
 } from '../types/events'
 
 const BASE = import.meta.env.VITE_API_BASE ?? ''
+/** Events pipeline API prefix — always root-absolute so fetch never resolves under /app/events/… */
+const EVENTS_API = '/api/events'
 
 function getToken(): string | null {
   return localStorage.getItem('access_token')
@@ -19,34 +22,34 @@ function getToken(): string | null {
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
 export const eventsApi = {
-  monitors: () => request<MonitorResponse[]>('/api/events/monitors'),
+  monitors: () => request<MonitorResponse[]>(`${EVENTS_API}/monitors`),
 
-  nerLabels: () => request<NerLabelsResponse>('/api/events/ner-labels'),
+  nerLabels: () => request<NerLabelsResponse>(`${EVENTS_API}/ner-labels`),
 
   createMonitor: (body: MonitorCreate) =>
-    request<MonitorResponse>('/api/events/monitors', {
+    request<MonitorResponse>(`${EVENTS_API}/monitors`, {
       method: 'POST',
       headers: jsonHeaders,
       body: JSON.stringify(body),
     }),
 
   updateMonitor: (monitorId: number, body: MonitorUpdate) =>
-    request<MonitorResponse>(`/api/events/monitors/${monitorId}`, {
+    request<MonitorResponse>(`${EVENTS_API}/monitors/${monitorId}`, {
       method: 'PATCH',
       headers: jsonHeaders,
       body: JSON.stringify(body),
     }),
 
   deleteMonitor: (monitorId: number) =>
-    request<{ ok: boolean }>(`/api/events/monitors/${monitorId}`, {
+    request<{ ok: boolean }>(`${EVENTS_API}/monitors/${monitorId}`, {
       method: 'DELETE',
     }),
 
   debugRecent: (limit = 80) =>
-    request<PipelineDebugEntry[]>(`/api/events/debug?limit=${encodeURIComponent(String(limit))}`),
+    request<PipelineDebugEntry[]>(`${EVENTS_API}/debug?limit=${encodeURIComponent(String(limit))}`),
 
   clearDebug: () =>
-    request<{ ok: boolean; removed: number }>('/api/events/debug', {
+    request<{ ok: boolean; removed: number }>(`${EVENTS_API}/debug`, {
       method: 'DELETE',
     }),
 
@@ -56,21 +59,45 @@ export const eventsApi = {
     if (args.status) sp.set('status', args.status)
     sp.set('limit', String(args.limit ?? 200))
     sp.set('offset', String(args.offset ?? 0))
-    return request<EventsListResponse>(`/api/events/events?${sp.toString()}`)
+    return request<EventsListResponse>(`${EVENTS_API}/events?${sp.toString()}`)
   },
 
   detail: (eventId: string) =>
-    request<EventDetailResponse>(`/api/events/events/${encodeURIComponent(eventId)}`),
+    request<EventDetailResponse>(`${EVENTS_API}/events/${encodeURIComponent(eventId)}`),
 
   close: (eventId: string) =>
-    request<{ ok: boolean; status: string }>(`/api/events/events/${encodeURIComponent(eventId)}/close`, {
+    request<{ ok: boolean; status: string }>(`${EVENTS_API}/events/${encodeURIComponent(eventId)}/close`, {
       method: 'POST',
     }),
 
   remove: (eventId: string) =>
-    request<{ ok: boolean }>(`/api/events/events/${encodeURIComponent(eventId)}`, {
+    request<{ ok: boolean }>(`${EVENTS_API}/events/${encodeURIComponent(eventId)}`, {
       method: 'DELETE',
     }),
+
+  geocode: (eventId: string) =>
+    request<{ ok: boolean; latitude?: number; longitude?: number; resolved_address?: string; message?: string }>(
+      `${EVENTS_API}/events/${encodeURIComponent(eventId)}/geocode`,
+      { method: 'POST' },
+    ),
+
+  spanStore: (args: {
+    monitorId?: number
+    talkgroup?: string
+    logEntryId?: number
+    q?: string
+    limit?: number
+    offset?: number
+  }) => {
+    const sp = new URLSearchParams()
+    if (typeof args.monitorId === 'number') sp.set('monitor_id', String(args.monitorId))
+    if (args.talkgroup) sp.set('talkgroup', args.talkgroup)
+    if (typeof args.logEntryId === 'number') sp.set('log_entry_id', String(args.logEntryId))
+    if (args.q) sp.set('q', args.q)
+    sp.set('limit', String(args.limit ?? 50))
+    sp.set('offset', String(args.offset ?? 0))
+    return request<SpanStoreListResponse>(`${EVENTS_API}/span-store?${sp.toString()}`)
+  },
 }
 
 export async function downloadEventsExportHeaders(args: {
@@ -83,7 +110,7 @@ export async function downloadEventsExportHeaders(args: {
   if (args.status) sp.set('status', args.status)
   sp.set('limit', String(args.limit ?? 10000))
   const token = getToken()
-  const res = await fetch(`${BASE}/api/events/events/export-headers?${sp.toString()}`, {
+  const res = await fetch(`${BASE}${EVENTS_API}/events/export-headers?${sp.toString()}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   if (!res.ok) {

@@ -9,8 +9,7 @@ from sqlalchemy import func
 
 from ..config import (
     get_settings,
-    incidents_ollama_master_model,
-    incidents_ollama_worker_model,
+    openrouter_model,
 )
 from ..database import EventsSessionLocal
 from ..models.event import PipelineDebugLog
@@ -76,18 +75,16 @@ def _maybe_prune(db) -> None:
 
 
 def _debug_model_for_action(action: str) -> str:
-    """Return configured LLM model for worker/master actions, else empty."""
+    """Return configured LLM model for router actions, else empty."""
     a = (action or "").strip().lower()
     if not a:
         return ""
     settings = get_settings()
-    ollama_cfg = getattr(settings.config, "incidents_ollama", None)
-    if ollama_cfg is None:
+    router_cfg = getattr(settings.config, "openrouter", None) or getattr(settings.config, "incidents_ollama", None)
+    if router_cfg is None:
         return ""
-    if a.startswith("worker_"):
-        return incidents_ollama_worker_model(ollama_cfg)
-    if a.startswith("master_"):
-        return incidents_ollama_master_model(ollama_cfg)
+    if a.startswith("router_") or a.startswith("worker_") or a.startswith("master_"):
+        return openrouter_model(router_cfg)
     return ""
 
 

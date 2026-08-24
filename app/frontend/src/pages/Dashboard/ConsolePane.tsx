@@ -17,9 +17,11 @@ function formatTime(iso: string | null): string {
 interface ConsolePaneProps {
   entries: ConsoleEntry[]
   onClear: () => void
+  /** Hide auto-scroll and clear (view-only console). */
+  readOnly?: boolean
 }
 
-export function ConsolePane({ entries, onClear }: ConsolePaneProps) {
+export function ConsolePane({ entries, onClear, readOnly = false }: ConsolePaneProps) {
   const [autoScroll, setAutoScroll] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -39,20 +41,22 @@ export function ConsolePane({ entries, onClear }: ConsolePaneProps) {
     <div className="ss-console-root">
       <div className="mb-3 flex shrink-0 items-center justify-between">
         <h2 className="ss-console-title">Console</h2>
-        <div className="flex items-center gap-3">
-          <label className="ss-check-sm">
-            <input
-              type="checkbox"
-              checked={autoScroll}
-              onChange={(e) => setAutoScroll(e.target.checked)}
-              className="accent-indigo-500"
-            />
-            Auto-scroll
-          </label>
-          <button onClick={onClear} className="ss-ghost-sm" type="button">
-            Clear
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-3">
+            <label className="ss-check-sm">
+              <input
+                type="checkbox"
+                checked={autoScroll}
+                onChange={(e) => setAutoScroll(e.target.checked)}
+                className="accent-indigo-500"
+              />
+              Auto-scroll
+            </label>
+            <button onClick={onClear} className="ss-ghost-sm" type="button">
+              Clear
+            </button>
+          </div>
+        )}
       </div>
 
       <div ref={scrollRef} onScroll={handleScroll} className="ss-console-stream">

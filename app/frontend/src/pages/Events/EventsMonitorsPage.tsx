@@ -24,11 +24,13 @@ export function EventsMonitorsPage() {
   const [createName, setCreateName] = useState('')
   const [createTg, setCreateTg] = useState('')
   const [createLabels, setCreateLabels] = useState('EVT_TYPE')
+  const [createGeoRegion, setCreateGeoRegion] = useState('')
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editTg, setEditTg] = useState('')
   const [editLabels, setEditLabels] = useState('')
+  const [editGeoRegion, setEditGeoRegion] = useState('')
 
   const monitorsQuery = useQuery({
     queryKey: ['events-monitors'],
@@ -58,12 +60,14 @@ export function EventsMonitorsPage() {
         name: createName.trim(),
         talkgroup_ids: parseTokens(createTg),
         start_event_labels: parseTokens(createLabels).length ? parseTokens(createLabels) : ['EVT_TYPE'],
+        geo_region: createGeoRegion.trim() || undefined,
       }),
     onSuccess: () => {
       addToast('Monitor created', 'success')
       setCreateName('')
       setCreateTg('')
       setCreateLabels('EVT_TYPE')
+      setCreateGeoRegion('')
       invalidate()
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Failed to create monitor'), 'error'),
@@ -94,6 +98,7 @@ export function EventsMonitorsPage() {
     setEditName(m.name)
     setEditTg(tokensToLines(m.talkgroup_ids))
     setEditLabels(tokensToLines(m.start_event_labels))
+    setEditGeoRegion(m.geo_region || '')
   }
 
   const cancelEdit = () => setEditingId(null)
@@ -114,6 +119,7 @@ export function EventsMonitorsPage() {
         name: editName.trim(),
         talkgroup_ids: parseTokens(editTg),
         start_event_labels: parseTokens(editLabels).length ? parseTokens(editLabels) : ['EVT_TYPE'],
+        geo_region: editGeoRegion.trim() || undefined,
       },
     })
   }
@@ -151,6 +157,19 @@ export function EventsMonitorsPage() {
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
                   placeholder="e.g. Fire dispatch"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="grid gap-2 md:col-span-2 md:grid-cols-1">
+                <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-region">
+                  Geographic Region / County (for Geocoding map resolution)
+                </label>
+                <input
+                  id="new-monitor-region"
+                  className="ss-input"
+                  value={createGeoRegion}
+                  onChange={(e) => setCreateGeoRegion(e.target.value)}
+                  placeholder="e.g. Cook County, IL or Springfield, IL"
                   autoComplete="off"
                 />
               </div>
@@ -276,6 +295,17 @@ export function EventsMonitorsPage() {
                     </div>
                     <div className="grid gap-2">
                       <label className="text-[11px] uppercase tracking-wide text-gray-500">
+                        Geographic Region / County
+                      </label>
+                      <input
+                        className="ss-input"
+                        value={editGeoRegion}
+                        onChange={(e) => setEditGeoRegion(e.target.value)}
+                        placeholder="e.g. Cook County, IL"
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-[11px] uppercase tracking-wide text-gray-500">
                         Talkgroup IDs (comma or newline)
                       </label>
                       <textarea
@@ -347,6 +377,10 @@ export function EventsMonitorsPage() {
 function MonitorSummary({ m }: { m: MonitorResponse }) {
   return (
     <div className="ss-events-monitor-meta">
+      <div className="min-w-0 flex-1">
+        <p className="ss-events-monitor-meta-label">Region Context</p>
+        <p className="text-xs text-gray-300">{m.geo_region || <span className="text-gray-600">None</span>}</p>
+      </div>
       <div className="min-w-0 flex-1">
         <p className="ss-events-monitor-meta-label">Talkgroups</p>
         <div className="flex flex-wrap gap-0.5">

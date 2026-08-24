@@ -4,10 +4,9 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import __version__
@@ -98,11 +97,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Templates and static files
 BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 app.mount("/audio_storage", StaticFiles(directory=str(settings.output_dir)), name="audio_storage")
+
+# React SPA (Vite `base: '/app/'`, see app/frontend/vite.config.ts). Without these routes,
+# a refresh on e.g. /app/login hits FastAPI and returns 404 — only client-side routing worked.
+_FRONTEND_DIST = (BASE_DIR / "frontend" / "dist").resolve()
+
+
+def _spa_index() -> FileResponse:
+    index = _FRONTEND_DIST / "index.html"
+    if not index.is_file():
+        raise HTTPException(
+            status_code=503,
+            detail="React UI not built. From repo root: cd app/frontend && npm ci && npm run build",
+        )
+    return FileResponse(index)
+
+
+def _spa_file_or_shell(full_path: str) -> FileResponse:
+    """Serve real files under dist (assets/*.js, etc.) or index.html for client routes."""
+    if ".." in full_path.split("/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    base = _FRONTEND_DIST
+    try:
+        candidate = (base / full_path).resolve()
+    except OSError:
+        return _spa_index()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Not found") from None
+    if candidate.is_file():
+        return FileResponse(candidate)
+    return _spa_index()
+
 
 # Include routers
 app.include_router(auth_router)
@@ -117,6 +146,15 @@ app.include_router(insights_router)
 app.include_router(events_router)
 
 
+@app.get("/span-store", include_in_schema=False)
+def compat_span_store_api(request: Request):
+    """Some older UI builds called GET /span-store instead of /api/events/span-store."""
+    dest = "/api/events/span-store"
+    if request.url.query:
+        dest = f"{dest}?{request.url.query}"
+    return RedirectResponse(url=dest, status_code=307)
+
+
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
@@ -127,66 +165,80 @@ def health_check():
     }
 
 
-@app.get("/", response_class=HTMLResponse)
-def root(request: Request):
-    """Root endpoint - redirect to login."""
-    return RedirectResponse(url="/login")
+def _redirect_to_app(path: str) -> RedirectResponse:
+    """307 so method/body are preserved if ever used for non-GET (we use GET-only legacy URLs)."""
+    return RedirectResponse(url=f"/app{path}", status_code=307)
 
 
-@app.get("/login", response_class=HTMLResponse)
-def login_page(request: Request):
-    """Login page."""
-    return templates.TemplateResponse("login.html", {"request": request})
+@app.get("/", include_in_schema=False)
+def root():
+    """Send users to the React shell."""
+    return RedirectResponse(url="/app/", status_code=307)
 
 
-@app.get("/register", response_class=HTMLResponse)
-def register_page(request: Request):
-    """Registration page."""
-    return templates.TemplateResponse("register.html", {"request": request})
+@app.get("/login", include_in_schema=False)
+def legacy_login_redirect():
+    return _redirect_to_app("/login")
 
 
-@app.get("/dashboard", response_class=HTMLResponse)
-def dashboard(request: Request):
-    """Main dashboard (protected route)."""
-    # TODO: Add authentication middleware
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+@app.get("/register", include_in_schema=False)
+def legacy_register_redirect():
+    return _redirect_to_app("/register")
 
 
-@app.get("/settings", response_class=HTMLResponse)
-def settings_page(request: Request):
-    """Settings page."""
-    # TODO: Add authentication middleware
-    return templates.TemplateResponse("settings.html", {"request": request})
+@app.get("/dashboard", include_in_schema=False)
+def legacy_dashboard_redirect():
+    return _redirect_to_app("/")
 
 
-@app.get("/logs", response_class=HTMLResponse)
-def logs_page(request: Request):
-    """Logs page."""
-    # TODO: Add authentication middleware
-    return templates.TemplateResponse("logs.html", {"request": request})
+@app.get("/insights", include_in_schema=False)
+def legacy_insights_redirect():
+    return _redirect_to_app("/insights")
 
 
-@app.get("/users", response_class=HTMLResponse)
-def users_page(request: Request):
-    """Users management page."""
-    return templates.TemplateResponse("users.html", {"request": request})
+@app.get("/logs", include_in_schema=False)
+def legacy_logs_redirect():
+    return _redirect_to_app("/logs")
 
 
-@app.get("/insights", response_class=HTMLResponse)
-def insights_page(request: Request):
-    """Insights and analytics page."""
-    return templates.TemplateResponse("insights.html", {"request": request})
+@app.get("/users", include_in_schema=False)
+def legacy_users_redirect():
+    return _redirect_to_app("/users")
 
 
-@app.get("/events", response_class=HTMLResponse)
-def events_page(request: Request):
-    """Events pipeline: events list and debug."""
-    return templates.TemplateResponse("events.html", {"request": request})
+@app.get("/settings", include_in_schema=False)
+def legacy_settings_redirect():
+    return _redirect_to_app("/settings")
 
 
-@app.get("/events/{event_id}", response_class=HTMLResponse)
-def event_detail_page(request: Request, event_id: str):
-    """Event detail: header and linked transcripts."""
-    return templates.TemplateResponse("event_detail.html", {"request": request, "event_id": event_id})
+@app.get("/events", include_in_schema=False)
+def legacy_events_redirect():
+    return _redirect_to_app("/events")
 
 
+# React Events hub sub-routes (must not be treated as public event_id hex strings).
+_EVENTS_SPA_SUBPATHS = frozenset({"monitors", "debug", "span-store"})
+
+
+@app.get("/events/{event_id}", include_in_schema=False)
+def legacy_event_detail_redirect(event_id: str):
+    """Legacy URLs without /app prefix → React shell (preserve sub-routes)."""
+    if event_id in _EVENTS_SPA_SUBPATHS:
+        return _redirect_to_app(f"/events/{event_id}")
+    return _redirect_to_app("/events")
+
+
+@app.get("/app")
+def react_app_shell():
+    return _spa_index()
+
+
+@app.get("/app/")
+def react_app_shell_slash():
+    return _spa_index()
+
+
+@app.get("/app/{full_path:path}")
+def react_app_spa(full_path: str):
+    """History fallback: /app/login, /app/dashboard, … → index.html; real paths → files in dist."""
+    return _spa_file_or_shell(full_path)

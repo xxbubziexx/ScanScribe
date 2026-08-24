@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useAuth } from '@/context/AuthContext'
 import { insights } from '@/lib/insights'
 import type { InsightsTab, InsightsView, SearchFilters, TalkgroupEntry } from '@/types/insights'
 import { StatsPanel } from './components/StatsPanel'
@@ -8,11 +9,11 @@ import { TalkgroupTab } from './tabs/TalkgroupTab'
 import { SummariesTab } from './tabs/SummariesTab'
 import { RecentTab } from './tabs/RecentTab'
 
-const TABS: { id: InsightsTab; label: string }[] = [
-  { id: 'search', label: '🔍 Search & Filter' },
-  { id: 'talkgroup', label: '📡 Talkgroup Activity' },
-  { id: 'summaries', label: '📝 Summaries' },
-  { id: 'recent', label: '🕐 Live Activity' },
+const TABS: { id: InsightsTab; label: string; shortLabel: string }[] = [
+  { id: 'search', label: '🔍 Search & Filter', shortLabel: '🔍 Search' },
+  { id: 'talkgroup', label: '📡 Talkgroup Activity', shortLabel: '📡 Talkgroups' },
+  { id: 'summaries', label: '📝 Summaries', shortLabel: '📝 Summaries' },
+  { id: 'recent', label: '🕐 Live Activity', shortLabel: '🕐 Live' },
 ]
 
 const DEFAULT_FILTERS: SearchFilters = {
@@ -27,6 +28,9 @@ function todayIso() {
 }
 
 export function InsightsPage() {
+  const { user } = useAuth()
+  const viewOnly = user?.is_admin !== true
+
   const [date, setDate] = useState(todayIso())
   const [view, setView] = useState<InsightsView>('hourly')
   const [activeTab, setActiveTab] = useState<InsightsTab>(() => {
@@ -111,12 +115,12 @@ export function InsightsPage() {
         activeDates={activeDates}
         onViewChange={setView}
         onDateChange={setDate}
-        onHourClick={onHourClick}
+        onHourClick={viewOnly ? undefined : onHourClick}
       />
 
       <div className="ss-insights-tabs">
         <div className="ss-insights-tabrow" role="tablist">
-          {TABS.map(({ id, label }) => (
+          {TABS.map(({ id, label, shortLabel }) => (
             <button
               key={id}
               type="button"
@@ -129,7 +133,8 @@ export function InsightsPage() {
                   : 'ss-insights-tab'
               }
             >
-              {label}
+              <span className="sm:hidden">{shortLabel}</span>
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>
@@ -142,12 +147,13 @@ export function InsightsPage() {
               filters={searchFilters}
               onFiltersChange={setSearchFilters}
               onTalkgroupFilter={() => switchTab('search')}
+              viewOnly={viewOnly}
             />
           )}
           {activeTab === 'talkgroup' && (
-            <TalkgroupTab talkgroups={talkgroups} onTalkgroupClick={onTalkgroupClick} />
+            <TalkgroupTab talkgroups={talkgroups} onTalkgroupClick={onTalkgroupClick} viewOnly={viewOnly} />
           )}
-          {activeTab === 'summaries' && <SummariesTab date={date} />}
+          {activeTab === 'summaries' && <SummariesTab date={date} viewOnly={viewOnly} />}
           {activeTab === 'recent' && <RecentTab recent={recent} />}
         </div>
       </div>

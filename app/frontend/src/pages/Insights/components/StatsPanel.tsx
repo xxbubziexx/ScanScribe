@@ -32,7 +32,8 @@ interface StatsPanelProps {
   activeDates: string[]
   onViewChange: (v: InsightsView) => void
   onDateChange: (d: string) => void
-  onHourClick: (hour: number) => void
+  /** When omitted, chart hour clicks do nothing. */
+  onHourClick?: (hour: number) => void
 }
 
 export function StatsPanel({
@@ -65,7 +66,7 @@ export function StatsPanel({
             </span>
           )}
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="ss-insights-controls">
           <DatabaseDateSinglePicker
             value={date}
             onChange={onDateChange}

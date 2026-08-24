@@ -20,7 +20,7 @@ def _get_or_create_event_work_lock(event_db_id: int) -> threading.Lock:
 
 
 def try_acquire_event_work_lock(event_db_id: int) -> Optional[threading.Lock]:
-    """Non-blocking per-event_id lock covering all Master writes (header + summary + foreground attach/close).
+    """Non-blocking per-event_id lock covering all Master writes (header + foreground attach/close).
 
     Returns the acquired Lock on success (caller MUST `.release()` when done), or None if
     another worker already holds it (caller should skip its run to avoid stomping DB writes).
@@ -32,7 +32,7 @@ def try_acquire_event_work_lock(event_db_id: int) -> Optional[threading.Lock]:
 @contextmanager
 def event_work_lock(event_db_id: int) -> Iterator[None]:
     """Blocking per-event_id lock. Use for foreground attach/close commits that must not race
-    background header/summary runs."""
+    background header normalize runs."""
     lock = _get_or_create_event_work_lock(event_db_id)
     lock.acquire()
     try:

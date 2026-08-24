@@ -23,7 +23,7 @@ export function RecentTab({ recent }: RecentTabProps) {
           <span className="flex-shrink-0 rounded bg-indigo-500/20 px-2 py-0.5 text-xs text-indigo-300">
             {entry.talkgroup || 'N/A'}
           </span>
-          <span className="min-w-0 flex-1 truncate text-gray-300">
+          <span className="min-w-0 flex-1 text-gray-300 sm:truncate">
             {entry.transcript || '—'}
           </span>
           <span className="flex-shrink-0 text-xs text-gray-600">{(entry.duration || 0).toFixed(1)}s</span>
