@@ -127,3 +127,20 @@ export interface SpanStoreListResponse {
   items: SpanStoreRow[]
   total: number
 }
+
+export interface EntityObservationItem {
+  id: number
+  span_store_id: number
+  monitor_id: number
+  talkgroup: string | null
+  log_entry_id: number | null
+  ts: string | null
+  label: string
+  canonical: string
+  raw: string
+}
+
+export interface EntityObservationListResponse {
+  items: EntityObservationItem[]
+  total: number
+}

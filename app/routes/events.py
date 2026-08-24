@@ -14,13 +14,13 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_events_db, get_logs_db
-from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore
+from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore, EntityObservation
 from ..models.log_entry import LogEntry
 from ..models.user import User
 from ..services.events_common import parse_json_list
 from ..services.events_debug import clear_all as clear_debug_all, get_recent as get_debug_recent
 from ..services.ner_service import ENTITY_LABELS
-from .auth import get_current_active_user
+from .auth import get_current_active_user, get_current_admin_user
 
 
 def _iso_utc(d: dt | None, assume_utc: bool = False) -> str | None:
@@ -161,6 +161,23 @@ class SpanStoreListResponse(BaseModel):
     total: int
 
 
+class EntityObservationItem(BaseModel):
+    id: int
+    span_store_id: int
+    monitor_id: int
+    talkgroup: Optional[str] = None
+    log_entry_id: Optional[int] = None
+    ts: Optional[str] = None
+    label: str
+    canonical: str
+    raw: str
+
+
+class EntityObservationListResponse(BaseModel):
+    items: List[EntityObservationItem]
+    total: int
+
+
 class EventResponse(BaseModel):
     id: int
     event_id: str
@@ -286,17 +303,20 @@ async def delete_monitor(
 
 
 @router.get("/span-store", response_model=SpanStoreListResponse)
+@router.get("/spans", response_model=SpanStoreListResponse)
 async def list_span_store(
     monitor_id: Optional[int] = Query(None, ge=1),
     talkgroup: Optional[str] = Query(None, max_length=255),
     log_entry_id: Optional[int] = Query(None, ge=1),
     q: Optional[str] = Query(None, max_length=500, description="Substring search in transcript"),
+    sort_by: Optional[str] = Query("id", pattern="^(id|created_at|talkgroup|log_entry_id|status|evt_type)$"),
+    sort_order: Optional[str] = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_events_db),
 ):
-    """Browse span_store rows (NER + transcript per ingest). Newest first."""
+    """Browse span_store rows (NER + transcript per ingest)."""
     qry = db.query(SpanStore)
     if monitor_id is not None:
         qry = qry.filter(SpanStore.monitor_id == monitor_id)
@@ -307,9 +327,15 @@ async def list_span_store(
     if q and q.strip():
         qry = qry.filter(SpanStore.transcript.ilike(f"%{q.strip()}%"))
     total = qry.count()
+
+    col = getattr(SpanStore, sort_by or "id", SpanStore.id)
+    if (sort_order or "desc").lower() == "asc":
+        qry = qry.order_by(col.asc())
+    else:
+        qry = qry.order_by(col.desc())
+
     rows = (
-        qry.order_by(SpanStore.id.desc())
-        .offset(offset)
+        qry.offset(offset)
         .limit(limit)
         .all()
     )
@@ -347,24 +373,104 @@ async def list_span_store(
     return SpanStoreListResponse(items=items, total=total)
 
 
+@router.get("/entities", response_model=EntityObservationListResponse)
+async def list_entities(
+    monitor_id: Optional[int] = Query(None, ge=1),
+    label: Optional[str] = Query(None, max_length=32),
+    talkgroup: Optional[str] = Query(None, max_length=255),
+    log_entry_id: Optional[int] = Query(None, ge=1),
+    span_store_id: Optional[int] = Query(None, ge=1),
+    q: Optional[str] = Query(None, max_length=500, description="Search canonical or raw text"),
+    sort_by: Optional[str] = Query("id", pattern="^(id|ts|label|canonical|raw|talkgroup|log_entry_id|span_store_id)$"),
+    sort_order: Optional[str] = Query("desc", pattern="^(asc|desc)$"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_events_db),
+):
+    """Browse entity_observations rows with filtering, sorting, and pagination."""
+    qry = db.query(EntityObservation)
+    if monitor_id is not None:
+        qry = qry.filter(EntityObservation.monitor_id == monitor_id)
+    if label and label.strip():
+        qry = qry.filter(EntityObservation.label == label.strip().upper())
+    if talkgroup and talkgroup.strip():
+        qry = qry.filter(EntityObservation.talkgroup.ilike(f"%{talkgroup.strip()}%"))
+    if log_entry_id is not None:
+        qry = qry.filter(EntityObservation.log_entry_id == log_entry_id)
+    if span_store_id is not None:
+        qry = qry.filter(EntityObservation.span_store_id == span_store_id)
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        qry = qry.filter(
+            (EntityObservation.canonical.ilike(term)) | (EntityObservation.raw.ilike(term))
+        )
+    total = qry.count()
+
+    col = getattr(EntityObservation, sort_by or "id", EntityObservation.id)
+    if (sort_order or "desc").lower() == "asc":
+        qry = qry.order_by(col.asc())
+    else:
+        qry = qry.order_by(col.desc())
+
+    rows = qry.offset(offset).limit(limit).all()
+    items = [
+        EntityObservationItem(
+            id=r.id,
+            span_store_id=r.span_store_id,
+            monitor_id=r.monitor_id,
+            talkgroup=r.talkgroup,
+            log_entry_id=r.log_entry_id,
+            ts=_iso_utc(r.ts, assume_utc=True),
+            label=r.label,
+            canonical=r.canonical,
+            raw=r.raw,
+        )
+        for r in rows
+    ]
+    return EntityObservationListResponse(items=items, total=total)
+
+
 @router.get("/events")
 async def list_events(
     monitor_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, max_length=500, description="Search in summary, location, units, transcript"),
+    sort_by: Optional[str] = Query("created_at", pattern="^(id|event_id|created_at|closed_at|status|event_type|location)$"),
+    sort_order: Optional[str] = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_active_user),
     events_db: Session = Depends(get_events_db),
     logs_db: Session = Depends(get_logs_db),
 ) -> Dict[str, Any]:
-    """List events with pagination. Returns {items: [...], total: N}."""
-    q = events_db.query(Event).order_by(Event.created_at.desc())
+    """List events with pagination and search. Returns {items: [...], total: N}."""
+    query = events_db.query(Event)
     if monitor_id is not None:
-        q = q.filter(Event.monitor_id == monitor_id)
+        query = query.filter(Event.monitor_id == monitor_id)
     if status:
-        q = q.filter(Event.status == status)
-    total: int = q.count()
-    events = q.offset(offset).limit(limit).all()
+        query = query.filter(Event.status == status)
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(
+            (Event.event_id.ilike(term))
+            | (Event.event_type.ilike(term))
+            | (Event.broadcast_type.ilike(term))
+            | (Event.location.ilike(term))
+            | (Event.resolved_address.ilike(term))
+            | (Event.units.ilike(term))
+            | (Event.summary.ilike(term))
+            | (Event.original_transcription.ilike(term))
+        )
+    total: int = query.count()
+
+    col = getattr(Event, sort_by or "created_at", Event.created_at)
+    if (sort_order or "desc").lower() == "asc":
+        query = query.order_by(col.asc())
+    else:
+        query = query.order_by(col.desc())
+
+    events = query.offset(offset).limit(limit).all()
     event_ids = [e.id for e in events]
     link_counts, talkgroup_str_map, first_span_at_by_event = _batch_event_link_aggregates(
         events_db, logs_db, event_ids
@@ -665,7 +771,7 @@ async def ner_labels(
 @router.get("/debug")
 async def events_debug(
     limit: Optional[int] = Query(80, ge=1, le=200),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Recent NER pipeline debug entries (newest first). In-memory only."""
     return get_debug_recent(limit)
@@ -673,7 +779,7 @@ async def events_debug(
 
 @router.delete("/debug")
 async def clear_events_debug(
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """Clear all NER pipeline debug entries."""
     removed = clear_debug_all()

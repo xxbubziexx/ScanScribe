@@ -7,12 +7,14 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from . import __version__
 from .config import get_settings, init_directories
 from .database import init_db
 from .bootstrap_admin import ensure_default_admin
+from .utils.limiter import limiter
 from .routes import auth_router, settings_router, logs_router, maintenance_router, watcher_router, upload_router, users_router, transcriptions_router
 from .routes.insights import router as insights_router
 from .routes.events import router as events_router
@@ -87,15 +89,34 @@ app = FastAPI(
     description="Audio transcription service with Whisper AI",
     version=__version__,
     lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
-# CORS middleware — no credentials needed (Bearer token auth, not cookies)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; "
+        "font-src 'self' data:; "
+        "connect-src 'self' ws: wss:; "
+        "media-src 'self' blob:;"
+    )
+    return response
 
 BASE_DIR = Path(__file__).resolve().parent
 app.mount("/audio_storage", StaticFiles(directory=str(settings.output_dir)), name="audio_storage")
@@ -158,11 +179,7 @@ def compat_span_store_api(request: Request):
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "ingest_dir": str(settings.ingest_dir),
-        "model": settings.model_name
-    }
+    return {"status": "healthy"}
 
 
 def _redirect_to_app(path: str) -> RedirectResponse:

@@ -6,7 +6,7 @@ const NAV_ITEMS = [
   { to: '/', label: 'Command Center', end: true },
   { to: '/dashboard', label: 'Audio Feed' },
   { to: '/insights', label: 'Insights' },
-  { to: '/logs', label: 'Database', adminOnly: true },
+  { to: '/data', label: 'Database', adminOnly: true },
   { to: '/events', label: 'Events', adminOnly: true },
   { to: '/users', label: 'Users', adminOnly: true },
   { to: '/settings', label: 'Settings', adminOnly: true },

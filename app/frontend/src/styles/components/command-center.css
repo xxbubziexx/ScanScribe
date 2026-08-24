@@ -4,6 +4,10 @@
     @apply flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden text-gray-100;
   }
 
+  .ss-cc-fullscreen {
+    @apply h-screen max-h-screen bg-gray-950;
+  }
+
   .ss-cc-header {
     @apply flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-black/40 border-b border-white/10 backdrop-blur-md shrink-0;
   }

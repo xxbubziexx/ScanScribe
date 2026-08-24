@@ -71,10 +71,50 @@ def clean_location_string(raw: str) -> str:
     text = re.sub(r'\s+[@/]\s+', ' and ', text)
     text = re.sub(r'\s*&\s*', ' and ', text)
     text = re.sub(r'\s+(?:at|and)\s+', ' and ', text, flags=re.IGNORECASE)
+    
+    # Handle "cross of X and Y" or "crossroads"
+    text = re.sub(r'\bcross(?:roads?)?\s+of\b', '', text, flags=re.IGNORECASE).strip()
 
     # Remove trailing/leading punctuation
     text = text.strip(' ,.-;/')
     return text
+
+def build_fallback_queries(raw_location: str, geo_region: Optional[str] = None) -> list[str]:
+    """
+    Generate progressively simpler queries. Nominatim is highly strict.
+    If '100 Main St, County Jail' fails, we fallback to '100 Main St'.
+    """
+    queries = []
+    
+    # 1. The full cleaned query
+    full = build_geocoding_query(raw_location, geo_region)
+    if full:
+        queries.append(full)
+        
+    cleaned = clean_location_string(raw_location)
+    
+    # 2. If it contains a comma (e.g. "104 South College Street, Arcadia"), try just the first part
+    if ',' in cleaned:
+        first_part = cleaned.split(',')[0].strip()
+        fallback = build_geocoding_query(first_part, geo_region)
+        if fallback and fallback not in queries:
+            queries.append(fallback)
+            
+    # 3. If it contains an intersection ("and"), try just the first street
+    if ' and ' in cleaned.lower():
+        first_street = re.split(r'\s+and\s+', cleaned, flags=re.IGNORECASE)[0].strip()
+        fallback = build_geocoding_query(first_street, geo_region)
+        if fallback and fallback not in queries:
+            queries.append(fallback)
+            
+    # 4. If it has hyphenated block numbers (e.g. "209-04 State Highway U"), strip the suffix
+    if re.match(r'^\d+-\d+\s+', cleaned):
+        de_hyphenated = re.sub(r'^(\d+)-\d+\s+', r'\1 ', cleaned)
+        fallback = build_geocoding_query(de_hyphenated, geo_region)
+        if fallback and fallback not in queries:
+            queries.append(fallback)
+            
+    return queries
 
 
 def build_geocoding_query(raw_location: str, geo_region: Optional[str] = None) -> str:
@@ -229,46 +269,52 @@ def resolve_address_sync(
     if not raw_location or not raw_location.strip():
         return None
 
-    query = build_geocoding_query(raw_location, geo_region)
-    if not query:
+    queries_to_try = build_fallback_queries(raw_location, geo_region)
+    if not queries_to_try:
         return None
 
-    cache_key = query.lower()
     now = time.time()
-
-    with _cache_lock:
-        cached = _geocode_cache.get(cache_key)
-        if cached is not None:
-            res, ts = cached
-            ttl = CACHE_TTL_SECONDS if res is not None else NEGATIVE_CACHE_TTL_SECONDS
-            if now - ts < ttl:
-                return res
-
     selected_provider = provider or get_configured_provider()
-    logger.info("Geocoding query '%s' with provider '%s'", query, selected_provider)
+    
+    for query in queries_to_try:
+        cache_key = query.lower()
 
-    result: Optional[GeocodeResult] = None
-    if selected_provider == "google":
-        result = _geocode_google_sync(query, timeout=timeout)
-    elif selected_provider == "mapbox":
-        result = _geocode_mapbox_sync(query, timeout=timeout)
-    else:
-        result = _geocode_nominatim_sync(query, timeout=timeout)
+        with _cache_lock:
+            cached = _geocode_cache.get(cache_key)
+            if cached is not None:
+                res, ts = cached
+                ttl = CACHE_TTL_SECONDS if res is not None else NEGATIVE_CACHE_TTL_SECONDS
+                if now - ts < ttl:
+                    # If we found a cached hit, return it. If it's a cached miss, try next fallback
+                    if res is not None:
+                        return res
+                    continue
 
-    # Fallback to Nominatim if proprietary provider failed and was not nominatim
-    if result is None and selected_provider != "nominatim":
-        logger.info("Falling back to Nominatim for '%s'", query)
-        result = _geocode_nominatim_sync(query, timeout=timeout)
+        logger.info("Geocoding query '%s' with provider '%s'", query, selected_provider)
 
-    with _cache_lock:
-        _geocode_cache[cache_key] = (result, now)
+        result: Optional[GeocodeResult] = None
+        if selected_provider == "google":
+            result = _geocode_google_sync(query, timeout=timeout)
+        elif selected_provider == "mapbox":
+            result = _geocode_mapbox_sync(query, timeout=timeout)
+        else:
+            result = _geocode_nominatim_sync(query, timeout=timeout)
 
-    if result:
-        logger.info("Geocoded '%s' -> (%f, %f) '%s'", query, result.latitude, result.longitude, result.resolved_address)
-    else:
-        logger.info("Failed to geocode '%s'", query)
+        # Fallback to Nominatim if proprietary provider failed and was not nominatim
+        if result is None and selected_provider != "nominatim":
+            logger.info("Falling back to Nominatim for '%s'", query)
+            result = _geocode_nominatim_sync(query, timeout=timeout)
 
-    return result
+        with _cache_lock:
+            _geocode_cache[cache_key] = (result, now)
+
+        if result:
+            logger.info("Geocoded '%s' -> (%f, %f) '%s'", query, result.latitude, result.longitude, result.resolved_address)
+            return result
+        else:
+            logger.info("Failed to geocode '%s', trying fallback if available", query)
+
+    return None
 
 
 async def resolve_address(

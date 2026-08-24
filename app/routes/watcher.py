@@ -3,7 +3,7 @@ import psutil
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 from ..models.user import User
-from .auth import get_current_active_user
+from .auth import get_current_active_user, get_current_admin_user
 from ..services.watcher import get_watcher_service
 from ..services.queue_processor import get_processor
 from ..services.websocket import websocket_manager
@@ -20,7 +20,7 @@ class RejectionReport(BaseModel):
 
 
 @router.get("/status")
-async def get_watcher_status(current_user: User = Depends(get_current_active_user)):
+async def get_watcher_status(current_user: User = Depends(get_current_admin_user)):
     """Get watcher status and statistics."""
     from ..config import get_settings
     settings = get_settings()

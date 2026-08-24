@@ -1,6 +1,7 @@
 import { request } from './api'
 import { ApiError } from '../types/api'
 import type {
+  EntityObservationListResponse,
   EventDetailResponse,
   EventsListResponse,
   MonitorCreate,
@@ -53,11 +54,22 @@ export const eventsApi = {
       method: 'DELETE',
     }),
 
-  list: (args: { monitorId?: number; status?: string; limit?: number; offset?: number }) => {
+  list: (args: {
+    monitorId?: number
+    status?: string
+    q?: string
+    sortBy?: string
+    sortOrder?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  }) => {
     const sp = new URLSearchParams()
     if (typeof args.monitorId === 'number') sp.set('monitor_id', String(args.monitorId))
     if (args.status) sp.set('status', args.status)
-    sp.set('limit', String(args.limit ?? 200))
+    if (args.q) sp.set('q', args.q)
+    if (args.sortBy) sp.set('sort_by', args.sortBy)
+    if (args.sortOrder) sp.set('sort_order', args.sortOrder)
+    sp.set('limit', String(args.limit ?? 50))
     sp.set('offset', String(args.offset ?? 0))
     return request<EventsListResponse>(`${EVENTS_API}/events?${sp.toString()}`)
   },
@@ -86,6 +98,8 @@ export const eventsApi = {
     talkgroup?: string
     logEntryId?: number
     q?: string
+    sortBy?: string
+    sortOrder?: 'asc' | 'desc'
     limit?: number
     offset?: number
   }) => {
@@ -94,9 +108,37 @@ export const eventsApi = {
     if (args.talkgroup) sp.set('talkgroup', args.talkgroup)
     if (typeof args.logEntryId === 'number') sp.set('log_entry_id', String(args.logEntryId))
     if (args.q) sp.set('q', args.q)
+    if (args.sortBy) sp.set('sort_by', args.sortBy)
+    if (args.sortOrder) sp.set('sort_order', args.sortOrder)
     sp.set('limit', String(args.limit ?? 50))
     sp.set('offset', String(args.offset ?? 0))
     return request<SpanStoreListResponse>(`${EVENTS_API}/span-store?${sp.toString()}`)
+  },
+
+  entities: (args: {
+    monitorId?: number
+    label?: string
+    talkgroup?: string
+    logEntryId?: number
+    spanStoreId?: number
+    q?: string
+    sortBy?: string
+    sortOrder?: 'asc' | 'desc'
+    limit?: number
+    offset?: number
+  }) => {
+    const sp = new URLSearchParams()
+    if (typeof args.monitorId === 'number') sp.set('monitor_id', String(args.monitorId))
+    if (args.label) sp.set('label', args.label)
+    if (args.talkgroup) sp.set('talkgroup', args.talkgroup)
+    if (typeof args.logEntryId === 'number') sp.set('log_entry_id', String(args.logEntryId))
+    if (typeof args.spanStoreId === 'number') sp.set('span_store_id', String(args.spanStoreId))
+    if (args.q) sp.set('q', args.q)
+    if (args.sortBy) sp.set('sort_by', args.sortBy)
+    if (args.sortOrder) sp.set('sort_order', args.sortOrder)
+    sp.set('limit', String(args.limit ?? 50))
+    sp.set('offset', String(args.offset ?? 0))
+    return request<EntityObservationListResponse>(`${EVENTS_API}/entities?${sp.toString()}`)
   },
 }
 

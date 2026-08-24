@@ -21,22 +21,6 @@ export function EventsLayout() {
         >
           Monitor config
         </NavLink>
-        <NavLink
-          to="span-store"
-          className={({ isActive }) =>
-            isActive ? 'ss-events-tab ss-events-tab--active' : 'ss-events-tab'
-          }
-        >
-          Span store
-        </NavLink>
-        <NavLink
-          to="debug"
-          className={({ isActive }) =>
-            isActive ? 'ss-events-tab ss-events-tab--active' : 'ss-events-tab'
-          }
-        >
-          Debug
-        </NavLink>
       </nav>
       <Outlet />
     </div>

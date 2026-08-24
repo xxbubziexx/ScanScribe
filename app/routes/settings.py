@@ -9,7 +9,7 @@ from typing import Optional
 
 from ..database import get_db, get_logs_db
 from ..models.user import User
-from .auth import get_current_active_user
+from .auth import get_current_active_user, get_current_admin_user
 from ..config import get_settings, save_config, reload_settings
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -22,7 +22,7 @@ class ConfigContent(BaseModel):
 
 @router.get("/config")
 async def get_config_file(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_admin_user)
 ):
     """Get raw config.yml content."""
     settings = get_settings()
@@ -40,7 +40,7 @@ async def get_config_file(
 @router.post("/config")
 async def save_config_file(
     config: ConfigContent,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_admin_user)
 ):
     """Save raw config.yml content."""
     settings = get_settings()
@@ -71,7 +71,7 @@ async def save_config_file(
 
 @router.post("/restart")
 async def restart_application(
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_admin_user)
 ):
     """Restart the application to apply config changes."""
     try:

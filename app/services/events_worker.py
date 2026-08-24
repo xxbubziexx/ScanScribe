@@ -198,6 +198,13 @@ _monitor_index_lock = threading.Lock()
 _monitor_index_cache: Optional[Tuple[Any, Dict[str, List[int]]]] = None
 
 
+def _normalize_talkgroup_key(tg: str) -> str:
+    """Normalize a talkgroup string by lowercasing, stripping, and collapsing internal whitespace."""
+    if not tg:
+        return ""
+    # Replace multiple whitespaces with a single space
+    return re.sub(r'\s+', ' ', tg.strip().lower())
+
 def _build_monitor_talkgroup_index(events_db) -> Tuple[Any, Dict[str, List[int]]]:
     """Build {talkgroup_lower: [monitor_ids]} index. Fingerprint = max(updated_at) over enabled monitors."""
     from sqlalchemy import func as sa_func
@@ -208,7 +215,7 @@ def _build_monitor_talkgroup_index(events_db) -> Tuple[Any, Dict[str, List[int]]
         for tg in parse_json_list(m.talkgroup_ids):
             if not isinstance(tg, str):
                 continue
-            key = tg.strip().lower()
+            key = _normalize_talkgroup_key(tg)
             if not key:
                 continue
             index.setdefault(key, []).append(m.id)
@@ -220,7 +227,7 @@ def get_matching_monitor_ids(events_db, talkgroup: str) -> List[int]:
     global _monitor_index_cache
     if not talkgroup:
         return []
-    key = talkgroup.strip().lower()
+    key = _normalize_talkgroup_key(talkgroup)
     if not key:
         return []
     from sqlalchemy import func as sa_func

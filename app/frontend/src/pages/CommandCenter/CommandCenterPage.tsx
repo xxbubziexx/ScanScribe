@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { eventsApi } from '@/lib/events'
@@ -19,9 +19,35 @@ const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${win
 export function CommandCenterPage() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [liveCpm, setLiveCpm] = useState<number | null>(null)
+
+  // Listen for fullscreenchange events to update state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  const toggleFullscreen = useCallback(async () => {
+    if (!document.fullscreenElement) {
+      try {
+        await containerRef.current?.requestFullscreen()
+      } catch (err) {
+        addToast('Failed to enter fullscreen mode', 'error')
+      }
+    } else {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen()
+      }
+    }
+  }, [addToast])
 
   // Fetch Monitors
   const monitorsQuery = useQuery({
@@ -119,7 +145,7 @@ export function CommandCenterPage() {
   }, [rawItems, monitorNameMap])
 
   return (
-    <div className="ss-command-center">
+    <div className={`ss-command-center ${isFullscreen ? 'ss-cc-fullscreen' : ''}`} ref={containerRef}>
       {/* Command Center Top Navigation Toolbar */}
       <header className="ss-cc-header">
         <div className="ss-cc-title-group">
@@ -133,6 +159,15 @@ export function CommandCenterPage() {
         </div>
 
         <div className="ss-cc-controls">
+          <button
+            type="button"
+            className="ss-btn-ghost text-xs py-1 px-2.5 flex items-center gap-1"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+          >
+            <span>{isFullscreen ? '⛶' : '🖵'}</span> {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+          </button>
+
           <button
             type="button"
             className="ss-btn-ghost text-xs py-1 px-2.5 flex items-center gap-1"

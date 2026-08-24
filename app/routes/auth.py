@@ -1,7 +1,7 @@
 """Authentication routes."""
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -11,11 +11,19 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.user import User
 from ..config import get_settings
+from ..utils.limiter import limiter
 
 settings = get_settings()
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 
 # Password hashing
+# Passlib 1.7.4 + bcrypt 4.0+ compatibility fix
+import passlib.handlers.bcrypt
+try:
+    passlib.handlers.bcrypt._BcryptBackend._finalize_backend_mixin = classmethod(lambda cls, name, dryrun: True)
+except Exception:
+    pass
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -115,6 +123,18 @@ async def get_current_active_user(
     return current_user
 
 
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    """Ensure current user is an active admin."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user
+
+
 # Routes
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
@@ -133,14 +153,13 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
             detail="Email already registered"
         )
     
-    is_first_user = db.query(User).count() == 0
     hashed_password = get_password_hash(user_data.password)
     db_user = User(
         username=user_data.username,
         email=user_data.email,
         hashed_password=hashed_password,
         is_active=True,
-        is_admin=is_first_user,
+        is_admin=False,
     )
     db.add(db_user)
     db.commit()
@@ -149,7 +168,10 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
+@router.post("/token", response_model=Token)
+@limiter.limit("5/minute")
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):

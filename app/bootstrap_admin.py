@@ -1,8 +1,13 @@
-"""First-time admin: optional env bootstrap or rely on first /register (see auth routes)."""
+"""First-time admin: bootstrap admin account via environment variables."""
 import logging
 import os
 
 from passlib.context import CryptContext
+import passlib.handlers.bcrypt
+try:
+    passlib.handlers.bcrypt._BcryptBackend._finalize_backend_mixin = classmethod(lambda cls, name, dryrun: True)
+except Exception:
+    pass
 
 from .database import SessionLocal
 from .models.user import User
@@ -16,7 +21,7 @@ def ensure_default_admin() -> None:
     """
     If the users table is empty:
     - SCANSCRIBE_DEFAULT_ADMIN_PASSWORD set → create admin (username/email from env or defaults).
-    - Else → log hint; first registration via /api/auth/register becomes admin (handled in auth).
+    - Else → log warning that an admin account must be bootstrapped via SCANSCRIBE_DEFAULT_ADMIN_PASSWORD.
     """
     db = SessionLocal()
     try:
@@ -42,10 +47,10 @@ def ensure_default_admin() -> None:
             )
             return
 
-        logger.info(
-            "No users yet. Options: (1) set SCANSCRIBE_DEFAULT_ADMIN_PASSWORD [+ "
-            "SCANSCRIBE_DEFAULT_ADMIN_USERNAME / SCANSCRIBE_DEFAULT_ADMIN_EMAIL] and restart; "
-            "(2) register once — the first account becomes admin."
+        logger.warning(
+            "No users found in database. Set SCANSCRIBE_DEFAULT_ADMIN_PASSWORD "
+            "[+ SCANSCRIBE_DEFAULT_ADMIN_USERNAME / SCANSCRIBE_DEFAULT_ADMIN_EMAIL] and restart "
+            "to bootstrap an initial administrator account."
         )
     finally:
         db.close()

@@ -8,11 +8,13 @@ import { CommandCenterPage } from '@/pages/CommandCenter/CommandCenterPage'
 import { DashboardPage } from '@/pages/Dashboard/DashboardPage'
 import { InsightsPage } from '@/pages/Insights/InsightsPage'
 import { DatabasePage } from '@/pages/Database/DatabasePage'
+import { DataExplorerLayout } from '@/pages/DataExplorer/DataExplorerLayout'
+import { EventsTable } from '@/pages/DataExplorer/Tables/EventsTable'
+import { SpansTable } from '@/pages/DataExplorer/Tables/SpansTable'
+import { EntitiesTable } from '@/pages/DataExplorer/Tables/EntitiesTable'
 import { EventsLayout } from '@/pages/Events/EventsLayout'
 import { EventsIncidentsPage } from '@/pages/Events/IncidentsPage'
 import { EventsMonitorsPage } from '@/pages/Events/EventsMonitorsPage'
-import { EventsDebugPage } from '@/pages/Events/EventsDebugPage'
-import { EventsSpanStorePage } from '@/pages/Events/EventsSpanStorePage'
 import { UsersPage } from '@/pages/Users/UsersPage'
 import { RequireAdmin } from '@/components/auth/RequireAdmin'
 import { DocumentTitle } from '@/components/layout/DocumentTitle'
@@ -44,12 +46,19 @@ export default function App() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/insights" element={<InsightsPage />} />
           <Route element={<RequireAdmin />}>
-            <Route path="/logs" element={<DatabasePage />} />
+            <Route path="/data" element={<DataExplorerLayout />}>
+              <Route index element={<Navigate to="events" replace />} />
+              <Route path="events" element={<EventsTable />} />
+              <Route path="spans" element={<SpansTable />} />
+              <Route path="entities" element={<EntitiesTable />} />
+              <Route path="logs" element={<DatabasePage />} />
+            </Route>
+            <Route path="/logs" element={<Navigate to="/data/logs" replace />} />
             <Route path="/events" element={<EventsLayout />}>
               <Route index element={<EventsIncidentsPage />} />
               <Route path="monitors" element={<EventsMonitorsPage />} />
-              <Route path="span-store" element={<EventsSpanStorePage />} />
-              <Route path="debug" element={<EventsDebugPage />} />
+              <Route path="span-store" element={<Navigate to="/data/spans" replace />} />
+              <Route path="debug" element={<Navigate to="/data/events" replace />} />
             </Route>
             <Route path="/users" element={<UsersPage />} />
             <Route
