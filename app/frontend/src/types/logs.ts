@@ -11,6 +11,8 @@ export interface LogListEntry {
   audio_path: string
   log_date: string | null
   created_at: string | null
+  is_reviewed: boolean
+  corrected_transcript: string | null
 }
 
 export interface LogsListResponse {

@@ -98,6 +98,17 @@ def init_db():
     from .models import event  # noqa: F401
     EventsBase.metadata.create_all(bind=events_engine)
 
+    # Logs DB Migrations
+    with logs_engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(log_entries)"))
+        log_cols = [row[1] for row in r.fetchall()]
+        if "is_reviewed" not in log_cols:
+            conn.execute(text("ALTER TABLE log_entries ADD COLUMN is_reviewed BOOLEAN DEFAULT 0"))
+            conn.commit()
+        if "corrected_transcript" not in log_cols:
+            conn.execute(text("ALTER TABLE log_entries ADD COLUMN corrected_transcript VARCHAR"))
+            conn.commit()
+
     # Migrations
     with events_engine.connect() as conn:
         r = conn.execute(text("PRAGMA table_info(monitors)"))

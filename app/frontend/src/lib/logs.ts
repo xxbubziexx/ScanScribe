@@ -41,6 +41,12 @@ export const logsApi = {
 
   delete: (id: number) =>
     request<{ success: boolean; message: string }>(`/api/logs/${id}`, { method: 'DELETE' }),
+
+  review: (id: number, corrected_transcript: string) =>
+    request<{ success: boolean; log_id: number; is_reviewed: boolean; corrected_transcript: string }>(
+      `/api/logs/${id}`,
+      { method: 'PATCH', body: JSON.stringify({ corrected_transcript }) }
+    ),
 }
 
 /** Stream CSV export with current filter params (no pagination). */
@@ -79,6 +85,38 @@ export async function downloadLogsExport(args: {
   const a = document.createElement('a')
   a.href = url
   a.download = 'scanscribe_logs.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export async function downloadDatasetExport(): Promise<void> {
+  const token = getToken()
+  const res = await fetch(`${BASE}/api/logs/export-dataset`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`
+    try {
+      const body: unknown = await res.json()
+      if (body && typeof body === 'object' && 'detail' in body) {
+        const d = (body as { detail: unknown }).detail
+        detail = typeof d === 'string' ? d : String(d)
+      }
+    } catch {
+      // ignore
+    }
+    if (res.status === 401) {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('username')
+    }
+    throw new ApiError(detail, res.status)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `whisper_dataset_${new Date().toISOString().split('T')[0]}.zip`
   a.click()
   URL.revokeObjectURL(url)
 }

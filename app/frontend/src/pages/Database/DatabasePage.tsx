@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/context/ToastContext'
-import { buildListParams, downloadLogsExport, logsApi } from '@/lib/logs'
+import { buildListParams, downloadLogsExport, downloadDatasetExport, logsApi } from '@/lib/logs'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { errorMessage } from '@/types/api'
 import type { LogListEntry, LogsSortBy } from '@/types/logs'
@@ -115,6 +115,15 @@ export function DatabasePage() {
     }
   }
 
+  const onExportDataset = async () => {
+    try {
+      await downloadDatasetExport()
+      addToast('Dataset export started', 'success')
+    } catch (e) {
+      addToast(errorMessage(e, 'Dataset export failed'), 'error')
+    }
+  }
+
   return (
     <div className="ss-db-page">
       <h1 className="ss-db-title">Database</h1>
@@ -178,7 +187,7 @@ export function DatabasePage() {
             ))}
           </select>
         </div>
-        <div className="flex items-end">
+        <div className="flex items-end gap-2">
           <button
             type="button"
             className="ss-btn-ghost"
@@ -186,6 +195,14 @@ export function DatabasePage() {
             disabled={query.isFetching}
           >
             Export CSV
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost"
+            onClick={onExportDataset}
+            disabled={query.isFetching}
+          >
+            Export Fine-Tuning Dataset
           </button>
         </div>
       </div>
@@ -316,7 +333,8 @@ function LogRow({
       </td>
       <td className="ss-db-td" title={row.transcript || ''}>
         <span className="ss-db-td-clip block text-gray-400">
-          {row.transcript || '—'}
+          {row.is_reviewed && <span className="text-green-500 mr-1" title="Reviewed">✓</span>}
+          {row.corrected_transcript || row.transcript || '—'}
         </span>
       </td>
       <td className="ss-db-td tabular-nums text-gray-500">
@@ -382,6 +400,18 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
     : '—'
   const confidence = row.confidence != null ? `${Math.round(row.confidence * 100)}%` : '—'
 
+  const [text, setText] = useState(row.corrected_transcript ?? row.transcript ?? '')
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+  const reviewMutation = useMutation({
+    mutationFn: (newText: string) => logsApi.review(row.id, newText),
+    onSuccess: () => {
+      addToast('Transcript updated', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+    },
+    onError: (e: unknown) => addToast(errorMessage(e, 'Update failed'), 'error'),
+  })
+
   return (
     <div className="ss-db-expand">
       <div className="ss-db-expand-grid">
@@ -395,13 +425,29 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
         {kv('Audio path', row.audio_path || '—')}
       </div>
 
-      <div className="ss-db-expand-field">
-        <span className="ss-db-expand-label">Full transcript</span>
-        <div className="ss-db-expand-transcript">{row.transcript || '[No transcript]'}</div>
+      <div className="ss-db-expand-field mt-4">
+        <span className="ss-db-expand-label flex items-center gap-2">
+          Full transcript {row.is_reviewed && <span className="text-green-500 text-sm">✓ Reviewed</span>}
+        </span>
+        <textarea
+          className="ss-input mt-1 w-full min-h-[100px] font-mono text-sm"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            className="ss-btn-primary"
+            onClick={() => reviewMutation.mutate(text)}
+            disabled={reviewMutation.isPending}
+          >
+            {reviewMutation.isPending ? 'Saving...' : 'Accept & Save'}
+          </button>
+        </div>
       </div>
 
       {hasAudio && (
-        <div className="ss-db-expand-audio">
+        <div className="ss-db-expand-audio mt-4">
           <span className="ss-db-expand-label">Audio playback</span>
           <ScAudioPlayer src={audioSrc} />
         </div>

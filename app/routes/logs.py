@@ -84,6 +84,8 @@ async def get_logs(
             "confidence": log.confidence,
             "audio_path": log.audio_path,
             "log_date": log.log_date,
+            "is_reviewed": log.is_reviewed,
+            "corrected_transcript": log.corrected_transcript,
             "created_at": log.created_at.isoformat() if log.created_at else None
         })
     
@@ -333,4 +335,77 @@ async def bulk_download_logs(
         buf,
         media_type="application/zip",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+class LogReviewRequest(BaseModel):
+    corrected_transcript: str
+
+
+@router.patch("/{log_id}")
+async def review_log(
+    log_id: int,
+    request: LogReviewRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_logs_db)
+):
+    """Update corrected transcript and mark as reviewed."""
+    log = db.query(LogEntry).filter(LogEntry.id == log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+    
+    log.corrected_transcript = request.corrected_transcript
+    log.is_reviewed = True
+    
+    db.commit()
+    
+    return {"success": True, "log_id": log.id, "is_reviewed": True, "corrected_transcript": log.corrected_transcript}
+
+
+@router.post("/export-dataset")
+async def export_dataset(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_logs_db)
+):
+    """Export a Whisper fine-tuning dataset (audio files + metadata.csv)."""
+    from ..config import get_settings
+    settings = get_settings()
+    
+    logs = db.query(LogEntry).filter(
+        LogEntry.is_deleted == False,
+        LogEntry.is_reviewed == True
+    ).all()
+    
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        metadata = []
+        for log in logs:
+            if log.audio_path and log.audio_path != "file not saved":
+                audio_file = Path(settings.output_dir) / Path(log.audio_path).name
+                if audio_file.exists():
+                    arcname = f"audio/{audio_file.name}"
+                    zf.write(audio_file, arcname)
+                    
+                    # Add to metadata
+                    transcript = log.corrected_transcript if log.corrected_transcript is not None else log.transcript
+                    metadata.append({
+                        "file_name": arcname,
+                        "transcription": transcript
+                    })
+        
+        # Create metadata.csv
+        metadata_csv = io.StringIO()
+        writer = csv.DictWriter(metadata_csv, fieldnames=["file_name", "transcription"])
+        writer.writeheader()
+        for row in metadata:
+            writer.writerow(row)
+            
+        zf.writestr("metadata.csv", metadata_csv.getvalue().encode("utf-8"))
+        
+    buf.seek(0)
+    filename = f"whisper_dataset_{date.today().isoformat()}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )

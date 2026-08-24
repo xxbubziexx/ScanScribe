@@ -24,6 +24,10 @@ class LogEntry(Base):
     language = Column(String(10), default="en")  # Detected/specified language
     confidence = Column(Float, default=0.0)  # Average confidence score (0-1)
     
+    # Review
+    is_reviewed = Column(Boolean, default=False, index=True)
+    corrected_transcript = Column(String, nullable=True)
+    
     # Processing metadata
     model_used = Column(String(100), default="whisper-small")  # Which model processed this
     processing_time = Column(Float, default=0.0)  # Time taken to transcribe (seconds)
