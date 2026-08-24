@@ -159,7 +159,7 @@ export function CommandCenterMap({
             >
               <Popup className="ss-map-popup">
                 <div className="p-3.5 max-w-xs flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2">
+                  <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2 pr-5">
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
                         ev.status === 'open'
@@ -211,7 +211,7 @@ export function CommandCenterMap({
                   )}
 
                   {(ev.summary || ev.originalTranscription) && (
-                    <p className="text-xs text-gray-300 line-clamp-2 italic bg-white/[0.02] p-1.5 rounded border border-white/5">
+                    <p className="text-xs text-gray-300 italic bg-white/[0.02] p-1.5 rounded border border-white/5">
                       &ldquo;{ev.summary || ev.originalTranscription}&rdquo;
                     </p>
                   )}
