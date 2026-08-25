@@ -42,6 +42,7 @@ export const logsApi = {
   delete: (id: number) =>
     request<{ success: boolean; message: string }>(`/api/logs/${id}`, { method: 'DELETE' }),
 
+  unreview: (id: number) => request(`/api/logs/${id}/unreview`, { method: 'PATCH' }),
   review: (id: number, corrected_transcript: string) =>
     request<{ success: boolean; log_id: number; is_reviewed: boolean; corrected_transcript: string }>(
       `/api/logs/${id}`,

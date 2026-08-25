@@ -28,6 +28,7 @@ async def get_logs(
     search: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    is_reviewed: Optional[bool] = None,
     sort_by: str = Query("timestamp_desc"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db)
@@ -46,12 +47,14 @@ async def get_logs(
                 LogEntry.talkgroup.like(search_pattern)
             )
         )
-    
     # Apply date filters
     if date_from:
         query = query.filter(LogEntry.log_date >= date_from.isoformat())
     if date_to:
         query = query.filter(LogEntry.log_date <= date_to.isoformat())
+    if is_reviewed is not None:
+        query = query.filter(LogEntry.is_reviewed == is_reviewed)
+
     
     # Apply sorting
     if sort_by == "timestamp_desc":
@@ -361,6 +364,24 @@ async def review_log(
     
     return {"success": True, "log_id": log.id, "is_reviewed": True, "corrected_transcript": log.corrected_transcript}
 
+
+
+@router.patch("/{log_id}/unreview")
+async def unreview_log(
+    log_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_logs_db)
+):
+    """Remove log from reviewed dataset."""
+    log = db.query(LogEntry).filter(LogEntry.id == log_id).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Log entry not found")
+    
+    log.is_reviewed = False
+    
+    db.commit()
+    
+    return {"success": True, "log_id": log.id, "is_reviewed": False}
 
 @router.post("/export-dataset")
 async def export_dataset(

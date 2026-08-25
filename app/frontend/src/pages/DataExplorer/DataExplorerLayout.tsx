@@ -62,6 +62,18 @@ export function DataExplorerLayout() {
             Audio Logs
           </span>
         </NavLink>
+        <NavLink
+          to="/data/dataset"
+          className={({ isActive }) =>
+            isActive ? 'ss-events-tab ss-events-tab--active' : 'ss-events-tab'
+          }
+        >
+          <span className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-pink-400" />
+            Fine-Tuning Dataset
+          </span>
+        </NavLink>
+
       </nav>
 
       <Outlet />

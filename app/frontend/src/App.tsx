@@ -8,6 +8,7 @@ import { CommandCenterPage } from '@/pages/CommandCenter/CommandCenterPage'
 import { DashboardPage } from '@/pages/Dashboard/DashboardPage'
 import { InsightsPage } from '@/pages/Insights/InsightsPage'
 import { DatabasePage } from '@/pages/Database/DatabasePage'
+import { DatasetPage } from '@/pages/DataExplorer/DatasetPage'
 import { DataExplorerLayout } from '@/pages/DataExplorer/DataExplorerLayout'
 import { EventsTable } from '@/pages/DataExplorer/Tables/EventsTable'
 import { SpansTable } from '@/pages/DataExplorer/Tables/SpansTable'
@@ -52,6 +53,7 @@ export default function App() {
               <Route path="spans" element={<SpansTable />} />
               <Route path="entities" element={<EntitiesTable />} />
               <Route path="logs" element={<DatabasePage />} />
+              <Route path="dataset" element={<DatasetPage />} />
             </Route>
             <Route path="/logs" element={<Navigate to="/data/logs" replace />} />
             <Route path="/events" element={<EventsLayout />}>
