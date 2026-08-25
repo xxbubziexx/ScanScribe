@@ -30,18 +30,33 @@ function formatRelativeTime(dateStr: string): string {
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   
-  if (diffMs < 0) return 'just now'
+  const datePart = date.toLocaleDateString('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    year: '2-digit'
+  })
   
-  const diffSec = Math.floor(diffMs / 1000)
-  if (diffSec < 60) return `${diffSec}s ago`
+  let rel = 'just now'
+  if (diffMs > 0) {
+    const diffSec = Math.floor(diffMs / 1000)
+    if (diffSec < 60) {
+      rel = `${diffSec}s ago`
+    } else {
+      const diffMin = Math.floor(diffSec / 60)
+      if (diffMin < 60) {
+        rel = `${diffMin}m ago`
+      } else {
+        const diffHour = Math.floor(diffMin / 60)
+        if (diffHour < 24) {
+          rel = `${diffHour}h ago`
+        } else {
+          rel = 'over 24h ago'
+        }
+      }
+    }
+  }
   
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin}m ago`
-  
-  const diffHour = Math.floor(diffMin / 60)
-  if (diffHour < 24) return `${diffHour}h ago`
-  
-  return 'over 24h ago'
+  return `${datePart} • ${rel}`
 }
 
 export function CommandCenterFeed({
