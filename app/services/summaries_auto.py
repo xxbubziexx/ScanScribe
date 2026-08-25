@@ -91,12 +91,17 @@ async def _auto_summary_loop() -> None:
                         for r in rows:
                             if not r.timestamp:
                                 continue
+                                
+                            transcript = r.corrected_transcript if getattr(r, 'corrected_transcript', None) else r.transcript
+                            if transcript and "[VAD_REJECTED]" in transcript:
+                                continue
+                                
                             entries.append(
                                 {
                                     "filename_id": r.filename,
                                     "talkgroup": r.talkgroup or "N/A",
                                     "time": r.timestamp.strftime("%H:%M:%S"),
-                                    "transcript": r.transcript,
+                                    "transcript": transcript,
                                 }
                             )
                         if not entries:
