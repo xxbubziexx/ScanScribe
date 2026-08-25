@@ -107,7 +107,22 @@ def build_fallback_queries(raw_location: str, geo_region: Optional[str] = None) 
         if fallback and fallback not in queries:
             queries.append(fallback)
             
-    # 4. If it has hyphenated block numbers (e.g. "209-04 State Highway U"), strip the suffix
+    # 4. If it contains mid-sentence descriptors ("near", "just south of", "around"), try the part BEFORE it
+    descriptor_match = re.search(r'\s+(?:near|just\s+(?:north|south|east|west)\s+of|around|past|towards?)\s+', cleaned, flags=re.IGNORECASE)
+    if descriptor_match:
+        before_desc = cleaned[:descriptor_match.start()].strip()
+        fallback = build_geocoding_query(before_desc, geo_region)
+        if fallback and fallback not in queries:
+            queries.append(fallback)
+
+    # 5. Try stripping highway directional jargon (e.g. "Highway 6732 Leadington exit southbound")
+    if re.search(r'\s+(?:exit|southbound|northbound|eastbound|westbound)', cleaned, flags=re.IGNORECASE):
+        no_dirs = re.sub(r'\s+(?:exit|southbound|northbound|eastbound|westbound).*$', '', cleaned, flags=re.IGNORECASE).strip()
+        fallback = build_geocoding_query(no_dirs, geo_region)
+        if fallback and fallback not in queries:
+            queries.append(fallback)
+
+    # 6. If it has hyphenated block numbers (e.g. "209-04 State Highway U"), strip the suffix
     if re.match(r'^\d+-\d+\s+', cleaned):
         de_hyphenated = re.sub(r'^(\d+)-\d+\s+', r'\1 ', cleaned)
         fallback = build_geocoding_query(de_hyphenated, geo_region)
