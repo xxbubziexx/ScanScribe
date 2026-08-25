@@ -503,7 +503,11 @@ export function EventsIncidentsPage() {
                 <div className="text-gray-300 font-mono">{selected.eventId}</div>
 
                 <div className="font-semibold text-gray-200">Type</div>
-                <div className="text-gray-100 font-semibold">{typeDisplayFor(selected)}</div>
+                <div className="flex">
+                  <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-500/20 text-orange-100 border border-orange-500/30">
+                    {typeDisplayFor(selected)}
+                  </span>
+                </div>
 
                 <div className="font-semibold text-gray-200">Monitor</div>
                 <div className="text-gray-300">{selected.monitorName}</div>
@@ -522,8 +526,8 @@ export function EventsIncidentsPage() {
 
                 <div className="font-semibold text-gray-200">Location</div>
                 <div className="flex flex-wrap gap-1.5">
-                  {splitBadgeEntries(selected.location).length > 0 ? (
-                    splitBadgeEntries(selected.location).map(loc => <span key={loc} className="ss-events-kv-badge">{loc}</span>)
+                  {selected.location ? (
+                    <span className="ss-events-kv-badge">{selected.location}</span>
                   ) : <span className="text-gray-500">—</span>}
                 </div>
 
