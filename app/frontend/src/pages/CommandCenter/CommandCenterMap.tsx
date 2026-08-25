@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
@@ -79,11 +79,11 @@ function getMarkerColor(eventType: string | null, broadcastType: string | null):
   return { bg: '#06b6d4', border: '#67e8f9', pulse: 'rgba(6, 182, 212, 0.4)', icon: '📍' }
 }
 
-function createIncidentDivIcon(event: PipelineEvent, isSelected: boolean, isMostRecent: boolean) {
+function createIncidentDivIcon(event: PipelineEvent, isSelected: boolean, isMostRecent: boolean, isAnimating: boolean) {
   const color = getMarkerColor(event.eventType, event.broadcastType)
 
   const html = `
-    <div class="ss-map-pin ${isSelected ? 'ss-map-pin--selected' : ''}">
+    <div class="ss-map-pin ${isSelected ? 'ss-map-pin--selected' : ''} ${isAnimating ? 'ss-map-pin--animating' : ''}">
       ${isMostRecent ? `<div class="ss-map-pin-pulse" style="background: ${color.pulse};"></div>` : ''}
       <div class="ss-map-pin-circle" style="background: ${color.bg}; border-color: ${isSelected ? '#eab308' : color.border};">
         <span>${color.icon}</span>
@@ -108,6 +108,43 @@ export function CommandCenterMap({
   onRemoveGeocodeEvent,
   isGeocoding,
 }: CommandCenterMapProps) {
+
+  const prevSpans = useRef<Record<string, number>>({})
+  const [animating, setAnimating] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    let changed = false
+    const newAnimating = { ...animating }
+    const now = Date.now()
+
+    for (const ev of events) {
+      const prev = prevSpans.current[ev.eventId]
+      if (prev !== undefined && ev.spansAttached > prev) {
+        newAnimating[ev.eventId] = now + 2000
+        changed = true
+      }
+      prevSpans.current[ev.eventId] = ev.spansAttached
+    }
+
+    if (changed) {
+      setAnimating(newAnimating)
+      setTimeout(() => {
+        setAnimating((current) => {
+          const cleaned = { ...current }
+          const time = Date.now()
+          let hasCleanup = false
+          for (const key in cleaned) {
+            if (time >= cleaned[key]) {
+              delete cleaned[key]
+              hasCleanup = true
+            }
+          }
+          return hasCleanup ? cleaned : current
+        })
+      }, 2500)
+    }
+  }, [events])
+
   const mappedEvents = useMemo(
     () => events.filter((e) => typeof e.latitude === 'number' && typeof e.longitude === 'number'),
     [events],
@@ -153,7 +190,8 @@ export function CommandCenterMap({
         {mappedEvents.map((ev) => {
           const isSelected = ev.eventId === selectedEventId
           const isMostRecent = ev.eventId === mostRecentEventId
-          const icon = createIncidentDivIcon(ev, isSelected, isMostRecent)
+          const isAnimating = !!animating[ev.eventId]
+          const icon = createIncidentDivIcon(ev, isSelected, isMostRecent, isAnimating)
 
           return (
             <Marker
