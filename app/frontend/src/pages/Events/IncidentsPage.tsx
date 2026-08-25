@@ -488,76 +488,57 @@ export function EventsIncidentsPage() {
           ) : activeTab === 'event-thread' ? (
             <div className="ss-events-thread-wrap">
               <h3 className="ss-events-section-title">HEADER</h3>
-              <div className="ss-events-detail-grid-badge !p-3">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3">
-                  {/* Row 1 */}
-                  <div className="ss-events-kv">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Event ID</span>
-                    <p className="font-mono text-xs text-gray-200">{selected.eventId}</p>
-                  </div>
-                  <div className="ss-events-kv">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Type</span>
-                    <p className="text-xs font-semibold text-indigo-300">{typeDisplayFor(selected)}</p>
-                  </div>
-                  <div className="ss-events-kv">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Status</span>
-                    <div className="flex items-center gap-1.5">
-                      <p className="capitalize text-xs text-gray-200">{selected.status}</p>
-                      {selected.statusDetail ? <span className="ss-events-low-badge !text-[9px] !px-1.5 !py-0">{selected.statusDetail}</span> : null}
-                    </div>
-                  </div>
-                  <div className="ss-events-kv">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Spans</span>
-                    <p className="text-xs text-gray-200">{selected.spansAttached}</p>
-                  </div>
+              <div className="grid grid-cols-[140px_1fr] gap-y-4 text-[13px] md:text-sm mb-8 mt-2">
+                <div className="font-semibold text-gray-200">Created</div>
+                <div className="text-gray-300 font-mono">{formatTimeOnly(selected.createdAt)}</div>
+                
+                {selected.closedAt && (
+                  <>
+                    <div className="font-semibold text-gray-200">Closed</div>
+                    <div className="text-gray-300 font-mono">{formatTimeOnly(selected.closedAt)}</div>
+                  </>
+                )}
 
-                  {/* Row 2 */}
-                  <div className="ss-events-kv col-span-2 md:col-span-1">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Monitor</span>
-                    <p className="text-xs text-gray-200 truncate">{selected.monitorName}</p>
-                  </div>
-                  <div className="ss-events-kv col-span-2 md:col-span-3">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Location</span>
-                    <div className="flex flex-wrap gap-1">
-                      {splitBadgeEntries(selected.location).length > 0 ? (
-                        splitBadgeEntries(selected.location).map(loc => <span key={loc} className="ss-events-kv-badge !text-[10px] !px-1.5 !py-0.5">{loc}</span>)
-                      ) : <span className="text-xs text-gray-500">—</span>}
-                    </div>
-                  </div>
+                <div className="font-semibold text-gray-200">Event ID</div>
+                <div className="text-gray-300 font-mono">{selected.eventId}</div>
 
-                  {/* Row 3 */}
-                  <div className="ss-events-kv col-span-2">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Units</span>
-                    <div className="flex flex-wrap gap-1">
-                      {splitBadgeEntries(selected.units).length > 0 ? (
-                        splitBadgeEntries(selected.units).map(unit => <span key={unit} className="ss-events-kv-badge !text-[10px] !px-1.5 !py-0.5">{unit}</span>)
-                      ) : <span className="text-xs text-gray-500">—</span>}
-                    </div>
-                  </div>
-                  <div className="ss-events-kv col-span-2">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Talkgroups</span>
-                    <div className="flex flex-wrap gap-1">
-                      {splitBadgeEntries(selected.talkgroup).length > 0 ? (
-                        splitBadgeEntries(selected.talkgroup).map(tg => <span key={tg} className="ss-events-kv-badge !text-[10px] !px-1.5 !py-0.5">{tg}</span>)
-                      ) : <span className="text-xs text-gray-500">—</span>}
-                    </div>
-                  </div>
+                <div className="font-semibold text-gray-200">Type</div>
+                <div className="text-gray-100 font-semibold">{typeDisplayFor(selected)}</div>
 
-                  {/* Row 4: Timeline */}
-                  <div className="ss-events-kv col-span-full border-t border-white/5 pt-2 mt-1">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Time Window</span>
-                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-gray-400">
-                      <span>Incident: <span className="text-gray-200">{formatTimeOnly(selected.incidentAt)}</span></span>
-                      <span>Created: <span className="text-gray-200">{formatTimeOnly(selected.createdAt)}</span></span>
-                      <span>Closed: <span className="text-gray-200">{formatTimeOnly(selected.closedAt)}</span></span>
-                    </div>
-                  </div>
-                  
-                  {/* Row 5: Summary */}
-                  <div className="ss-events-kv col-span-full border-t border-white/5 pt-2">
-                    <span className="ss-events-k !mb-0.5 text-[10px]">Narrative Summary</span>
-                    <p className="text-xs text-gray-200 leading-snug">{selected.summary || '—'}</p>
-                  </div>
+                <div className="font-semibold text-gray-200">Monitor</div>
+                <div className="text-gray-300">{selected.monitorName}</div>
+
+                <div className="font-semibold text-gray-200">Status</div>
+                <div className="flex items-center gap-2">
+                  <span className="capitalize text-gray-300">{selected.status}</span>
+                  {selected.statusDetail ? <span className="ss-events-low-badge !mt-0">{selected.statusDetail}</span> : null}
+                </div>
+
+                <div className="font-semibold text-gray-200">Location</div>
+                <div className="text-gray-300">
+                  {splitBadgeEntries(selected.location).join(', ') || '—'}
+                </div>
+
+                <div className="font-semibold text-gray-200">Units</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {splitBadgeEntries(selected.units).length > 0 ? (
+                    splitBadgeEntries(selected.units).map(unit => <span key={unit} className="ss-events-kv-badge">{unit}</span>)
+                  ) : <span className="text-gray-500">—</span>}
+                </div>
+
+                <div className="font-semibold text-gray-200">Talkgroups</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {splitBadgeEntries(selected.talkgroup).length > 0 ? (
+                    splitBadgeEntries(selected.talkgroup).map(tg => <span key={tg} className="ss-events-kv-badge">{tg}</span>)
+                  ) : <span className="text-gray-500">—</span>}
+                </div>
+
+                <div className="font-semibold text-gray-200">Spans</div>
+                <div className="text-gray-300">{selected.spansAttached}</div>
+
+                <div className="font-semibold text-gray-200">Summary</div>
+                <div className="text-gray-300 leading-relaxed max-w-3xl">
+                  {selected.summary || '—'}
                 </div>
               </div>
 
