@@ -489,7 +489,7 @@ export function EventsIncidentsPage() {
             <div className="ss-events-thread-wrap">
               <h3 className="ss-events-section-title">HEADER</h3>
               <div className="ss-events-detail-grid-badge">
-                <div className="ss-events-detail-grid">
+                <div className="ss-events-detail-grid md:!grid-cols-3">
                 <div className="ss-events-kv">
                   <span className="ss-events-k">Event ID</span>
                   <p className="ss-events-kv-value font-mono text-sm text-gray-200">{selected.eventId}</p>
@@ -566,14 +566,14 @@ export function EventsIncidentsPage() {
                   <span className="ss-events-k">Transcript spans</span>
                   <p className="ss-events-kv-value text-sm text-gray-200">{selected.spansAttached}</p>
                 </div>
-                <div className="ss-events-detail-span ss-events-kv">
+                <div className="ss-events-detail-span ss-events-kv md:!col-span-3">
                   <span className="ss-events-k">Narrative summary</span>
                   <p className="ss-events-kv-value text-sm text-gray-200">{selected.summary || '—'}</p>
                 </div>
                 </div>
               </div>
 
-              <h3 className="ss-events-section-title">SPAN LINKS</h3>
+              <h3 className="ss-events-section-title mt-6">SPAN LINKS</h3>
               <div className="ss-events-spans-list-wrap">
                 {detailQuery.isFetching && !detailQuery.data ? (
                   <p className="ss-empty not-italic">Loading span links…</p>
