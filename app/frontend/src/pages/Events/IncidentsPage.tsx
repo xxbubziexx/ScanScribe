@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { downloadEventsExportHeaders, eventsApi } from '../../lib/events'
 import { errorMessage } from '../../types/api'
+import { logsApi } from '../../lib/logs'
 import { useToast } from '../../context/ToastContext'
 import type {
   EventDetailResponse,
@@ -193,6 +194,60 @@ function nerEntityChips(entities: EventTranscript['entities']): string[] {
       .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
       .map((v) => `${label}:${v}`)
   })
+}
+
+
+function EditableTranscript({ logId, initialText }: { logId: number; initialText: string }) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState(initialText)
+  
+  const mutation = useMutation({
+    mutationFn: (newText: string) => logsApi.review(logId, newText),
+    onSuccess: () => setEditing(false)
+  })
+
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-2 mt-1">
+        <textarea
+          className="ss-input text-sm w-full h-24"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
+        <div className="flex items-center gap-2">
+          <button
+            className="ss-btn-primary text-xs py-1 px-2"
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate(text)}
+          >
+            {mutation.isPending ? 'Saving...' : 'Save & Mark Reviewed'}
+          </button>
+          <button
+            className="ss-btn-ghost text-xs py-1 px-2"
+            disabled={mutation.isPending}
+            onClick={() => {
+              setEditing(false)
+              setText(initialText)
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group relative">
+      <p className="ss-events-kv-value text-sm text-gray-300 pr-8">{text || '—'}</p>
+      <button
+        onClick={() => setEditing(true)}
+        className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 text-indigo-400 hover:text-indigo-300 text-xs transition underline"
+      >
+        Edit
+      </button>
+    </div>
+  )
 }
 
 export function EventsIncidentsPage() {
@@ -594,7 +649,11 @@ export function EventsIncidentsPage() {
                         <div className="ss-events-span-section ss-events-span-section--transcript mt-2">
                           <div className="ss-events-kv">
                             <p className="ss-events-k mb-0.5">Transcript</p>
-                            <p className="ss-events-kv-value text-sm text-gray-300">{span.transcript || '—'}</p>
+                            {span.log_entry_id ? (
+                              <EditableTranscript logId={span.log_entry_id} initialText={span.transcript || ''} />
+                            ) : (
+                              <p className="ss-events-kv-value text-sm text-gray-300">{span.transcript || '—'}</p>
+                            )}
                           </div>
                         </div>
 
