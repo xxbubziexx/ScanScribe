@@ -510,13 +510,21 @@ export function EventsIncidentsPage() {
 
                 <div className="font-semibold text-gray-200">Status</div>
                 <div className="flex items-center gap-2">
-                  <span className="capitalize text-gray-300">{selected.status}</span>
+                  <span className={`capitalize px-2 py-0.5 rounded text-xs font-semibold ${
+                    selected.status.toLowerCase() === 'open' 
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}>
+                    {selected.status}
+                  </span>
                   {selected.statusDetail ? <span className="ss-events-low-badge !mt-0">{selected.statusDetail}</span> : null}
                 </div>
 
                 <div className="font-semibold text-gray-200">Location</div>
-                <div className="text-gray-300">
-                  {splitBadgeEntries(selected.location).join(', ') || '—'}
+                <div className="flex flex-wrap gap-1.5">
+                  {splitBadgeEntries(selected.location).length > 0 ? (
+                    splitBadgeEntries(selected.location).map(loc => <span key={loc} className="ss-events-kv-badge">{loc}</span>)
+                  ) : <span className="text-gray-500">—</span>}
                 </div>
 
                 <div className="font-semibold text-gray-200">Units</div>
@@ -536,10 +544,14 @@ export function EventsIncidentsPage() {
                 <div className="font-semibold text-gray-200">Spans</div>
                 <div className="text-gray-300">{selected.spansAttached}</div>
 
-                <div className="font-semibold text-gray-200">Summary</div>
-                <div className="text-gray-300 leading-relaxed max-w-3xl">
-                  {selected.summary || '—'}
-                </div>
+                {selected.summary ? (
+                  <>
+                    <div className="font-semibold text-gray-200">Summary</div>
+                    <div className="text-gray-300 leading-relaxed max-w-3xl">
+                      {selected.summary}
+                    </div>
+                  </>
+                ) : null}
               </div>
 
               <h3 className="ss-events-section-title mt-6">SPAN LINKS</h3>
