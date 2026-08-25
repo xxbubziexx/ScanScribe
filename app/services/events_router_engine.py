@@ -34,7 +34,7 @@ Your task is to analyze an incoming radio transmission transcript for a specific
 2. "ATTACH": The transcript is an update, continuation, status report, size-up, unit arrival, or response traffic belonging to one of the OPEN incidents. You MUST specify the exact "event_id" of that incident.
 3. "CLOSE": The transcript explicitly concludes, clears, or terminates an active incident (e.g., "Command terminated, all units clear", "False alarm, scene cleared", "Patient refused transport, Medic 3 back in service", "Fire is out, returning to quarters"). You MUST specify the exact "event_id" of that incident.
 4. "BROADCAST": The transcript is a general non-incident broadcast or administrative announcement (e.g., severe weather warning / tornado watch, road debris / hazard alert, CNI driver alert, attempt to locate / BOLO).
-5. "SKIP": The transcript is uninformative routine radio chatter, radio check / test ("10-4 test"), static / garbled noise, duplicate dispatch tone, or unrelated administrative traffic that does not warrant incident creation or attachment.
+5. "SKIP": The transcript is uninformative routine radio chatter, unit status checks (e.g., just a unit number like "22"), brief acknowledgments ("10-4"), time checks ("93, 2140"), static / garbled noise, or unrelated administrative traffic. **CRITICAL: You MUST select SKIP for all meaningless chatter, EVEN IF the unit is currently assigned to an open incident.**
 
 ### Output Schema:
 You MUST respond with a single valid JSON object strictly adhering to this schema:
@@ -50,10 +50,10 @@ You MUST respond with a single valid JSON object strictly adhering to this schem
 }
 
 ### Guidelines:
-- If a transmission matches the units, location, or nature of an active OPEN incident, choose "ATTACH" instead of creating a duplicate incident.
-- EXCEPTION: If the transmission is extremely brief or uninformative (e.g., just a unit number and a timestamp like "93, 2140", or a basic radio check), you MUST choose "SKIP". Do NOT attach meaningless chatter just because the unit matches, as this prevents the incident from auto-expiring.
-- If a unit announces they are "10-8", "in service", or "clearing the scene", choose "CLOSE" if they are the primary or last unit, or "ATTACH" if other units remain.
-- If multiple open incidents exist, carefully choose the specific "event_id" that matches the units, location, or call type.
+- **CRITICAL RULE ON CHATTER**: Do NOT attach meaningless chatter (e.g., "93, 2140", "22", "10-4", "Check MDT") to open incidents just because the unit matches. You MUST choose "SKIP". Attaching chatter resets the timer and prevents incidents from closing.
+- **CRITICAL RULE ON UNAFFILIATED UNITS**: Do NOT attach a new unit (especially one going "10-8" or "in service") to an active incident unless that specific unit was ALREADY assigned to that incident. If unit 22 goes "10-8" but unit 22 is not on the open Traffic Stop, choose SKIP.
+- If a transmission provides a meaningful update (location, status, patient condition) that matches the units, location, or nature of an active OPEN incident, choose "ATTACH".
+- If a unit announces they are "10-8", "in service", or "clearing the scene" AND they belong to the open incident, choose "CLOSE" if they are the primary/last unit, or "ATTACH" if other units remain.
 - Clean and normalize unit identifiers (e.g. "Engine 4", "Ladder 12", "Medic 2", "Squad 3", "Unit 102") and addresses (e.g. "124 Main St", "I-35 Mile Marker 200").
 - If the monitor has NO open incidents and the transmission is not an incident (or just static / non-emergency), choose "SKIP".
 - Output ONLY the JSON object. Do not include markdown preamble.
