@@ -15,6 +15,7 @@ function buildListParams(args: {
   dateFrom: string
   dateTo: string
   sortBy: string
+  is_reviewed?: boolean
 }): URLSearchParams {
   const sp = new URLSearchParams()
   sp.set('page', String(args.page))
@@ -22,6 +23,7 @@ function buildListParams(args: {
   if (args.search.trim()) sp.set('search', args.search.trim())
   if (args.dateFrom) sp.set('date_from', args.dateFrom)
   if (args.dateTo) sp.set('date_to', args.dateTo)
+  if (args.is_reviewed !== undefined) sp.set('is_reviewed', String(args.is_reviewed))
   sp.set('sort_by', args.sortBy)
   return sp
 }
@@ -55,11 +57,13 @@ export async function downloadLogsExport(args: {
   search: string
   dateFrom: string
   dateTo: string
+  is_reviewed?: boolean
 }): Promise<void> {
   const sp = new URLSearchParams()
   if (args.search.trim()) sp.set('search', args.search.trim())
   if (args.dateFrom) sp.set('date_from', args.dateFrom)
   if (args.dateTo) sp.set('date_to', args.dateTo)
+  if (args.is_reviewed !== undefined) sp.set('is_reviewed', String(args.is_reviewed))
   const token = getToken()
   const res = await fetch(`${BASE}/api/logs/export?${sp.toString()}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},

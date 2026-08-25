@@ -10,6 +10,7 @@ import csv
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -341,6 +342,9 @@ async def bulk_download_logs(
     )
 
 
+class ExportDatasetRequest(BaseModel):
+    log_ids: Optional[List[int]] = None
+
 class LogReviewRequest(BaseModel):
     corrected_transcript: str
 
@@ -385,6 +389,7 @@ async def unreview_log(
 
 @router.post("/export-dataset")
 async def export_dataset(
+    request: ExportDatasetRequest = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db)
 ):
@@ -392,10 +397,13 @@ async def export_dataset(
     from ..config import get_settings
     settings = get_settings()
     
-    logs = db.query(LogEntry).filter(
+    query = db.query(LogEntry).filter(
         LogEntry.is_deleted == False,
         LogEntry.is_reviewed == True
-    ).all()
+    )
+    if request and request.log_ids:
+        query = query.filter(LogEntry.id.in_(request.log_ids))
+    logs = query.all()
     
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:

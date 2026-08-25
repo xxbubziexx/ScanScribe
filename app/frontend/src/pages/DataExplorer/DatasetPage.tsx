@@ -46,6 +46,7 @@ export function DatasetPage() {
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput), 400)
@@ -79,6 +80,7 @@ export function DatasetPage() {
           dateFrom,
           dateTo,
           sortBy,
+          is_reviewed: true,
         }),
       ),
   })
@@ -192,6 +194,47 @@ export function DatasetPage() {
         </div>
       </div>
 
+      
+      {selectedIds.size > 0 && (
+        <div className="bg-indigo-500/10 border border-indigo-500/30 p-2 rounded flex items-center justify-between mb-4">
+          <span className="text-sm text-indigo-200 ml-2 font-bold">{selectedIds.size} spans selected</span>
+          <div className="flex gap-2">
+            <button className="ss-btn-ghost text-red-400 hover:bg-red-400/10 text-xs py-1" onClick={async () => {
+              if (!window.confirm(`Remove ${selectedIds.size} spans from dataset?`)) return
+              for (const id of selectedIds) await logsApi.unreview(id)
+              addToast('Removed selected spans', 'success')
+              setSelectedIds(new Set())
+              queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+            }}>Remove Selected</button>
+            <button className="ss-btn-primary text-xs py-1" onClick={async () => {
+              try {
+                const res = await fetch('/api/logs/export-dataset', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                  },
+                  body: JSON.stringify({ log_ids: Array.from(selectedIds) })
+                })
+                if (!res.ok) throw new Error('Export failed')
+                const blob = await res.blob()
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `whisper_dataset_selected.zip`
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                window.URL.revokeObjectURL(url)
+                addToast('Dataset exported', 'success')
+              } catch (e: any) {
+                addToast(e.message, 'error')
+              }
+            }}>Download Selected</button>
+          </div>
+        </div>
+      )}
+
       {query.isError && (
         <p className="ss-form-error mb-4" role="alert">
           {errorMessage(query.error, 'Failed to load logs')}
@@ -210,13 +253,14 @@ export function DatasetPage() {
             <table className="ss-db-table">
               <thead>
                 <tr>
+                  <th className="ss-db-th w-10"></th>
                   <th className="ss-db-th">Time</th>
-                  <th className="ss-db-th">Talkgroup</th>
+                  
                   <th className="ss-db-th">Filename</th>
                   <th className="ss-db-th">Transcript</th>
-                  <th className="ss-db-th">Dur</th>
-                  <th className="ss-db-th">Size</th>
-                  <th className="ss-db-th">Conf.</th>
+                  
+                  
+                  
                   <th className="ss-db-th text-right"> </th>
                 </tr>
               </thead>
@@ -224,6 +268,13 @@ export function DatasetPage() {
                 {rows.map((row) => (
                   <Fragment key={row.id}>
                     <LogRow
+                      selected={selectedIds.has(row.id)}
+                      onToggleSelect={() => {
+                        const newSet = new Set(selectedIds)
+                        if (newSet.has(row.id)) newSet.delete(row.id)
+                        else newSet.add(row.id)
+                        setSelectedIds(newSet)
+                      }}
                       row={row}
                       isAdmin={isAdmin}
                       onDelete={onDelete}
@@ -287,9 +338,13 @@ function LogRow({
   deleting,
   expanded,
   onToggleExpand,
+  selected,
+  onToggleSelect,
 }: {
   row: LogListEntry
   isAdmin: boolean
+  selected?: boolean
+  onToggleSelect?: () => void
   onDelete: (id: number) => void
   deleting: boolean
   expanded: boolean
@@ -301,7 +356,10 @@ function LogRow({
       className={`ss-db-row ${expanded ? 'ss-db-row--expanded' : ''}`}
       onClick={onToggleExpand}
       aria-expanded={expanded}
-    >
+        >
+      <td className="ss-db-td text-center" onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" className="ss-checkbox" checked={selected} onChange={(e) => { e.stopPropagation(); if (onToggleSelect) onToggleSelect(); }} />
+      </td>
       <td className="ss-db-td font-mono text-xs text-gray-400">
         <span className={`ss-db-expand-icon ${expanded ? 'ss-db-expand-icon--open' : ''}`}>▶</span>{' '}
         {row.timestamp
@@ -322,13 +380,9 @@ function LogRow({
           {row.corrected_transcript || row.transcript || '—'}
         </span>
       </td>
-      <td className="ss-db-td tabular-nums text-gray-500">
-        {typeof row.duration === 'number' ? row.duration.toFixed(1) : '—'}
-      </td>
-      <td className="ss-db-td text-gray-500">{formatBytes(row.file_size || 0)}</td>
-      <td className="ss-db-td tabular-nums text-gray-500">
-        {row.confidence != null ? `${Math.round(row.confidence * 100)}%` : '—'}
-      </td>
+      
+      
+      
       <td className="ss-db-td text-right">
         <div className="ss-db-actions">
           {hasAudio && (
