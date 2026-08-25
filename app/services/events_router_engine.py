@@ -50,7 +50,9 @@ You MUST respond with a single valid JSON object strictly adhering to this schem
 }
 
 ### Guidelines:
-- If a transmission matches the units, location, or nature of an active OPEN incident, ALWAYS choose "ATTACH" instead of creating a duplicate incident.
+- If a transmission matches the units, location, or nature of an active OPEN incident, choose "ATTACH" instead of creating a duplicate incident.
+- EXCEPTION: If the transmission is extremely brief or uninformative (e.g., just a unit number and a timestamp like "93, 2140", or a basic radio check), you MUST choose "SKIP". Do NOT attach meaningless chatter just because the unit matches, as this prevents the incident from auto-expiring.
+- If a unit announces they are "10-8", "in service", or "clearing the scene", choose "CLOSE" if they are the primary or last unit, or "ATTACH" if other units remain.
 - If multiple open incidents exist, carefully choose the specific "event_id" that matches the units, location, or call type.
 - Clean and normalize unit identifiers (e.g. "Engine 4", "Ladder 12", "Medic 2", "Squad 3", "Unit 102") and addresses (e.g. "124 Main St", "I-35 Mile Marker 200").
 - If the monitor has NO open incidents and the transmission is not an incident (or just static / non-emergency), choose "SKIP".
