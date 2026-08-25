@@ -78,13 +78,12 @@ function getMarkerColor(eventType: string | null, broadcastType: string | null):
   return { bg: '#06b6d4', border: '#67e8f9', pulse: 'rgba(6, 182, 212, 0.4)', icon: '📍' }
 }
 
-function createIncidentDivIcon(event: PipelineEvent, isSelected: boolean) {
+function createIncidentDivIcon(event: PipelineEvent, isSelected: boolean, isMostRecent: boolean) {
   const color = getMarkerColor(event.eventType, event.broadcastType)
-  const isOpen = event.status === 'open'
 
   const html = `
     <div class="ss-map-pin ${isSelected ? 'ss-map-pin--selected' : ''}">
-      ${isOpen ? `<div class="ss-map-pin-pulse" style="background: ${color.pulse};"></div>` : ''}
+      ${isMostRecent ? `<div class="ss-map-pin-pulse" style="background: ${color.pulse};"></div>` : ''}
       <div class="ss-map-pin-circle" style="background: ${color.bg}; border-color: ${isSelected ? '#eab308' : color.border};">
         <span>${color.icon}</span>
       </div>
@@ -110,6 +109,11 @@ export function CommandCenterMap({
   const mappedEvents = useMemo(
     () => events.filter((e) => typeof e.latitude === 'number' && typeof e.longitude === 'number'),
     [events],
+  )
+
+  const mostRecentEventId = useMemo(
+    () => (mappedEvents.length > 0 ? mappedEvents[0].eventId : null),
+    [mappedEvents],
   )
 
   const selectedEvent = useMemo(
@@ -146,7 +150,8 @@ export function CommandCenterMap({
 
         {mappedEvents.map((ev) => {
           const isSelected = ev.eventId === selectedEventId
-          const icon = createIncidentDivIcon(ev, isSelected)
+          const isMostRecent = ev.eventId === mostRecentEventId
+          const icon = createIncidentDivIcon(ev, isSelected, isMostRecent)
 
           return (
             <Marker
