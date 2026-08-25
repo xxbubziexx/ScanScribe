@@ -488,88 +488,90 @@ export function EventsIncidentsPage() {
           ) : activeTab === 'event-thread' ? (
             <div className="ss-events-thread-wrap">
               <h3 className="ss-events-section-title">HEADER</h3>
-              <div className="ss-events-detail-grid-badge">
-                <div className="ss-events-detail-grid md:!grid-cols-3">
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Event ID</span>
-                  <p className="ss-events-kv-value font-mono text-sm text-gray-200">{selected.eventId}</p>
-                </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Type (display)</span>
-                  <p className="ss-events-kv-value text-sm text-gray-200">{typeDisplayFor(selected)}</p>
-                </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Status</span>
-                  <div className="ss-events-kv-value">
-                    <p className="capitalize text-gray-200">{selected.status}</p>
-                    {selected.statusDetail ? <p className="ss-events-low-badge mt-1">{selected.statusDetail}</p> : null}
+              <div className="ss-events-detail-grid-badge flex flex-col gap-5">
+                {/* Top Row: Meta */}
+                <div className="flex flex-wrap gap-8 border-b border-white/5 pb-4">
+                  <div className="ss-events-kv flex-1 min-w-[120px]">
+                    <span className="ss-events-k">Event ID</span>
+                    <p className="ss-events-kv-value font-mono text-sm text-gray-200">{selected.eventId}</p>
+                  </div>
+                  <div className="ss-events-kv flex-1 min-w-[120px]">
+                    <span className="ss-events-k">Type (display)</span>
+                    <p className="ss-events-kv-value text-sm font-semibold text-indigo-300">{typeDisplayFor(selected)}</p>
+                  </div>
+                  <div className="ss-events-kv flex-1 min-w-[120px]">
+                    <span className="ss-events-k">Status</span>
+                    <div className="ss-events-kv-value flex items-center gap-2">
+                      <p className="capitalize text-gray-200">{selected.status}</p>
+                      {selected.statusDetail ? <span className="ss-events-low-badge !mt-0">{selected.statusDetail}</span> : null}
+                    </div>
+                  </div>
+                  <div className="ss-events-kv flex-1 min-w-[150px]">
+                    <span className="ss-events-k">Monitor (department)</span>
+                    <p className="ss-events-kv-value text-sm text-gray-200">
+                      {selected.monitorName} <span className="text-gray-500">(id {selected.monitorId})</span>
+                    </p>
                   </div>
                 </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Monitor (department)</span>
-                  <p className="ss-events-kv-value text-sm text-gray-200">
-                    {selected.monitorName}{' '}
-                    <span className="text-gray-500">(id {selected.monitorId})</span>
-                  </p>
+
+                {/* Middle Row: Tactical */}
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  <div className="ss-events-kv">
+                    <span className="ss-events-k">Location</span>
+                    {splitBadgeEntries(selected.location).length > 0 ? (
+                      <div className="ss-events-kv-value ss-events-kv-badge-list">
+                        {splitBadgeEntries(selected.location).map((loc) => (
+                          <span key={`detail-loc-${loc}`} className="ss-events-kv-badge">{loc}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="ss-events-kv-value text-sm text-gray-200">—</p>
+                    )}
+                  </div>
+                  <div className="ss-events-kv">
+                    <span className="ss-events-k">Units</span>
+                    {splitBadgeEntries(selected.units).length > 0 ? (
+                      <div className="ss-events-kv-value ss-events-kv-badge-list">
+                        {splitBadgeEntries(selected.units).map((unit) => (
+                          <span key={`detail-unit-${unit}`} className="ss-events-kv-badge">{unit}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="ss-events-kv-value text-sm text-gray-200">—</p>
+                    )}
+                  </div>
+                  <div className="ss-events-kv">
+                    <span className="ss-events-k">Talkgroups (aggregated)</span>
+                    {splitBadgeEntries(selected.talkgroup).length > 0 ? (
+                      <div className="ss-events-kv-value ss-events-kv-badge-list">
+                        {splitBadgeEntries(selected.talkgroup).map((tg) => (
+                          <span key={`detail-tg-${tg}`} className="ss-events-kv-badge">{tg}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="ss-events-kv-value text-sm text-gray-200">—</p>
+                    )}
+                  </div>
                 </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Time window</span>
-                  <p className="ss-events-kv-value text-xs text-gray-300">
-                    <span className="block">Incident: {formatTimeOnly(selected.incidentAt)}</span>
-                    <span className="block">Created: {formatTimeOnly(selected.createdAt)}</span>
-                    <span className="block">Closed: {formatTimeOnly(selected.closedAt)}</span>
-                  </p>
-                </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Location</span>
-                  {splitBadgeEntries(selected.location).length > 0 ? (
-                    <div className="ss-events-kv-value ss-events-kv-badge-list">
-                      {splitBadgeEntries(selected.location).map((loc) => (
-                        <span key={`detail-loc-${loc}`} className="ss-events-kv-badge">
-                          {loc}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="ss-events-kv-value text-sm text-gray-200">—</p>
-                  )}
-                </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Units</span>
-                  {splitBadgeEntries(selected.units).length > 0 ? (
-                    <div className="ss-events-kv-value ss-events-kv-badge-list">
-                      {splitBadgeEntries(selected.units).map((unit) => (
-                        <span key={`detail-unit-${unit}`} className="ss-events-kv-badge">
-                          {unit}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="ss-events-kv-value text-sm text-gray-200">—</p>
-                  )}
-                </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Talkgroups (aggregated)</span>
-                  {splitBadgeEntries(selected.talkgroup).length > 0 ? (
-                    <div className="ss-events-kv-value ss-events-kv-badge-list">
-                      {splitBadgeEntries(selected.talkgroup).map((tg) => (
-                        <span key={`detail-tg-${tg}`} className="ss-events-kv-badge">
-                          {tg}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="ss-events-kv-value text-sm text-gray-200">—</p>
-                  )}
-                </div>
-                <div className="ss-events-kv">
-                  <span className="ss-events-k">Transcript spans</span>
-                  <p className="ss-events-kv-value text-sm text-gray-200">{selected.spansAttached}</p>
-                </div>
-                <div className="ss-events-detail-span ss-events-kv md:!col-span-3">
-                  <span className="ss-events-k">Narrative summary</span>
-                  <p className="ss-events-kv-value text-sm text-gray-200">{selected.summary || '—'}</p>
-                </div>
+
+                {/* Bottom Row: Logging & Narrative */}
+                <div className="grid gap-6 md:grid-cols-4 border-t border-white/5 pt-4">
+                  <div className="ss-events-kv">
+                    <span className="ss-events-k">Time window</span>
+                    <p className="ss-events-kv-value text-xs text-gray-400 space-y-1">
+                      <span className="block">Incident: <span className="text-gray-200">{formatTimeOnly(selected.incidentAt)}</span></span>
+                      <span className="block">Created: <span className="text-gray-200">{formatTimeOnly(selected.createdAt)}</span></span>
+                      <span className="block">Closed: <span className="text-gray-200">{formatTimeOnly(selected.closedAt)}</span></span>
+                    </p>
+                  </div>
+                  <div className="ss-events-kv">
+                    <span className="ss-events-k">Transcript spans</span>
+                    <p className="ss-events-kv-value text-sm font-semibold text-gray-200">{selected.spansAttached}</p>
+                  </div>
+                  <div className="ss-events-kv md:col-span-2">
+                    <span className="ss-events-k">Narrative summary</span>
+                    <p className="ss-events-kv-value text-sm text-gray-200 leading-relaxed">{selected.summary || '—'}</p>
+                  </div>
                 </div>
               </div>
 
