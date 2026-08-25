@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import type { MonitorResponse } from '@/types/events'
 import type { PipelineEvent } from '@/pages/Events/IncidentsPage'
-import { formatTime, splitBadgeEntries, typeDisplayFor } from '@/pages/Events/IncidentsPage'
+import { splitBadgeEntries, typeDisplayFor } from '@/pages/Events/IncidentsPage'
 
 export type FilterMode = 'open' | 'closed' | 'mapped' | 'all'
 export type Timeframe = '24h' | '3day' | '7day' | 'all'
@@ -24,6 +24,26 @@ interface CommandCenterFeedProps {
   setTimeframe: (t: Timeframe) => void
 }
 
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  
+  if (diffMs < 0) return 'just now'
+  
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 60) return `${diffSec}s ago`
+  
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}h ago`
+  
+  return 'over 24h ago'
+}
+
 export function CommandCenterFeed({
   events,
   rawEvents,
@@ -41,6 +61,12 @@ export function CommandCenterFeed({
   timeframe,
   setTimeframe,
 }: CommandCenterFeedProps) {
+
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Counts based on time and monitor filters (but ignoring mode filter)
   const counts = useMemo(() => {
@@ -211,7 +237,7 @@ export function CommandCenterFeed({
                   </div>
 
                   <span className="text-[11px] text-gray-400 font-mono">
-                    {formatTime(ev.incidentAt ?? ev.createdAt)}
+                    {formatRelativeTime(ev.incidentAt ?? ev.createdAt)}
                   </span>
                 </div>
 
