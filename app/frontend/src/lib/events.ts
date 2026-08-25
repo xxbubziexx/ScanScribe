@@ -23,6 +23,7 @@ function getToken(): string | null {
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
 export const eventsApi = {
+  todayUnits: () => request<{units: string[]}>(`${EVENTS_API}/units/today`),
   monitors: () => request<MonitorResponse[]>(`${EVENTS_API}/monitors`),
 
   nerLabels: () => request<NerLabelsResponse>(`${EVENTS_API}/ner-labels`),

@@ -121,6 +121,7 @@ class MonitorCreate(BaseModel):
     talkgroup_ids: List[str] = Field(default_factory=list)
     start_event_labels: List[str] = Field(default_factory=lambda: ["EVT_TYPE"])
     geo_region: Optional[str] = None
+    known_units: Optional[str] = None
 
 
 class MonitorUpdate(BaseModel):
@@ -129,6 +130,7 @@ class MonitorUpdate(BaseModel):
     talkgroup_ids: Optional[List[str]] = None
     start_event_labels: Optional[List[str]] = None
     geo_region: Optional[str] = None
+    known_units: Optional[str] = None
 
 
 class MonitorResponse(BaseModel):
@@ -138,6 +140,7 @@ class MonitorResponse(BaseModel):
     talkgroup_ids: List[str]
     start_event_labels: List[str]
     geo_region: Optional[str] = None
+    known_units: Optional[str] = None
 
 
 class SpanStoreItem(BaseModel):
@@ -202,6 +205,24 @@ class EventResponse(BaseModel):
     talkgroup: str = ""
 
 
+
+
+@router.get("/units/today")
+async def get_units_today(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_events_db)
+):
+    """Get distinct UNIT canonical values logged today (for the config UI defaults)."""
+    today_start = dt.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    rows = db.query(EntityObservation.canonical).filter(
+        EntityObservation.label == 'UNIT',
+        EntityObservation.ts >= today_start
+    ).distinct().all()
+    units = [r[0] for r in rows if r[0]]
+    units.sort()
+    return {"units": units}
+
+
 @router.get("/monitors", response_model=List[MonitorResponse])
 async def list_monitors(
     current_user: User = Depends(get_current_active_user),
@@ -217,6 +238,7 @@ async def list_monitors(
             talkgroup_ids=parse_json_list(m.talkgroup_ids),
             start_event_labels=_start_labels(m.keyword_config),
             geo_region=m.geo_region,
+            known_units=m.known_units,
         )
         for m in monitors
     ]
@@ -234,6 +256,7 @@ async def create_monitor(
         name=body.name,
         enabled=True,
         geo_region=(body.geo_region or "").strip() or None,
+        known_units=(body.known_units or "").strip() or None,
         talkgroup_ids=json.dumps(body.talkgroup_ids),
         keyword_config=json.dumps(labels),
     )
@@ -247,6 +270,7 @@ async def create_monitor(
         talkgroup_ids=body.talkgroup_ids,
         start_event_labels=labels,
         geo_region=m.geo_region,
+        known_units=m.known_units,
     )
 
 
@@ -267,6 +291,8 @@ async def update_monitor(
         m.enabled = body.enabled
     if body.geo_region is not None:
         m.geo_region = body.geo_region.strip() or None
+    if body.known_units is not None:
+        m.known_units = body.known_units.strip() or None
     if body.talkgroup_ids is not None:
         m.talkgroup_ids = json.dumps(body.talkgroup_ids)
     if body.start_event_labels is not None:
@@ -281,6 +307,7 @@ async def update_monitor(
         talkgroup_ids=parse_json_list(m.talkgroup_ids),
         start_event_labels=_start_labels(m.keyword_config),
         geo_region=m.geo_region,
+        known_units=m.known_units,
     )
 
 

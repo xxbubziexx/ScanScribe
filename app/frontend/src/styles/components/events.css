@@ -16,7 +16,7 @@
   }
 
   .ss-events-monitor-create-layout {
-    @apply grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(16rem,22rem)] lg:items-start;
+    @apply grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(12rem,18rem)_minmax(12rem,18rem)] lg:items-start;
   }
 
   .ss-events-monitor-form-col {

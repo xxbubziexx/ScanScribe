@@ -50,6 +50,12 @@ export function EventsMonitorsPage() {
     staleTime: 60_000,
   })
 
+  const todayUnitsQuery = useQuery({
+    queryKey: ['events-units-today'],
+    queryFn: () => eventsApi.todayUnits(),
+    staleTime: 60_000,
+  })
+
   const nerOptions = useMemo(() => nerLabelsQuery.data?.labels ?? [], [nerLabelsQuery.data?.labels])
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['events-monitors'] })
@@ -109,6 +115,15 @@ export function EventsMonitorsPage() {
       addToast('Talkgroup copied', 'success')
     } catch {
       addToast('Could not copy talkgroup', 'error')
+    }
+  }
+
+  const copyTodayUnit = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      addToast('Unit copied', 'success')
+    } catch {
+      addToast('Could not copy unit', 'error')
     }
   }
 
@@ -244,6 +259,46 @@ export function EventsMonitorsPage() {
                         type="button"
                         className="ss-events-monitor-today-tg-copy"
                         onClick={() => void copyTodayTalkgroup(tg)}
+                      >
+                        Copy
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </aside>
+
+          <aside className="ss-events-monitor-today-tg" aria-label="Today's logged units">
+            <div className="ss-events-monitor-today-tg-head">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-200/90">
+                Today&apos;s logged units
+              </p>
+              <p className="mt-0.5 font-mono text-[10px] text-gray-500">
+                {new Date().toLocaleDateString(undefined, {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </p>
+            </div>
+            <div className="ss-events-monitor-today-tg-scroll">
+              {todayUnitsQuery.isPending ? (
+                <p className="text-xs text-gray-500">Loading…</p>
+              ) : todayUnitsQuery.isError ? (
+                <p className="text-xs text-amber-200/90">{errorMessage(todayUnitsQuery.error, 'Could not load')}</p>
+              ) : (todayUnitsQuery.data?.units ?? []).length === 0 ? (
+                <p className="text-xs text-gray-500">None logged yet today.</p>
+              ) : (
+                <ul className="ss-events-monitor-today-tg-list">
+                  {(todayUnitsQuery.data?.units ?? []).map((unit) => (
+                    <li key={unit} className="ss-events-monitor-today-tg-row">
+                      <span className="ss-events-monitor-today-tg-text">{unit}</span>
+                      <button
+                        type="button"
+                        className="ss-events-monitor-today-tg-copy"
+                        onClick={() => void copyTodayUnit(unit)}
                       >
                         Copy
                       </button>
