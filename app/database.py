@@ -116,6 +116,9 @@ def init_db():
         if "geo_region" not in m_cols:
             conn.execute(text("ALTER TABLE monitors ADD COLUMN geo_region VARCHAR(255)"))
             conn.commit()
+        if "known_units" not in m_cols:
+            conn.execute(text("ALTER TABLE monitors ADD COLUMN known_units TEXT"))
+            conn.commit()
 
         r = conn.execute(text("PRAGMA table_info(events)"))
         cols = [row[1] for row in r.fetchall()]

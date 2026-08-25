@@ -17,6 +17,7 @@ class Monitor(EventsBase):
     talkgroup_ids = Column(Text, nullable=False, default="[]")
     # JSON list of NER labels that trigger event creation (e.g. ["EVT_TYPE"]). Stored in keyword_config.
     keyword_config = Column(Text, nullable=False, default='["EVT_TYPE"]')
+    known_units = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

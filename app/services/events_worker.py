@@ -639,6 +639,7 @@ def process_transcript_for_monitor(
             entities=entities,
             open_incidents=open_incidents_payload,
             recent_spans=recent_spans,
+            known_units=getattr(monitor, "known_units", None),
         )
 
         action = decision.get("action", "SKIP")

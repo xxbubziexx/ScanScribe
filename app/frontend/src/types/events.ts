@@ -5,6 +5,7 @@ export interface MonitorResponse {
   talkgroup_ids: string[]
   start_event_labels: string[]
   geo_region?: string | null
+  known_units?: string | null
 }
 
 export interface MonitorCreate {
@@ -12,6 +13,7 @@ export interface MonitorCreate {
   talkgroup_ids: string[]
   start_event_labels: string[]
   geo_region?: string | null
+  known_units?: string | null
 }
 
 export interface MonitorUpdate {
@@ -20,6 +22,7 @@ export interface MonitorUpdate {
   talkgroup_ids?: string[]
   start_event_labels?: string[]
   geo_region?: string | null
+  known_units?: string | null
 }
 
 export interface NerLabelsResponse {

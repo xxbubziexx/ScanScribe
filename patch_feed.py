@@ -1,4 +1,8 @@
-import { useMemo } from 'react'
+with open("app/frontend/src/pages/CommandCenter/CommandCenterFeed.tsx", "r") as f:
+    content = f.read()
+
+# I will just write a new file since I'm changing props and everything.
+new_content = """import { useMemo } from 'react'
 import type { MonitorResponse } from '@/types/events'
 import type { PipelineEvent } from '@/pages/Events/IncidentsPage'
 import { formatTime, splitBadgeEntries, typeDisplayFor } from '@/pages/Events/IncidentsPage'
@@ -297,3 +301,7 @@ export function CommandCenterFeed({
     </aside>
   )
 }
+"""
+
+with open("app/frontend/src/pages/CommandCenter/CommandCenterFeed.tsx", "w") as f:
+    f.write(new_content)

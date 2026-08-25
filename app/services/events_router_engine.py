@@ -96,6 +96,7 @@ def build_user_prompt(
     entities: Optional[Dict[str, List[str]]] = None,
     open_incidents: Optional[List[Dict[str, Any]]] = None,
     recent_spans: Optional[List[str]] = None,
+    known_units: Optional[str] = None,
 ) -> str:
     """Build the single-pass prompt context."""
     user_content: List[str] = [
@@ -103,6 +104,9 @@ def build_user_prompt(
         f"Talkgroup: {talkgroup or 'Unknown'}",
         f"Current Transmission Transcript:\n\"{transcript}\"",
     ]
+
+    if known_units and known_units.strip():
+        user_content.append(f"Known Unit Identifiers for this Monitor: [{known_units.strip()}]")
 
     if entities:
         ent_lines = []
@@ -151,6 +155,7 @@ class EventsRouter:
         entities: Optional[Dict[str, List[str]]] = None,
         open_incidents: Optional[List[Dict[str, Any]]] = None,
         recent_spans: Optional[List[str]] = None,
+        known_units: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Synchronously evaluate transcript and return routing decision."""
         settings = get_settings()
@@ -185,6 +190,7 @@ class EventsRouter:
             entities=entities,
             open_incidents=open_incidents,
             recent_spans=recent_spans,
+            known_units=known_units,
         )
 
         url = f"{base_url.rstrip('/')}/chat/completions"

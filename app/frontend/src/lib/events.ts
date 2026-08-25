@@ -88,6 +88,11 @@ export const eventsApi = {
       method: 'DELETE',
     }),
 
+  removeGeocode: (eventId: string) =>
+    request<{ ok: boolean; message?: string }>(
+      `${EVENTS_API}/events/${encodeURIComponent(eventId)}/remove-geocode`,
+      { method: 'POST' },
+    ),
   geocode: (eventId: string) =>
     request<{ ok: boolean; latitude?: number; longitude?: number; resolved_address?: string; message?: string }>(
       `${EVENTS_API}/events/${encodeURIComponent(eventId)}/geocode`,

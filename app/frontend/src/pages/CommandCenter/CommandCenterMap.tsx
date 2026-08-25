@@ -10,6 +10,7 @@ interface CommandCenterMapProps {
   selectedEventId: string | null
   onSelectEvent: (eventId: string) => void
   onGeocodeEvent?: (eventId: string) => void
+  onRemoveGeocodeEvent?: (eventId: string) => void
   isGeocoding?: boolean
 }
 
@@ -104,6 +105,7 @@ export function CommandCenterMap({
   selectedEventId,
   onSelectEvent,
   onGeocodeEvent,
+  onRemoveGeocodeEvent,
   isGeocoding,
 }: CommandCenterMapProps) {
   const mappedEvents = useMemo(
@@ -225,19 +227,33 @@ export function CommandCenterMap({
                     <span className="text-gray-500 font-mono text-[10px]">
                       {ev.latitude?.toFixed(4)}, {ev.longitude?.toFixed(4)}
                     </span>
-                    {onGeocodeEvent && (
-                      <button
-                        type="button"
-                        className="text-indigo-400 hover:text-indigo-300 font-medium underline transition"
-                        disabled={isGeocoding}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onGeocodeEvent(ev.eventId)
-                        }}
-                      >
-                        {isGeocoding ? 'Resolving…' : 'Re-Geocode'}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {onRemoveGeocodeEvent && (
+                        <button
+                          type="button"
+                          className="text-red-400 hover:text-red-300 font-medium underline transition"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onRemoveGeocodeEvent(ev.eventId)
+                          }}
+                        >
+                          Remove Pin
+                        </button>
+                      )}
+                      {onGeocodeEvent && (
+                        <button
+                          type="button"
+                          className="text-indigo-400 hover:text-indigo-300 font-medium underline transition"
+                          disabled={isGeocoding}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onGeocodeEvent(ev.eventId)
+                          }}
+                        >
+                          {isGeocoding ? 'Resolving…' : 'Re-Geocode'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </Popup>
