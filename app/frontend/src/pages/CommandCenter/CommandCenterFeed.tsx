@@ -65,8 +65,8 @@ export function CommandCenterFeed({
   }, [rawEvents, selectedMonitor, timeframe])
 
   return (
-    <aside className="ss-cc-feed ss-cc-feed-glass">
-      <div className="ss-cc-feed-header sticky top-0 z-10 p-3 bg-gray-950/80 backdrop-blur-md border-b border-white/5 flex flex-col gap-3">
+    <aside className="ss-cc-feed-sidebar" aria-label="Live Incident Feed">
+      <div className="ss-cc-feed-header gap-3">
         
         {/* Top Header Row with Title and Stats */}
         <div className="flex items-center justify-between">
