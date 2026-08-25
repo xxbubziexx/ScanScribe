@@ -589,15 +589,6 @@ export function EventsIncidentsPage() {
                         </div>
                         <p className="ss-events-talkgroup-badge mt-1">{span.talkgroup || 'N/A'}</p>
 
-                        <div className="ss-events-span-section ss-events-span-section--attach mt-2">
-                          <div className="ss-events-kv">
-                            <p className="ss-events-k mb-0.5">Attach reason</p>
-                            <p className="ss-events-kv-value text-sm text-indigo-200/90">
-                              {span.llm_reason || (span.is_trigger ? 'Trigger span matched event header extraction' : 'Linked context span')}
-                            </p>
-                          </div>
-                        </div>
-
                         <div className="ss-events-span-section mt-2">
                           <div className="ss-events-kv">
                             <p className="ss-events-k mb-0.5">NER extractions</p>
@@ -619,6 +610,15 @@ export function EventsIncidentsPage() {
                           <div className="ss-events-kv">
                             <p className="ss-events-k mb-0.5">Transcript</p>
                             <p className="ss-events-kv-value text-sm text-gray-300">{span.transcript || '—'}</p>
+                          </div>
+                        </div>
+
+                        <div className="ss-events-span-section ss-events-span-section--attach mt-2">
+                          <div className="ss-events-kv">
+                            <p className="ss-events-k mb-0.5">Attach reason</p>
+                            <p className="ss-events-kv-value text-sm text-indigo-200/90">
+                              {span.llm_reason || (span.is_trigger ? 'Trigger span matched event header extraction' : 'Linked context span')}
+                            </p>
                           </div>
                         </div>
 
