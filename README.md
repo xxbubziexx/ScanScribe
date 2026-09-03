@@ -1,58 +1,84 @@
 # ScanScribe
-An open source AI powered transcription system designed for public safety radio scanning. Uses whisper AI to transcribe raw radio recordings then stores and catagorizes them in an advanced searchable database. Easy to use web UI. Has the ability to create detailed incident threads with local ollama hosted LLM's. Docker ready deployment for easy setup.
+
+An open-source, AI-powered transcription and incident intelligence system purpose-built for public safety radio scanning. ScanScribe captures raw radio transmissions from SDR receivers or scanner software, transcribes them with OpenAI Whisper, extracts critical entities with custom NER, routes dispatches into live incident threads via LLMs, and maps them in real time on an interactive tactical Command Center.
+
+---
 
 ## Screenshots
-### ScanScribe Dashboard
+
+### Tactical Command Center & Live Map
+*Interactive map with draggable pins, auto-reverse geocoding, address autocomplete, and inline audio playback.*
+
+### ScanScribe Dashboard & Live Feed
 <img src="screenshots/Screenshot_1.png" alt="ScanScribe Dashboard">
 
-### Search and advanced filtering
+### Search and Advanced Filtering
 <img src="screenshots/Screenshot_2.png" alt="Search Engine for Transcriptions">
 
-### Insights Dashboard
+### Real-Time Insights & Activity Analytics
 <img src="screenshots/Screenshot_3.png" alt="Advanced Insights">
 
-## Features
+---
 
-- **Whisper transcription** — multi-worker, VAD-filtered, CPU or GPU
-- **Real-time Web UI** — React SPA at `/app/` (Vite build in `app/frontend/`); live dashboard via WebSocket. Legacy Jinja UI is archived under `archive/legacy-ui/`.
-- **Search and Playback** - Search for specific words in the database. Playback any transcriptions.
-- **Insights** — Daily activity statistics with interactable graph. Counts how many transcriptions per hour and logs talkgroups.
-- **Multi-user auth** — JWT-based login, user management
-- **Ollama LLM integration** — local model routing, header normalization, and event summaries (no cloud required)
-- **Events pipeline** — NER → Worker LLM (opens incidents) → Master LLM (attach/skip/close) → header normalizer → summary
-- **Incident management** — open/close/reopen events, paginated archive, pipeline activity log, auto-close stale events by incident time
+## Key Features
+
+- **High-Performance Whisper Transcription**
+  - Multi-worker parallel processing, Voice Activity Detection (VAD) filtering, and silence removal.
+  - Native support for both **CPU** (optimized multi-threading) and **NVIDIA GPU** (CUDA acceleration).
+- **Tactical Command Center & Live Map**
+  - Real-time incident mapping powered by Leaflet and OpenStreetMap Nominatim (100% free, no API keys required).
+  - **Draggable Markers**: Drag and release any pin to automatically update incident coordinates and reverse-geocode to the nearest street address.
+  - **Type-Ahead Address Search**: Instant autocomplete search bar on incident cards to quickly find and pin locations.
+  - **Corridor & Highway Midpoint Geocoding**: Automatically resolves directional highway dispatches (e.g. *Southbound US Highway 67*) to the highway corridor within the monitor's county jurisdiction.
+  - **Custom Landmark Aliases**: Built-in and config-extensible landmark resolver (e.g. local restaurants, parks, mile markers).
+  - **Inline Radio Dispatch Player**: Compact audio waveform player directly on incident cards for instant transmission verification.
+- **AI Events Pipeline & Incident Routing**
+  - Public-safety entity extraction (NER) identifies event types, units, addresses, and cross-streets.
+  - **Single-Pass LLM Router**: Fast, robust routing powered by OpenRouter (Gemini, Claude, or free tier models) or local Ollama instances.
+  - Automatically manages incident lifecycles (`CREATE`, `ATTACH`, `CLOSE`, `BROADCAST`), normalizes headers, and generates thread summaries.
+  - **Absolute Truth Known Units**: Configure known unit identifiers per monitor/department to eliminate hallucinated callsigns.
+- **Dataset Studio & Fine-Tuning Pipeline**
+  - In-browser review tool to inspect transcriptions against raw audio, edit corrections, and tag reviewed samples.
+  - **1-Click Fine-Tuning Export**: Exports reviewed audio and HuggingFace-compatible `metadata.csv` for fine-tuning custom Whisper models.
+- **Enterprise-Grade Web Interface & Security**
+  - Fast, modern React SPA (Vite, TypeScript, Tailwind CSS, dark tactical theme).
+  - Real-time WebSocket streaming for zero-latency dashboard updates.
+  - Raw console output & real-time pipeline event trace terminals.
+  - JWT authentication with automatic **Admin promotion on first registration** and SlowAPI rate-limiting protection.
+
+---
 
 ## Prerequisites
 
-- Docker & Docker Compose
-- Ollama (local or remote) with your chosen models loaded
-- NER model (`models/incident_ner_*`) — custom public-safety NER
-- Whisper model (`models/whisper-*`)
-- 8 GB+ RAM recommended; 16+ GB if running Ollama on the same host
+- **Docker & Docker Compose** (v2.0+)
+- **Python 3.8+** (for running the setup wizard)
+- **Whisper Model** (`models/whisper-*`) placed inside `./models/`
+- **NER Model** (`models/incident_ner_*`) placed inside `./models/`
+- **Hardware Requirements:**
+  - 8 GB+ RAM recommended for CPU transcription.
+  - 16 GB+ RAM / NVIDIA GPU (6 GB+ VRAM) recommended for GPU transcription or local LLM execution.
+
+---
 
 ## Fast Interactive Setup (Recommended)
 
-ScanScribe features an automated setup wizard (`setup.sh` / `setup.ps1` / `setup.py`) that handles environment generation, security keys, hardware acceleration configuration, and Docker container initialization in under a minute.
+ScanScribe provides an automated setup wizard (`setup.sh` / `setup.ps1` / `setup.py`) that checks your system, generates security keys, configures CPU or GPU hardware acceleration, and initializes your environment in under a minute.
 
-### Step 1: Install Docker Desktop & Prerequisites
-Before starting, ensure you have:
-1. **Docker & Docker Compose** installed and running:
-   - **Windows & macOS:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (ensure Docker Desktop is running before launching setup).
-   - **Linux:** [Docker Engine & Compose Plugin](https://docs.docker.com/engine/install/)
-2. **Python 3.8+** installed on your host system:
-   - **Windows:** Download from [python.org](https://www.python.org/downloads/) (make sure to check *"Add python.exe to PATH"* during installation).
-   - **Linux/macOS:** Pre-installed on most distributions (`python3 --version`).
+### Step 1: Install Prerequisites
+1. **Docker Desktop / Docker Engine:**
+   - **Windows & macOS:** Download and start [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+   - **Linux:** Install [Docker Engine & Compose Plugin](https://docs.docker.com/engine/install/).
+2. **Python 3.8+:**
+   - Ensure Python is installed on your host system (`python3 --version` or `python --version`).
 
 ### Step 2: Clone the Repository
-Open your terminal (or PowerShell on Windows):
-
 ```bash
 git clone https://github.com/xxbubziexx/ScanScribe.git
 cd ScanScribe
 ```
 
 ### Step 3: Run the Setup Wizard
-Launch the script for your operating system:
+Launch the setup script for your operating system:
 
 - **Linux / macOS / Git Bash:**
   ```bash
@@ -62,48 +88,41 @@ Launch the script for your operating system:
   ```powershell
   .\setup.ps1
   ```
-  *(If PowerShell blocks the script with an execution policy notice, run: `powershell -ExecutionPolicy Bypass -File .\setup.ps1`)*
+  *(If blocked by Windows execution policy, run: `powershell -ExecutionPolicy Bypass -File .\setup.ps1`)*
 - **Universal (Any OS with Python):**
   ```bash
   python setup.py
   ```
 
-### Step 4: Follow the Interactive Prompts
-The wizard will walk you through 4 quick questions:
+### Step 4: Interactive Prompts
+The wizard will guide you through:
+1. **Hardware Acceleration:** Automatically checks for an NVIDIA GPU via `nvidia-smi`. Select `[1] CPU` or `[2] GPU (CUDA)`. The wizard copies the matching `docker-compose.yml` and `requirements.txt` pair and sets `device` in `config.yml`.
+2. **Admin Password:** Sets the initial password for the default `admin` account.
+3. **Local Timezone:** Sets your local timezone (e.g. `America/Chicago`, `America/New_York`, `UTC`).
+4. **Instant Boot:** Optionally launches the container immediately via Docker Compose.
 
-1. **Hardware Acceleration Selection:**
-   - The wizard automatically checks whether an NVIDIA GPU is available (`nvidia-smi`).
-   - Select `[1] CPU` for standard Intel/AMD CPUs, or `[2] GPU` if you have an NVIDIA card with the Container Toolkit installed.
-   - *The script will automatically copy the matching `docker-compose.yml` and `requirements.txt` pair and set `device` in `config.yml`.*
-2. **Initial Administrator Password:**
-   - Enter your desired password for the default `admin` account (default: `admin`).
-3. **Local Timezone:**
-   - Enter your timezone name (e.g., `America/Chicago`, `America/New_York`, `UTC`).
-4. **Automatic Launch:**
-   - When asked *"Would you like to build and start ScanScribe now with Docker Compose? [Y/n]"*, press **Enter** to start immediately.
-
-### What the Setup Script Automates Behind the Scenes:
+### What the Setup Script Automates:
 - [x] Generates a cryptographically secure 64-character random `SECRET_KEY` in `.env`.
-- [x] Configures `docker-compose.yml` and `requirements.txt` for your chosen architecture (CPU or GPU).
-- [x] Configures `config.yml` with the correct `model.device` setting (`cpu` or `cuda`).
+- [x] Configures `docker-compose.yml` and `requirements.txt` for CPU or GPU.
+- [x] Sets up `config.yml` with the correct device and worker threads.
 - [x] Bootstraps initial administrator credentials in `.env`.
-- [x] Initializes all required runtime directories (`./data`, `./logs`, `./audio_storage`, `./models`).
-- [x] Checks `./models/` for existing Whisper and NER models.
-- [x] Runs `docker compose up -d --build` to launch the application.
+- [x] Creates all required folders (`./data`, `./logs`, `./audio_storage`, `./models`).
+- [x] Validates model directories and launches `docker compose up -d --build`.
 
 ### Step 5: Access the Web Interface
-Once the build completes:
-1. Open your browser and navigate to: **`http://localhost:8000`**
-2. Log in using your administrator credentials:
-   - **Username:** `admin`
-   - **Password:** *(the password you entered during setup)*
+Once started, navigate to:
+**`http://localhost:8000`**
 
-*(Note: If you ever register a new user on a clean installation, the very first user created is also automatically granted full Administrator privileges).*
+Log in using your administrator credentials:
+- **Username:** `admin`
+- **Password:** *(the password chosen during setup, default: `admin`)*
+
+*(Note: On any fresh installation, the very first user who registers through the web interface is also automatically granted full Administrator privileges).*
 
 ---
 
 ### Non-Interactive & Automated Deployments (CLI Flags)
-For automated scripting, headless servers, or CI/CD pipelines, pass flags to bypass interactive prompts:
+For automated scripting, server provisioning, or CI/CD pipelines, pass flags to bypass prompts:
 
 ```bash
 # Automated CPU setup and immediate launch
@@ -115,369 +134,167 @@ python setup.py --gpu --yes --start
 
 ---
 
-### Useful Post-Setup Commands
+## Manual Docker Setup Alternative
+
+If you prefer configuring files manually without the setup wizard:
+
+### 1. Configure Environment
 ```bash
-# View live container logs
+cp .env.example .env
+```
+Open `.env` and set a random 64-character `SECRET_KEY`:
+```bash
+python3 -c "import secrets; print(secrets.token_hex(32))"
+```
+
+### 2. Choose CPU or GPU
+Copy the appropriate configuration files:
+
+**For CPU:**
+```bash
+cp docker-compose.cpu.example docker-compose.yml
+cp requirements.cpu.example requirements.txt
+```
+In `config.yml`, ensure `model.device: cpu`.
+
+**For NVIDIA GPU (CUDA):**
+```bash
+cp docker-compose.gpu.example docker-compose.yml
+cp requirements.gpu.example requirements.txt
+```
+In `config.yml`, set `model.device: cuda`.
+
+### 3. Initialize `config.yml`
+```bash
+cp config.yml.example config.yml
+```
+Ensure `model.name` points to your Whisper directory inside `./models/`.
+
+### 4. Build and Start
+```bash
+docker compose up -d --build
+```
+
+---
+
+## Models Setup
+
+Place your model checkpoints into the `./models/` directory:
+
+```
+models/
+├── whisper-small/              # Base or fine-tuned Whisper model
+│   ├── config.json
+│   ├── model.bin (or safetensors)
+│   └── tokenizer.json
+└── incident_ner_v1/            # Public-safety NER model
+    ├── config.json
+    └── pytorch_model.bin
+```
+
+- **Whisper Speech-to-Text:** Use any standard HuggingFace Whisper model (e.g. [`openai/whisper-small`](https://huggingface.co/openai/whisper-small)) or your own fine-tuned model.
+- **Public Safety NER:** Download the fine-tuned public-safety NER model from [HuggingFace: xxbubziexx/incident_ner_v1](https://huggingface.co/xxbubziexx/incident_ner_v1).
+
+---
+
+## Architecture Overview
+
+```
+ScanScribe Container (Port 8000)
+│
+├── FastAPI Application
+│   ├── Auth & User Management (JWT, SlowAPI rate-limiting)
+│   ├── Transcriptions API & Audio Streaming (/{audio_path})
+│   ├── Command Center API (Geocoding, Autocomplete, Draggable Pins)
+│   ├── Events Pipeline API (Incident Threads, Spans, Debug Telemetry)
+│   ├── Dataset Review & Export API (/api/logs/export-dataset)
+│   └── Settings, Health, & System Maintenance
+│
+├── Background Workers
+│   ├── Audio Watcher & Queue Ingestion (./ingest directory or HTTP client)
+│   ├── Whisper Transcription Engine (Multi-worker pool, VAD filtering)
+│   ├── NER Extractor (Local PyTorch NER inference)
+│   ├── AI Events Router (Single-pass LLM: OpenRouter or Ollama)
+│   └── Auto-Close Worker (Sweeps idle incidents by transmission age)
+│
+├── React Frontend SPA (Vite + TypeScript + Leaflet)
+│   └── Served directly from /app/ (Vite build in app/frontend/dist)
+│
+└── Persistent SQLite Storage (./data/)
+    ├── scanscribe.db        (Users, application settings)
+    ├── scanscribe_logs.db   (Transcription entries, review tags)
+    └── scanscribe_events.db (Monitors, incidents, transcript links)
+```
+
+---
+
+## Configuration Reference
+
+### Environment Variables (`.env`)
+
+| Variable | Description | Default |
+|---|---|---|
+| `SECRET_KEY` | **Required.** Cryptographic secret for signing JWT auth tokens | *(Generated)* |
+| `TZ` | Container local timezone | `America/Chicago` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Lifetime of user login sessions | `1440` (24h) |
+| `SCANSCRIBE_DEFAULT_ADMIN_PASSWORD` | Bootstraps initial `admin` account password on fresh DB | `admin` |
+| `OPENROUTER_API_KEY` | API key for OpenRouter LLM routing | *(Optional)* |
+| `OPENROUTER_BASE_URL` | Base URL for OpenRouter API | `https://openrouter.ai/api/v1` |
+| `OPENROUTER_MODEL` | Default model identifier for events routing | `openrouter/free` |
+| `GEOCODE_PROVIDER` | Geocoding provider (`nominatim`, `google`, `mapbox`) | `nominatim` |
+
+### Key Settings in `config.yml`
+
+| Section | Setting | Description |
+|---|---|---|
+| `model` | `name` | Folder name inside `./models/` containing Whisper weights |
+| `model` | `device` | `cpu` or `cuda` |
+| `model` | `workers` | Parallel worker threads for transcription |
+| `events_pipeline` | `enabled` | Enable/disable AI incident routing pipeline |
+| `events_pipeline` | `ner_model_path` | Relative path to local NER checkpoint folder |
+| `events_pipeline` | `auto_close_stale_seconds` | Seconds of inactivity before auto-closing incidents |
+| `openrouter` | `api_key` | OpenRouter API Key (can also be passed via `.env`) |
+| `openrouter` | `model_name` | Model name (e.g. `google/gemini-2.5-flash`, `openrouter/free`) |
+| `landmarks` | *(dictionary)* | Custom alias-to-address mappings (e.g. `"lady queen": "523 Center St, Bismarck, MO"`) |
+| `storage` | `retention_days` | Number of days to retain audio and logs (`0` = keep forever) |
+
+---
+
+## Audio Ingestion & Scanner Integration
+
+### ScanScribe Windows Uploader Client
+For users streaming from dedicated scanner PCs, use the companion [ScanScribe Uploader Client on GitHub](https://github.com/xxbubziexx/Scanscribe-Uploader-Client). The client monitors your radio scanner's output folder, verifies audio file write stability, and securely uploads files to the ScanScribe server via HTTP.
+
+### Scanner Software Configuration (SDRTrunk & ProScan)
+ScanScribe automatically parses metadata (talkgroups, frequencies, systems, and timestamps) directly from audio metadata tags or filenames.
+
+- **SDRTrunk**: Supported natively out of the box with standard recording configurations.
+- **ProScan**:
+  1. Custom filename format: `%TT %D %C` *(enables precise timestamp extraction from filename)*.
+  2. Custom TIT2 (Title) tag: `%TG %G %C` *(enables talkgroup and channel extraction)*.
+
+---
+
+## Daily Docker Management Commands
+
+```bash
+# View live application logs
 docker compose logs -f
 
 # Check container status
 docker compose ps
 
-# Restart ScanScribe
+# Restart ScanScribe (after config changes)
 docker compose restart scanscribe
 
 # Stop ScanScribe
 docker compose down
+
+# Rebuild after code updates
+docker compose up -d --build
 ```
 
 ---
-
-## Manual Docker Setup Guide
-
-If you prefer configuring files manually, follow these steps:
-
-### Step 1: Install Docker Desktop
-1. Go to [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
-2. Download **Docker Desktop for Windows**
-3. Run the installer and keep default options
-4. Restart your PC if Docker asks
-5. Open Docker Desktop and wait until it says Docker is running
-
-### Step 2: Download ScanScribe
-Open **PowerShell** and run:
-
-```powershell
-git clone https://github.com/xxbubziexx/scanscribe.git
-cd scanscribe
-```
-
-If you do not have Git installed, install **Git for Windows** first:
-[https://git-scm.com/download/win](https://git-scm.com/download/win)
-
-### Step 3: Create your environment file
-In PowerShell (inside the `scanscribe` folder):
-
-```powershell
-copy .env.example .env
-```
-
-Then open `.env` in Notepad and set a strong `SECRET_KEY`.
-
-Quick way to generate one:
-
-```powershell
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-### Step 4: Check `config.yml`
-Open `config.yml` and confirm:
-- `model.name` matches your Whisper model folder in `./models`
-- `events_pipeline.enabled` is true/false as you want
-- `incidents_ollama.enabled` and `base_url` are correct if using Ollama
-
-### Step 5: CPU or GPU (same mode for all of these)
-Pick **one** path—do not mix files from the CPU and GPU examples.
-
-**CPU (typical):**
-
-```powershell
-copy docker-compose.cpu.example docker-compose.yml
-copy requirements.cpu.example requirements.txt
-```
-
-In `config.yml`, set **`model.device: cpu`**.
-
-**GPU (NVIDIA GPU + [Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)):**
-
-```powershell
-copy docker-compose.gpu.example docker-compose.yml
-copy requirements.gpu.example requirements.txt
-```
-
-In `config.yml`, set **`model.device: cuda`**.
-
-**To switch later:** `docker compose down` → copy the *other* pair of examples over `docker-compose.yml` and `requirements.txt` → set **`model.device`** → `docker compose up -d --build`.
-
-### Step 6: Start ScanScribe
-From the project folder:
-
-```powershell
-docker-compose up -d --build
-```
-
-First build can take a while. This is normal.
-
-### Step 7: Open the app
-Go to:
-
-`http://localhost:8000`
-
-Register your first account.
-
-### Step 8: Basic commands you will use later
-```powershell
-# See running logs
-docker-compose logs -f
-
-# Stop ScanScribe
-docker-compose down
-
-# Start again later
-docker-compose up -d
-```
-
-### Notes
-- You do **not** need to install FFmpeg manually when using Docker. It is already included in the container.
-- Your databases and files stay in local folders (`./data`, `./logs`, `./audio_storage`) between restarts.
-
-## Quick Start
-
-### 1. Clone & configure environment
-
-```bash
-cp .env.example .env
-# Edit .env — set SECRET_KEY (required)
-openssl rand -hex 32   # generate a key
-```
-
-### 2. Configure `config.yml`
-**Events pipeline is DISABLED by default.**
-
-It's recommened to use whisper-small fined tuned on public safety audio. There is no official release for a finetuned model as of now. Just use the base whisper-small model available here on [Huggingface.](https://huggingface.co/openai/whisper-small)
-
-Key sections to set before first run:
-```yaml
-model:
-  name: <your-whisper-model-dir>   # folder name inside ./models/
-  workers: 4                        # parallel transcription threads
-
-events_pipeline:
-  enabled: false
-  ner_model_path: ./models/incident_ner_<version>
-  auto_close_stale_seconds: 3600    # close events idle > 1 hour
-  cleanup_interval_seconds: 300     # sweep every 5 min
-
-openrouter:
-  api_key: "sk-or-v1-..."           # or set OPENROUTER_API_KEY env var
-  base_url: "https://openrouter.ai/api/v1"
-  model_name: "google/gemini-2.5-flash"
-  timeout_seconds: 30
-```
-
-### 3. CPU or GPU
-
-Copy the matching pair to the working names, then set **`model.device`** in **`config.yml`** (`cpu` or `cuda`):
-
-```bash
-# CPU
-cp docker-compose.cpu.example docker-compose.yml
-cp requirements.cpu.example requirements.txt
-
-# or GPU
-# cp docker-compose.gpu.example docker-compose.yml
-# cp requirements.gpu.example requirements.txt
-# → model.device: cuda  (needs NVIDIA + Container Toolkit)
-```
-
-**To switch later:** `docker compose down` → use the *other* pair of examples → update **`model.device`** → `docker compose up -d --build`.
-
-### 4. Build & run
-
-```bash
-docker-compose up -d
-```
-
-Open `http://<host>:8000` — register your first account.
-
-## Architecture
-
-```
-ScanScribe Container (port 8000)
-│
-├── FastAPI web service
-│   ├── Auth / Users
-│   ├── Transcriptions / Logs
-│   ├── Events pipeline API
-│   ├── Insights (hour summaries)
-│   └── Settings / Maintenance
-│
-├── Transcription engine (Whisper, multi-worker)
-├── File watcher (./ingest or client HTTP upload)
-│
-├── Events pipeline
-│   ├── NER service  →  SpanStore
-│   ├── Worker LLM   →  opens new incidents
-│   ├── Master LLM   →  attach / skip / close
-│   ├── Header normalizer (event_type, location, units, status_detail)
-│   ├── Event summary generator
-│   └── Cleanup worker (auto-close stale by incident time)
-│
-└── Databases (SQLite)
-    ├── scanscribe.db        (users, config)
-    ├── scanscribe_logs.db   (transcription log entries)
-    └── scanscribe_events.db (monitors, events, links, debug logs)
-```
-
-## Events Pipeline
-You can find my fine-tuned NER model here on [huggingface.](https://huggingface.co/xxbubziexx/incident_ner_v1)
-
-The pipeline processes every transcription through:
-
-1. **NER** — extracts `EVT_TYPE`, `LOC`, `UNIT`, `ADDRESS`, etc.
-2. **Worker LLM** (cheap model) — decides if an `EVT_TYPE` span should open a new incident
-3. **Master LLM** (stronger model) — routes spans to open events: `attach`, `skip`, or `close`
-4. **Header normalizer** — runs on create, every N attaches (`normalize_every_n_spans`), and on close; fills structured header fields from transcripts
-5. **Summary generator** — chains after header normalization in the same thread once `summary_trigger_spans` is reached
-6. **Cleanup worker** — background sweep that auto-closes events whose last radio transmission timestamp exceeds `auto_close_stale_seconds`
-
-Configure monitors (talkgroup → monitor mapping) from the Events page.
-
-## Configuration
-
-All runtime settings live in **`config.yml`**. Environment variables in **`.env`** handle secrets and paths only.
-
-### `.env` variables
-
-| Variable | Description |
-|---|---|
-| `SECRET_KEY` | **Required.** JWT signing key |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime (default 60) |
-| `INGEST_DIR` | Audio drop directory |
-| `OUTPUT_DIR` | Processed audio storage |
-| `LOG_DIR` | App logs |
-| `DB_PATH` | Main SQLite DB path |
-| `CONFIG_PATH` | Path to `config.yml` |
-| `OMP_NUM_THREADS` / `MKL_NUM_THREADS` / `TORCH_NUM_THREADS` | PyTorch CPU thread limits |
-
-### Key `config.yml` sections
-
-| Section | Purpose |
-|---|---|
-| `model` | Whisper model name, path, workers, device |
-| `transcription` | VAD, beam size, silence removal |
-| `events_pipeline` | NER path, LLM routing, auto-close, normalize interval |
-| `incidents_ollama` | Ollama URL, worker/master model names, timeout |
-| `hourly_summaries` | Hourly Summaries API (`provider`: gemini \| openrouter), key, model |
-| `summaries` | Auto-generation schedule |
-| `storage` | Audio retention, cleanup hour |
-| `logging` | Log level, rotation |
-
-## ScanScribe Client
-
-A lightweight audio file uploader for Windows. Available here: [Uploader Client on Github](https://github.com/xxbubziexx/Scanscribe-Uploader-Client). This is an active folder watcher for your scanner recording software recording directory. It uploads all recordings to the scanscribe server. Configurable in config.yml.
-
-## Timestamp and Talkgroup Extraction
-
-ScanScribe handles timestamps two different ways (config chooses). From file date modified or from the filename. SDRtrunk works natively with scanscribe and there is no need for any config.
-
-### 1. From the filename (“title”) 
-- YYYYMMDD_HHMMSS (e.g. 20260125_123543)
-- HH-MM-SS AM/PM MM-DD-YY
-- HH-MM-SS AM/PM only → uses today’s date
-
-
-### 2. From the filesystem (“metadata”) 
-- **macOS:** st_birthtime if present
-- **otherwise:** st_mtime (modification time)
-
-### How to configure proscan
-1. Use `%TT %D %C` as a custom file format. **Use this format if you plan on extracting timestamp data from the title.**
-2. Use `%TG %G %C` as a custom TIT2(title). **This is crucial for talkgroup extraction to work. SDRtrunk does this natively.**
-
-## Docker Commands
-
-```bash
-# Start
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Rebuild after code changes
-docker-compose up -d --build
-
-# Stop
-docker-compose down
-
-# Health check
-curl http://localhost:8000/health
-```
-
-## Development
-
-```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Copy and edit config
-cp config.yml.example config.yml   # if present, else edit config.yml directly
-cp .env.example .env
-
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Build the React UI once (`cd app/frontend && npm ci && npm run build`), then open **`http://localhost:8000/app/`** (legacy paths like `/login` redirect into the SPA).
-
-## Project Structure
-
-```
-scanscribe/
-├── app/
-│   ├── main.py                    # FastAPI app + lifespan startup
-│   ├── config.py                  # Pydantic config schema + loader
-│   ├── database.py                # SQLAlchemy sessions (3 DBs)
-│   ├── models/                    # SQLAlchemy models
-│   │   ├── user.py
-│   │   ├── log_entry.py
-│   │   ├── event.py               # Monitor, Event, EventTranscriptLink, SpanStore
-│   │   └── hour_summary.py
-│   ├── routes/                    # FastAPI routers
-│   │   ├── auth.py, users.py
-│   │   ├── logs.py, transcriptions.py, upload.py
-│   │   ├── events.py              # Events pipeline API
-│   │   ├── insights.py, settings.py, maintenance.py, watcher.py
-│   ├── services/                  # Business logic
-│   │   ├── events_worker.py       # NER pre-filter & pipeline orchestration
-│   │   ├── events_router_engine.py # Single-pass OpenRouter LLM router
-│   │   ├── ner_service.py         # Local NER entity extraction
-│   │   ├── events_common.py, events_debug.py
-│   │   ├── transcription_engine.py
-│   │   ├── queue_processor.py
-│   │   ├── watcher.py
-│   │   └── summaries_auto.py
-│   ├── frontend/                  # React SPA (Vite); `dist/` served at /app/
-│   └── ...
-├── archive/
-│   └── legacy-ui/                 # Archived Jinja templates + old static assets
-├── models/                        # Whisper + NER model weights
-├── data/                          # SQLite databases (persistent)
-├── logs/                          # Application logs
-├── ingest/                        # Audio drop directory
-├── Dockerfile
-├── docker-compose.yml
-├── config.yml
-└── requirements.txt
-```
-
-## Troubleshooting
-
-**Events not routing** — check `events_pipeline.enabled: true` in `config.yml`. Verify `OPENROUTER_API_KEY` is set in `.env` or `openrouter.api_key` in `config.yml`.
-
-**Stale events not closing** — both `auto_close_stale_seconds` and `cleanup_interval_seconds` must be > 0.
-
-**Container won't start** — `docker-compose logs scanscribe`
-
-**Database locked** — SQLite DBs live in `./data/` (persistent bind mount), not in the container layer.
-
-**Model not found** — verify `model.name` in `config.yml` matches the folder name inside `./models/`.
-
-## Security Notes
-
-- Set a strong `SECRET_KEY` in `.env` before deployment
-- Use an HTTPS reverse proxy (nginx, Traefik, Caddy) in production
-- Restrict the Ollama host to your LAN
-- The web interface and API have no rate limiting by default
 
 ## License
 
