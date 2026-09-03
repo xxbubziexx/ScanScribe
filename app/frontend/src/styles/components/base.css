@@ -17,69 +17,69 @@
   }
 
   .ss-resize-row {
-    @apply mx-auto mt-8 mb-10 h-2 w-16 cursor-row-resize rounded-full bg-white/10;
+    @apply mx-auto my-2.5 h-1.5 w-16 cursor-row-resize rounded-full bg-white/10;
     @apply transition-colors hover:bg-indigo-500/40 active:bg-indigo-500/60;
   }
 
   .ss-tcard {
-    @apply rounded-lg border border-white/[0.05] bg-[#0c0e12] p-4;
+    @apply rounded-lg border border-white/[0.05] bg-[#0c0e12] p-2.5 sm:p-3;
     @apply transition-colors hover:border-white/10;
   }
 
   .ss-tcard-h {
-    @apply mb-3 flex items-start justify-between gap-2 border-b border-white/5 pb-2;
+    @apply mb-1.5 flex items-start justify-between gap-2 border-b border-white/5 pb-1.5;
   }
 
   .ss-tname {
-    @apply min-w-0 flex-1 truncate text-sm font-medium tracking-tight text-gray-400;
+    @apply min-w-0 flex-1 truncate text-xs sm:text-sm font-medium tracking-tight text-gray-400;
   }
 
   .ss-ttime {
-    @apply shrink-0 text-sm font-medium tabular-nums text-gray-600;
+    @apply shrink-0 text-xs sm:text-sm font-medium tabular-nums text-gray-600;
   }
 
   .ss-tmeta {
-    @apply mb-2 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-gray-600;
+    @apply mb-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-600;
   }
 
   .ss-tbar {
-    @apply mb-3 flex flex-wrap items-center gap-2;
+    @apply mb-1.5 flex flex-wrap items-center gap-1.5;
   }
 
   .ss-pill-tg {
-    @apply rounded-md bg-indigo-500/15 px-2.5 py-1 text-sm font-medium text-indigo-200;
+    @apply rounded-md bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-200;
   }
 
   .ss-badge-ok {
-    @apply rounded-md bg-green-500/20 px-2.5 py-1 text-sm font-semibold text-green-300;
+    @apply rounded-md bg-green-500/20 px-2 py-0.5 text-xs font-semibold text-green-300;
   }
 
   .ss-badge-mid {
-    @apply rounded-md bg-yellow-500/20 px-2.5 py-1 text-sm font-semibold text-yellow-300;
+    @apply rounded-md bg-yellow-500/20 px-2 py-0.5 text-xs font-semibold text-yellow-300;
   }
 
   .ss-badge-bad {
-    @apply rounded-md bg-red-500/20 px-2.5 py-1 text-sm font-semibold text-red-300;
+    @apply rounded-md bg-red-500/20 px-2 py-0.5 text-xs font-semibold text-red-300;
   }
 
   .ss-tbody {
-    @apply border-t border-white/5 pt-3;
+    @apply border-t border-white/5 pt-2;
   }
 
   .ss-transcript {
-    @apply whitespace-pre-wrap break-words text-base leading-7 text-gray-100 sm:text-xl sm:leading-8;
+    @apply whitespace-pre-wrap break-words text-sm leading-6 text-gray-100 sm:text-base sm:leading-7;
   }
 
   .ss-text-link {
-    @apply inline-flex items-center rounded-md border border-indigo-400/25 bg-indigo-500/10 px-2.5 py-1;
-    @apply text-sm font-semibold text-indigo-300 transition-colors;
+    @apply inline-flex items-center rounded-md border border-indigo-400/25 bg-indigo-500/10 px-2 py-0.5;
+    @apply text-xs font-semibold text-indigo-300 transition-colors;
     @apply hover:border-indigo-300/40 hover:bg-indigo-500/20 hover:text-indigo-200;
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40;
     @apply disabled:cursor-not-allowed disabled:opacity-50;
   }
 
   .ss-audio-wrap {
-    @apply mt-4 border-t border-white/5 pt-3;
+    @apply mt-2.5 border-t border-white/5 pt-2;
   }
 
   .ss-page-h2 {
@@ -107,7 +107,7 @@
   }
 
   .ss-scroll {
-    @apply flex-1 space-y-3 overflow-y-auto pr-1;
+    @apply flex-1 space-y-2 overflow-y-auto pr-1;
   }
 
   .ss-input {

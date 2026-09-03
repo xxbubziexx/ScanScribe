@@ -750,6 +750,10 @@ def process_transcript_for_monitor(
                     dec_status = decision.get("status_detail")
                     if dec_status:
                         target_ev.status_detail = dec_status
+                        if dec_status.strip().lower() in ("cleared", "terminated", "closed", "resolved"):
+                            target_ev.status = "closed"
+                            if not target_ev.closed_at:
+                                target_ev.closed_at = datetime.now(timezone.utc)
 
                     dec_etype = decision.get("event_type")
                     if dec_etype and (not target_ev.event_type or target_ev.event_type == "N/A"):

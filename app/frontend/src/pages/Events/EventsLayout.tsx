@@ -21,6 +21,14 @@ export function EventsLayout() {
         >
           Monitor config
         </NavLink>
+        <NavLink
+          to="debug"
+          className={({ isActive }) =>
+            isActive ? 'ss-events-tab ss-events-tab--active' : 'ss-events-tab'
+          }
+        >
+          Pipeline & LLM Debug
+        </NavLink>
       </nav>
       <Outlet />
     </div>

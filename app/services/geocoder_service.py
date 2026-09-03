@@ -24,6 +24,7 @@ class GeocodeResult(NamedTuple):
     latitude: float
     longitude: float
     resolved_address: str
+    county: Optional[str] = None
 
 
 # In-memory thread-safe cache: cleaned query -> (GeocodeResult or None, timestamp)
@@ -142,6 +143,86 @@ def extract_cross_street(raw: str) -> Tuple[str, Optional[str]]:
     return raw, None
 
 
+
+def normalize_county(name: str) -> str:
+    """Standardize county names for comparison (e.g. 'St. Francois' -> 'saintfrancois')."""
+    n = name.lower()
+    n = re.sub(r'\bst\.?\b', 'saint', n)
+    n = re.sub(r'\bste\.?\b', 'sainte', n)
+    n = re.sub(r'\bcounty\b', '', n).strip()
+    return re.sub(r'[^a-z0-9]', '', n)
+
+
+def is_within_geo_region(resolved_address: str, resolved_county: Optional[str], geo_region: Optional[str]) -> bool:
+    """
+    Strictly verify that a geocoded address is within the monitor's locked jurisdiction.
+    Prevents rural state-wide fallback searches from pinning in unrelated counties (e.g. Joplin / Carthage).
+    """
+    if not geo_region or not geo_region.strip():
+        return True
+
+    # Extract county from geo_region if present (e.g. 'St. Francois County, Missouri' -> 'saintfrancois')
+    m = re.search(r'([A-Za-z.\s\-]+)\s+County', geo_region, flags=re.IGNORECASE)
+    if m:
+        target_county = normalize_county(m.group(1))
+        if resolved_county:
+            res_c = normalize_county(resolved_county)
+            if target_county == res_c:
+                return True
+            if res_c and target_county != res_c:
+                return False
+
+        norm_display = normalize_county(resolved_address)
+        return target_county in norm_display
+
+    # Non-county geo_region (e.g. city or region name)
+    first_part = geo_region.split(',')[0].strip().lower()
+    return bool(re.search(r'\b' + re.escape(first_part) + r'\b', resolved_address.lower()))
+
+
+def resolve_landmark_alias(raw_location: str) -> str:
+    """
+    Check if a raw location string matches a known local business, restaurant, or landmark alias.
+    Maps local names (like 'Lady Queen' -> '523 Center St, Bismarck, MO') so free OSM can geocode them.
+    """
+    if not raw_location or not raw_location.strip():
+        return raw_location
+
+    loc_clean = raw_location.strip().lower()
+    
+    # Check custom user landmarks configured in config.yml first
+    try:
+        from ..config import get_settings
+        settings = get_settings()
+        cfg_landmarks = getattr(settings.config, "landmarks", None) or {}
+        if isinstance(cfg_landmarks, dict):
+            for k, v in cfg_landmarks.items():
+                alias = k.lower().strip()
+                if alias == loc_clean or re.search(r'\b' + re.escape(alias) + r'\b', loc_clean):
+                    return str(v).strip()
+    except Exception as e:
+        logger.error(f"Failed to load custom landmarks from config: {e}")
+
+    # Common built-in Missouri landmarks
+    built_in = {
+        "lady queen": "523 Center St, Bismarck, MO",
+        "lady queene": "523 Center St, Bismarck, MO",
+        "lady queen drive in": "523 Center St, Bismarck, MO",
+        "lady queene drive in": "523 Center St, Bismarck, MO",
+        "mineral area college": "5270 Flat River Rd, Park Hills, MO",
+        "mac college": "5270 Flat River Rd, Park Hills, MO",
+        "mac campus": "5270 Flat River Rd, Park Hills, MO",
+    }
+    if loc_clean in built_in:
+        return built_in[loc_clean]
+
+    # Also check if any alias is contained in the string
+    for alias_key, alias_addr in built_in.items():
+        if re.search(r'\b' + re.escape(alias_key) + r'\b', loc_clean):
+            return alias_addr
+
+    return raw_location
+
 def clean_location_string(raw: str) -> str:
     """
     Clean raw location text extracted from NER or LLM triage.
@@ -191,6 +272,23 @@ def strip_house_number(location_text: str) -> Optional[str]:
     if match:
         return match.group(1).strip()
     return None
+
+
+def strip_directional_indicators(text: str) -> str:
+    """
+    Strips directional prefixes or suffixes from road/highway names.
+    E.g. 'Southbound US Highway 67' -> 'US Highway 67'
+         'Northbound 67' -> '67'
+         'Highway 32 Eastbound' -> 'Highway 32'
+         'SB Hwy 67' -> 'Hwy 67'
+         'NB Route OO' -> 'Route OO'
+    """
+    if not text:
+        return ""
+    t = text.strip()
+    t = re.sub(r'^(?:southbound|northbound|eastbound|westbound|sb|nb|eb|wb)\s+', '', t, flags=re.IGNORECASE)
+    t = re.sub(r'\s+(?:southbound|northbound|eastbound|westbound|sb|nb|eb|wb)$', '', t, flags=re.IGNORECASE)
+    return t.strip()
 
 
 def generate_highway_variants(location_text: str, state_code: str = 'MO') -> list[str]:
@@ -301,13 +399,25 @@ def build_fallback_queries(raw_location: str, geo_region: Optional[str] = None) 
         if q and q not in queries:
             queries.append(q)
 
-    primary_raw, cross_street = extract_cross_street(raw_location)
+    aliased_raw = resolve_landmark_alias(raw_location)
+    primary_raw, cross_street = extract_cross_street(aliased_raw)
     cleaned_primary = clean_location_string(primary_raw)
     if not cleaned_primary:
         return queries
 
     # 1. Full cleaned primary query with full geo_region
     add_query(cleaned_primary, geo_region)
+
+    # 1b. Directional stripped queries (e.g. 'Southbound US Highway 67' -> 'US Highway 67')
+    dir_stripped = strip_directional_indicators(cleaned_primary)
+    if dir_stripped and dir_stripped.lower() != cleaned_primary.lower():
+        add_query(dir_stripped, geo_region)
+        for hwy_var in generate_highway_variants(dir_stripped, state_code):
+            add_query(hwy_var, geo_region)
+        if has_county_in_region:
+            add_query(dir_stripped, state_name)
+            for hwy_var in generate_highway_variants(dir_stripped, state_code):
+                add_query(hwy_var, state_name)
 
     # 2. Highway variants with house number
     for hwy_var in generate_highway_variants(cleaned_primary, state_code):
@@ -433,7 +543,9 @@ def _geocode_nominatim_sync(query: str, timeout: float = 8.0) -> Optional[Geocod
             lat = float(first.get("lat"))
             lon = float(first.get("lon"))
             display_name = first.get("display_name", query)
-            return GeocodeResult(latitude=lat, longitude=lon, resolved_address=display_name)
+            address_obj = first.get("address", {})
+            county = address_obj.get("county") or address_obj.get("city") or None
+            return GeocodeResult(latitude=lat, longitude=lon, resolved_address=display_name, county=county)
     except Exception as exc:
         logger.warning("Nominatim geocoding failed for '%s': %s", query, exc)
         return None
@@ -555,8 +667,17 @@ def resolve_address_sync(
             _geocode_cache[cache_key] = (result, now)
 
         if result:
-            logger.info("Geocoded '%s' -> (%f, %f) '%s'", query, result.latitude, result.longitude, result.resolved_address)
-            return result
+            if geo_region and not is_within_geo_region(result.resolved_address, result.county, geo_region):
+                logger.warning(
+                    "Geocode rejected out-of-jurisdiction match: '%s' (county: %s) does not match monitor geo_region '%s'",
+                    result.resolved_address,
+                    result.county,
+                    geo_region,
+                )
+                result = None
+            else:
+                logger.info("Geocoded '%s' -> (%f, %f) '%s'", query, result.latitude, result.longitude, result.resolved_address)
+                return result
         else:
             logger.info("Failed to geocode '%s', trying fallback if available", query)
 
@@ -579,3 +700,133 @@ async def resolve_address(
         provider,
         timeout,
     )
+
+
+def reverse_geocode_sync(lat: float, lon: float, timeout: float = 8.0) -> Optional[str]:
+    """
+    Reverse geocodes coordinates (lat, lon) using OpenStreetMap Nominatim.
+    Returns human-friendly formatted address string.
+    """
+    global _last_nominatim_request_time
+    with _nominatim_lock:
+        now = time.time()
+        elapsed = now - _last_nominatim_request_time
+        if elapsed < NOMINATIM_MIN_INTERVAL:
+            time.sleep(NOMINATIM_MIN_INTERVAL - elapsed)
+        _last_nominatim_request_time = time.time()
+
+    url = f"https://nominatim.openstreetmap.org/reverse?lat={lat}&lon={lon}&format=jsonv2&addressdetails=1"
+    headers = {"User-Agent": "ScanScribe-Geocoder/1.0"}
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                addr = data.get("address") or {}
+                road = addr.get("road")
+                house_number = addr.get("house_number")
+                city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("hamlet") or addr.get("municipality")
+                state = addr.get("state")
+                postcode = addr.get("postcode")
+                county = addr.get("county")
+
+                parts = []
+                if house_number and road:
+                    parts.append(f"{house_number} {road}")
+                elif road:
+                    parts.append(road)
+
+                if city:
+                    parts.append(city)
+                elif county:
+                    parts.append(county)
+
+                if state:
+                    if postcode:
+                        parts.append(f"{state} {postcode}")
+                    else:
+                        parts.append(state)
+
+                if parts:
+                    return ", ".join(parts)
+                return data.get("display_name")
+    except Exception as e:
+        logger.error("Reverse geocoding failed for (%f, %f): %s", lat, lon, e)
+    return None
+
+
+def search_address_candidates(
+    query: str,
+    geo_region: Optional[str] = None,
+    limit: int = 5,
+    timeout: float = 8.0,
+) -> list[dict]:
+    """
+    Search OpenStreetMap Nominatim for address suggestions matching query.
+    Scoped to monitor's geo_region.
+    """
+    global _last_nominatim_request_time
+    if not query or not query.strip():
+        return []
+
+    aliased = resolve_landmark_alias(query.strip())
+    q = build_geocoding_query(aliased, geo_region)
+
+    with _nominatim_lock:
+        now = time.time()
+        elapsed = now - _last_nominatim_request_time
+        if elapsed < NOMINATIM_MIN_INTERVAL:
+            time.sleep(NOMINATIM_MIN_INTERVAL - elapsed)
+        _last_nominatim_request_time = time.time()
+
+    url = f"https://nominatim.openstreetmap.org/search?q={quote_plus(q)}&format=jsonv2&addressdetails=1&limit={limit}"
+    headers = {"User-Agent": "ScanScribe-Geocoder/1.0"}
+    candidates = []
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code == 200:
+                results = resp.json()
+                for item in results:
+                    lat_str = item.get("lat")
+                    lon_str = item.get("lon")
+                    if lat_str is None or lon_str is None:
+                        continue
+                    lat = float(lat_str)
+                    lon = float(lon_str)
+                    display_name = item.get("display_name", "")
+                    addr = item.get("address", {})
+                    county = addr.get("county", "")
+
+                    if geo_region and not is_within_geo_region(display_name, county, geo_region):
+                        continue
+
+                    house_num = addr.get("house_number")
+                    road = addr.get("road")
+                    city = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("hamlet") or addr.get("municipality")
+
+                    short_label = ""
+                    if house_num and road:
+                        short_label = f"{house_num} {road}"
+                    elif road:
+                        short_label = road
+                    else:
+                        short_label = item.get("name") or display_name.split(",")[0]
+
+                    if city:
+                        short_label = f"{short_label}, {city}"
+
+                    candidates.append({
+                        "latitude": lat,
+                        "longitude": lon,
+                        "label": short_label,
+                        "display_name": display_name,
+                        "road": road or "",
+                        "city": city or "",
+                        "county": county,
+                        "type": item.get("type", ""),
+                    })
+    except Exception as e:
+        logger.error("Address candidate search failed for '%s': %s", query, e)
+    return candidates
+

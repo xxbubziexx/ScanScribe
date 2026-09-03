@@ -168,8 +168,8 @@ export function TranscriptionsPane({ cards, onClear, viewOnly = false }: Transcr
   }, [onClear])
 
   return (
-    <div className="flex h-full flex-col p-4">
-      <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
+    <div className="flex h-full flex-col p-3">
+      <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <h2 className="ss-page-h2">
           Transcriptions
           <span className="ss-page-h2-sub">{cards.length} items</span>

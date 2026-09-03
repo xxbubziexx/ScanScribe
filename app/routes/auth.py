@@ -154,12 +154,15 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         )
     
     hashed_password = get_password_hash(user_data.password)
+    # The first user created in the database is automatically granted admin privileges
+    is_first_user = db.query(User).count() == 0
+
     db_user = User(
         username=user_data.username,
         email=user_data.email,
         hashed_password=hashed_password,
         is_active=True,
-        is_admin=False,
+        is_admin=is_first_user,
     )
     db.add(db_user)
     db.commit()

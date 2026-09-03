@@ -45,10 +45,14 @@ export const logsApi = {
     request<{ success: boolean; message: string }>(`/api/logs/${id}`, { method: 'DELETE' }),
 
   unreview: (id: number) => request(`/api/logs/${id}/unreview`, { method: 'PATCH' }),
+  clearReviewed: () =>
+    request<{ success: boolean; count: number; message: string }>('/api/logs/reviewed', {
+      method: 'DELETE',
+    }),
   review: (id: number, corrected_transcript: string) =>
     request<{ success: boolean; log_id: number; is_reviewed: boolean; corrected_transcript: string }>(
       `/api/logs/${id}`,
-      { method: 'PATCH', body: JSON.stringify({ corrected_transcript }) }
+      { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ corrected_transcript }) }
     ),
 }
 

@@ -66,6 +66,7 @@ export interface EventListItem {
   closed_at: string | null
   spans_attached: number
   talkgroup: string
+  audio_path?: string | null
 }
 
 export interface EventsListResponse {

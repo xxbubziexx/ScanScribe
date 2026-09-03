@@ -30,9 +30,34 @@ An open source AI powered transcription system designed for public safety radio 
 - Whisper model (`models/whisper-*`)
 - 8 GB+ RAM recommended; 16+ GB if running Ollama on the same host
 
-## Windows First-Time Docker Setup (Simple Guide)
+## Fast Interactive Setup (Recommended)
 
-If this is your first time using Docker, follow these exact steps.
+After cloning the repository, simply run the setup wizard:
+
+**Linux / macOS:**
+```bash
+./setup.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+.\setup.ps1
+```
+
+*(Or run `python setup.py` on any operating system)*
+
+The wizard automatically:
+1. Checks for Docker and detects NVIDIA GPU / CUDA support.
+2. Generates a secure random `SECRET_KEY` in `.env`.
+3. Configures `docker-compose.yml`, `requirements.txt`, and `config.yml` for your selected runtime (CPU or GPU).
+4. Sets up your initial administrator credentials.
+5. Creates all required data/model directories and optionally boots Docker Compose!
+
+---
+
+## Manual Docker Setup Guide
+
+If you prefer configuring files manually, follow these steps:
 
 ### Step 1: Install Docker Desktop
 1. Go to [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)

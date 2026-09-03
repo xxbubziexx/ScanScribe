@@ -61,15 +61,23 @@ You MUST respond with a single valid JSON object strictly adhering to this schem
 
 
 def _clean_and_parse_json(text: str) -> Optional[Dict[str, Any]]:
-    """Clean markdown code fences and parse JSON object."""
+    """Clean markdown code fences, repair partial JSON, and parse JSON object."""
     if not text:
         return None
     cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-        cleaned = re.sub(r"\s*```$", "", cleaned)
-        cleaned = cleaned.strip()
 
+    # 1. Check for markdown code fences
+    blocks = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", cleaned, re.DOTALL)
+    if blocks:
+        for b in reversed(blocks):
+            try:
+                data = json.loads(b)
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+
+    # 2. Direct JSON parse
     try:
         data = json.loads(cleaned)
         if isinstance(data, dict):
@@ -77,16 +85,48 @@ def _clean_and_parse_json(text: str) -> Optional[Dict[str, Any]]:
     except Exception:
         pass
 
-    m = re.search(r"(\{.*\})", cleaned, re.DOTALL)
-    if m:
+    # 3. Regex search for complete { ... } block
+    start_idx = cleaned.find("{")
+    end_idx = cleaned.rfind("}")
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
         try:
-            data = json.loads(m.group(1))
+            data = json.loads(cleaned[start_idx:end_idx+1])
             if isinstance(data, dict):
                 return data
         except Exception:
             pass
 
-    return None
+    # 4. Heuristic repair if token limit cut off the closing braces
+    idx = cleaned.find("{")
+    while idx != -1:
+        snippet = cleaned[idx:]
+        for suffix in ["}", "\n}", "\"\n}", "\"}\n}", "\"}}", "\"}]\n}"]:
+            try:
+                data = json.loads(snippet + suffix)
+                if isinstance(data, dict):
+                    return data
+            except Exception:
+                pass
+        idx = cleaned.find("{", idx + 1)
+
+    # 5. Text fallback parser for verbose reasoning models
+    t_lower = cleaned.lower()
+    action = "SKIP"
+    matches = re.findall(r'\baction\b.{0,40}?\b(create|attach|close|broadcast|skip)\b', t_lower, flags=re.DOTALL)
+    if matches:
+        action = matches[-1].upper()
+    
+    first_line = cleaned.split('\n')[0][:200]
+    return {
+        "action": action,
+        "event_id": None,
+        "reason": f"Heuristic recovery from text: {first_line}",
+        "event_type": None,
+        "broadcast_type": None,
+        "location": None,
+        "units": [],
+        "status_detail": None,
+    }
 
 
 def build_user_prompt(
@@ -106,7 +146,7 @@ def build_user_prompt(
     ]
 
     if known_units and known_units.strip():
-        user_content.append(f"Known Unit Identifiers for this Monitor: [{known_units.strip()}]")
+        user_content.append(f"Known Units and Prefix Rules for this Monitor: [{known_units.strip()}]")
 
     if entities:
         ent_lines = []
@@ -212,7 +252,8 @@ class EventsRouter:
             ],
             "response_format": {"type": "json_object"},
             "temperature": temperature,
-            "max_tokens": 1024,
+            "max_tokens": 2048,
+            "include_reasoning": False,
         }
 
         t0 = time.perf_counter()

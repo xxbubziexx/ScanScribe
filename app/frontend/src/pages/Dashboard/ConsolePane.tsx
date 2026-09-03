@@ -39,7 +39,7 @@ export function ConsolePane({ entries, onClear, readOnly = false }: ConsolePaneP
 
   return (
     <div className="ss-console-root">
-      <div className="mb-3 flex shrink-0 items-center justify-between">
+      <div className="mb-2 flex shrink-0 items-center justify-between">
         <h2 className="ss-console-title">Console</h2>
         {!readOnly && (
           <div className="flex items-center gap-3">

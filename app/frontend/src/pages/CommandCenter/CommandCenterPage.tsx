@@ -136,6 +136,65 @@ export function CommandCenterPage() {
     [geocodeMutation],
   )
 
+  const [pinPlacementEventId, setPinPlacementEventId] = useState<string | null>(null)
+
+  const setCoordinatesMutation = useMutation({
+    mutationFn: (args: {
+      eventId: string
+      latitude: number
+      longitude: number
+      resolvedAddress?: string
+      reverseLookup?: boolean
+    }) =>
+      eventsApi.setCoordinates(args.eventId, {
+        latitude: args.latitude,
+        longitude: args.longitude,
+        resolved_address: args.resolvedAddress,
+        reverse_lookup: args.reverseLookup,
+      }),
+    onSuccess: (res) => {
+      addToast(
+        res.resolved_address
+          ? `Pin updated: ${res.resolved_address}`
+          : 'Pin updated successfully',
+        'success',
+      )
+      void queryClient.invalidateQueries({ queryKey: ['events-list'] })
+    },
+    onError: (e: unknown) => {
+      addToast(errorMessage(e, 'Failed to update pin location'), 'error')
+    },
+  })
+
+  const handleUpdateCoordinates = useCallback(
+    async (
+      eventId: string,
+      latitude: number,
+      longitude: number,
+      resolvedAddress?: string,
+      reverseLookup = true,
+    ) => {
+      await setCoordinatesMutation.mutateAsync({
+        eventId,
+        latitude,
+        longitude,
+        resolvedAddress,
+        reverseLookup,
+      })
+    },
+    [setCoordinatesMutation],
+  )
+
+  const handleMapClickToPin = useCallback(
+    async (lat: number, lng: number) => {
+      if (pinPlacementEventId) {
+        await handleUpdateCoordinates(pinPlacementEventId, lat, lng, undefined, true)
+        setPinPlacementEventId(null)
+      }
+    },
+    [pinPlacementEventId, handleUpdateCoordinates],
+  )
+
   // Real-time WebSocket event handling
   const handleWsMessage = useCallback(
     (msg: WsMessage) => {
@@ -296,7 +355,11 @@ export function CommandCenterPage() {
           onSelectEvent={(id) => setSelectedEventId(id)}
           onGeocodeEvent={handleGeocode}
           onRemoveGeocodeEvent={handleRemoveGeocode}
-          isGeocoding={geocodeMutation.isPending}
+          onUpdateCoordinates={handleUpdateCoordinates}
+          isPlacingPin={!!pinPlacementEventId}
+          onMapClick={handleMapClickToPin}
+          onCancelPlacePin={() => setPinPlacementEventId(null)}
+          isGeocoding={geocodeMutation.isPending || setCoordinatesMutation.isPending}
         />
 
         <CommandCenterFeed
@@ -306,7 +369,9 @@ export function CommandCenterPage() {
           selectedEventId={selectedEventId}
           onSelectEvent={(id) => setSelectedEventId(id)}
           onGeocodeEvent={handleGeocode}
-          isGeocoding={geocodeMutation.isPending}
+          onUpdateCoordinates={handleUpdateCoordinates}
+          onStartPlacePin={(id) => setPinPlacementEventId(id)}
+          isGeocoding={geocodeMutation.isPending || setCoordinatesMutation.isPending}
           search={search}
           setSearch={setSearch}
           selectedMonitor={selectedMonitor}

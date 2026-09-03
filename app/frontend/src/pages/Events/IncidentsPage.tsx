@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { downloadEventsExportHeaders, eventsApi } from '../../lib/events'
 import { errorMessage } from '../../types/api'
@@ -32,6 +33,8 @@ export type PipelineEvent = {
   incidentAt: string | null
   closedAt: string | null
   spansAttached: number
+  audioPath?: string | null
+  isManuallyPlaced?: boolean
 }
 
 export type DetailTab = 'event-thread' | 'transcription' | 'raw'
@@ -157,6 +160,7 @@ export function toPipelineEvent(item: EventListItem): PipelineEvent {
     incidentAt: item.incident_at,
     closedAt: item.closed_at,
     spansAttached: item.spans_attached ?? 0,
+    audioPath: item.audio_path,
   }
 }
 
@@ -201,9 +205,12 @@ function EditableTranscript({ logId, initialText }: { logId: number; initialText
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(initialText)
   
+  const { addToast } = useToast()
+  
   const mutation = useMutation({
     mutationFn: (newText: string) => logsApi.review(logId, newText),
-    onSuccess: () => setEditing(false)
+    onSuccess: () => setEditing(false),
+    onError: (e: any) => addToast(e?.message || 'Failed to save transcript', 'error')
   })
 
   if (editing) {
@@ -253,12 +260,14 @@ function EditableTranscript({ logId, initialText }: { logId: number; initialText
 export function EventsIncidentsPage() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const incidentParam = searchParams.get('incident_id') || searchParams.get('event_id') || ''
   const [query, setQuery] = useState('')
   const [monitor, setMonitor] = useState<number | 'all'>('all')
   const [status, setStatus] = useState<'all' | 'open' | 'closed'>('open')
   const [cardCount, setCardCount] = useState<number>(50)
   const [activeTab, setActiveTab] = useState<DetailTab>('event-thread')
-  const [selectedId, setSelectedId] = useState<string>('')
+  const [selectedId, setSelectedId] = useState<string>(incidentParam)
 
   const monitorsQuery = useQuery({
     queryKey: ['events-monitors'],
@@ -312,14 +321,23 @@ export function EventsIncidentsPage() {
   }, [events, query])
 
   useEffect(() => {
+    const urlEventId = searchParams.get('incident_id') || searchParams.get('event_id')
+    if (urlEventId && urlEventId !== selectedId) {
+      setSelectedId(urlEventId)
+      return
+    }
     if (filtered.length === 0) {
-      setSelectedId('')
+      if (!urlEventId) {
+        setSelectedId('')
+      }
       return
     }
     if (!selectedId || !filtered.some((e) => e.eventId === selectedId)) {
-      setSelectedId(filtered[0].eventId)
+      if (!urlEventId) {
+        setSelectedId(filtered[0].eventId)
+      }
     }
-  }, [filtered, selectedId])
+  }, [filtered, selectedId, searchParams])
 
   const selectedListEvent = useMemo(() => filtered.find((e) => e.eventId === selectedId) ?? null, [filtered, selectedId])
 
@@ -332,7 +350,10 @@ export function EventsIncidentsPage() {
   })
 
   const selected = useMemo(() => {
-    if (!selectedListEvent) return null
+    if (!selectedListEvent) {
+      if (detailQuery.data) return toDetailEvent(detailQuery.data, null)
+      return null
+    }
     if (!detailQuery.data) return selectedListEvent
     return toDetailEvent(detailQuery.data, selectedListEvent)
   }, [selectedListEvent, detailQuery.data])
@@ -478,7 +499,14 @@ export function EventsIncidentsPage() {
                     key={event.eventId}
                     className={active ? 'ss-events-row-item ss-events-row-item--active' : 'ss-events-row-item'}
                   >
-                    <EventListCard event={event} active={active} onSelect={() => setSelectedId(event.eventId)} />
+                    <EventListCard
+                      event={event}
+                      active={active}
+                      onSelect={() => {
+                        setSelectedId(event.eventId)
+                        setSearchParams({ incident_id: event.eventId }, { replace: true })
+                      }}
+                    />
                   </li>
                 )
               })}

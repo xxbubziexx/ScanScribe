@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/context/ToastContext'
-import { buildListParams, downloadLogsExport, downloadDatasetExport, logsApi } from '@/lib/logs'
+import { buildListParams, downloadLogsExport, logsApi } from '@/lib/logs'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { errorMessage } from '@/types/api'
 import type { LogListEntry, LogsSortBy } from '@/types/logs'
@@ -93,6 +93,7 @@ export function DatabasePage() {
     onSuccess: () => {
       addToast('Log entry removed', 'success')
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Delete failed'), 'error'),
   })
@@ -112,15 +113,6 @@ export function DatabasePage() {
       addToast('Export started', 'success')
     } catch (e) {
       addToast(errorMessage(e, 'Export failed'), 'error')
-    }
-  }
-
-  const onExportDataset = async () => {
-    try {
-      await downloadDatasetExport()
-      addToast('Dataset export started', 'success')
-    } catch (e) {
-      addToast(errorMessage(e, 'Dataset export failed'), 'error')
     }
   }
 
@@ -195,14 +187,6 @@ export function DatabasePage() {
             disabled={query.isFetching}
           >
             Export CSV
-          </button>
-          <button
-            type="button"
-            className="ss-btn-ghost"
-            onClick={onExportDataset}
-            disabled={query.isFetching}
-          >
-            Export Fine-Tuning Dataset
           </button>
         </div>
       </div>
@@ -331,7 +315,7 @@ function LogRow({
       <td className="ss-db-td" title={row.filename}>
         <span className="ss-db-filename-clip block">{row.filename || '—'}</span>
       </td>
-      <td className="ss-db-td" title={row.transcript || ''}>
+      <td className="ss-db-td">
         <span className="ss-db-td-clip block text-gray-400">
           {row.is_reviewed && <span className="text-green-500 mr-1" title="Reviewed">✓</span>}
           {row.corrected_transcript || row.transcript || '—'}
@@ -408,6 +392,7 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
     onSuccess: () => {
       addToast('Transcript updated', 'success')
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Update failed'), 'error'),
   })

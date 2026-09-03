@@ -1,4 +1,6 @@
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useState, useRef } from 'react'
+import { Link } from 'react-router-dom'
+import { eventsApi } from '@/lib/events'
 import type { MonitorResponse } from '@/types/events'
 import type { PipelineEvent } from '@/pages/Events/IncidentsPage'
 import { splitBadgeEntries, typeDisplayFor } from '@/pages/Events/IncidentsPage'
@@ -13,6 +15,14 @@ interface CommandCenterFeedProps {
   selectedEventId: string | null
   onSelectEvent: (eventId: string) => void
   onGeocodeEvent?: (eventId: string) => void
+  onUpdateCoordinates?: (
+    eventId: string,
+    lat: number,
+    lng: number,
+    address?: string,
+    reverseLookup?: boolean,
+  ) => Promise<void> | void
+  onStartPlacePin?: (eventId: string) => void
   isGeocoding?: boolean
   search: string
   setSearch: (s: string) => void
@@ -30,10 +40,12 @@ function formatRelativeTime(dateStr: string): string {
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
   
-  const datePart = date.toLocaleDateString('en-US', {
+  const datePart = date.toLocaleString('en-US', {
     month: 'numeric',
     day: 'numeric',
-    year: '2-digit'
+    year: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
   })
   
   let rel = 'just now'
@@ -59,6 +71,13 @@ function formatRelativeTime(dateStr: string): string {
   return `${datePart} • ${rel}`
 }
 
+function formatAudioTime(seconds: number): string {
+  if (!seconds || isNaN(seconds)) return '0:00'
+  const m = Math.floor(seconds / 60)
+  const s = Math.floor(seconds % 60)
+  return `${m}:${s < 10 ? '0' : ''}${s}`
+}
+
 export function CommandCenterFeed({
   events,
   rawEvents,
@@ -66,6 +85,8 @@ export function CommandCenterFeed({
   selectedEventId,
   onSelectEvent,
   onGeocodeEvent,
+  onUpdateCoordinates,
+  onStartPlacePin,
   isGeocoding,
   search,
   setSearch,
@@ -77,9 +98,121 @@ export function CommandCenterFeed({
   setTimeframe,
 }: CommandCenterFeedProps) {
 
+  // Audio Playback State
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null)
+  const [audioProgress, setAudioProgress] = useState<Record<string, { current: number; duration: number }>>({})
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  const toggleAudio = (eventId: string, audioPath: string) => {
+    if (playingAudioId === eventId) {
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+      setPlayingAudioId(null)
+      return
+    }
+
+    if (audioRef.current) {
+      audioRef.current.pause()
+    }
+
+    const audio = new Audio(`/${audioPath}`)
+    audioRef.current = audio
+
+    audio.ontimeupdate = () => {
+      setAudioProgress((prev) => ({
+        ...prev,
+        [eventId]: { current: audio.currentTime, duration: audio.duration || 0 },
+      }))
+    }
+
+    audio.onloadedmetadata = () => {
+      setAudioProgress((prev) => ({
+        ...prev,
+        [eventId]: { current: 0, duration: audio.duration || 0 },
+      }))
+    }
+
+    audio.onended = () => {
+      setPlayingAudioId(null)
+      setAudioProgress((prev) => ({
+        ...prev,
+        [eventId]: { current: 0, duration: audio.duration || 0 },
+      }))
+    }
+
+    audio.play().catch(() => setPlayingAudioId(null))
+    setPlayingAudioId(eventId)
+  }
+
+  const handleAudioSeek = (eventId: string, time: number) => {
+    if (playingAudioId === eventId && audioRef.current) {
+      audioRef.current.currentTime = time
+      setAudioProgress((prev) => ({
+        ...prev,
+        [eventId]: { ...prev[eventId], current: time },
+      }))
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+    }
+  }, [])
+
+  // Quick Address Search & Autocomplete State
+  const [searchTargetEventId, setSearchTargetEventId] = useState<string | null>(null)
+  const [addressInput, setAddressInput] = useState<string>('')
+  const [suggestions, setSuggestions] = useState<
+    Array<{
+      latitude: number
+      longitude: number
+      label: string
+      display_name: string
+    }>
+  >([])
+  const [isSearchingSuggestions, setIsSearchingSuggestions] = useState(false)
+
+  useEffect(() => {
+    if (!searchTargetEventId || !addressInput || addressInput.trim().length < 2) {
+      setSuggestions([])
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingSuggestions(true)
+      try {
+        const targetEv = events.find((e) => e.eventId === searchTargetEventId)
+        const res = await eventsApi.autocomplete(addressInput.trim(), targetEv?.monitorId)
+        setSuggestions(res.candidates || [])
+      } catch {
+        setSuggestions([])
+      } finally {
+        setIsSearchingSuggestions(false)
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [addressInput, searchTargetEventId, events])
+
+  const handleSelectSuggestion = async (
+    eventId: string,
+    cand: { latitude: number; longitude: number; display_name: string },
+  ) => {
+    if (onUpdateCoordinates) {
+      await onUpdateCoordinates(eventId, cand.latitude, cand.longitude, cand.display_name, false)
+    }
+    setSearchTargetEventId(null)
+    setAddressInput('')
+    setSuggestions([])
+  }
+
   const [, setTick] = useState(0)
   useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 5000)
+    const interval = setInterval(() => setTick((t) => t + 1), 5000)
     return () => clearInterval(interval)
   }, [])
 
@@ -224,7 +357,7 @@ export function CommandCenterFeed({
               <div
                 key={ev.eventId}
                 onClick={() => onSelectEvent(ev.eventId)}
-                className={`group p-3 rounded-xl border transition cursor-pointer flex flex-col gap-2 relative ${
+                className={`group p-2.5 rounded-xl border transition cursor-pointer flex flex-col gap-1.5 relative ${
                   isSelected
                     ? 'border-indigo-500 bg-indigo-950/40 shadow-lg shadow-indigo-950/50'
                     : 'border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]'
@@ -270,37 +403,131 @@ export function CommandCenterFeed({
 
                 {/* Location / Geocode Status Banner */}
                 <div
-                  className={`flex items-center justify-between gap-2 rounded-lg p-2 text-xs border ${
+                  className={`flex flex-col gap-1.5 rounded-lg p-1.5 text-xs border ${
                     isMapped
                       ? 'bg-emerald-950/20 border-emerald-500/20 text-emerald-300'
                       : 'bg-amber-950/20 border-amber-500/20 text-amber-300'
                   }`}
                 >
-                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <span>{isMapped ? '📍' : '⚠️'}</span>
-                    <span className="truncate font-medium text-gray-200" title={ev.resolvedAddress || ev.location || ''}>
-                      {ev.location || 'No location given'}
-                    </span>
-                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <span>{isMapped ? '📍' : '⚠️'}</span>
+                      <span className="truncate font-medium text-gray-200" title={ev.resolvedAddress || ev.location || ''}>
+                        {ev.resolvedAddress || ev.location || 'No location given'}
+                      </span>
+                    </div>
 
-                  {isMapped ? (
-                    <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded shrink-0 border border-emerald-500/20">
-                      Mapped
-                    </span>
-                  ) : (
-                    onGeocodeEvent && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      {isMapped ? (
+                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                          Mapped
+                        </span>
+                      ) : (
+                        <>
+                          {onGeocodeEvent && (
+                            <button
+                              type="button"
+                              className="text-[10px] font-semibold text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 rounded border border-amber-500/30 transition"
+                              disabled={isGeocoding}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onGeocodeEvent(ev.eventId)
+                              }}
+                            >
+                              {isGeocoding ? 'Resolving…' : 'Geocode'}
+                            </button>
+                          )}
+                          {onStartPlacePin && (
+                            <button
+                              type="button"
+                              className="text-[10px] font-semibold text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/30 px-2 py-0.5 rounded border border-indigo-500/30 transition flex items-center gap-1"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onStartPlacePin(ev.eventId)
+                              }}
+                              title="Click on the map to place a pin for this incident"
+                            >
+                              <span>📍</span> Pick on Map
+                            </button>
+                          )}
+                        </>
+                      )}
+
                       <button
                         type="button"
-                        className="text-[10px] font-semibold text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 rounded border border-amber-500/30 transition shrink-0"
-                        disabled={isGeocoding}
+                        className="text-[10px] text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-1.5 py-0.5 rounded border border-white/10 transition"
                         onClick={(e) => {
                           e.stopPropagation()
-                          onGeocodeEvent(ev.eventId)
+                          if (searchTargetEventId === ev.eventId) {
+                            setSearchTargetEventId(null)
+                            setSuggestions([])
+                          } else {
+                            setSearchTargetEventId(ev.eventId)
+                            setAddressInput(ev.location || '')
+                          }
                         }}
+                        title="Search and assign address"
                       >
-                        {isGeocoding ? 'Resolving…' : 'Geocode'}
+                        🔍
                       </button>
-                    )
+                    </div>
+                  </div>
+
+                  {/* Inline Address Search & Autocomplete Dropdown */}
+                  {searchTargetEventId === ev.eventId && (
+                    <div
+                      className="flex flex-col gap-1 mt-1 bg-gray-950 p-2 rounded-lg border border-indigo-500/40 relative shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          autoFocus
+                          placeholder="Type address or road name..."
+                          value={addressInput}
+                          onChange={(e) => setAddressInput(e.target.value)}
+                          className="ss-input text-xs py-1 px-2 flex-1 bg-black/60 border-white/20 text-white"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              setSearchTargetEventId(null)
+                              setSuggestions([])
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchTargetEventId(null)
+                            setSuggestions([])
+                          }}
+                          className="text-xs text-gray-400 hover:text-white px-1.5 py-0.5"
+                        >
+                          ✕
+                        </button>
+                      </div>
+
+                      {isSearchingSuggestions && (
+                        <span className="text-[10px] text-indigo-300 animate-pulse px-1">
+                          Searching candidates...
+                        </span>
+                      )}
+
+                      {suggestions.length > 0 && (
+                        <div className="flex flex-col gap-1 mt-1 max-h-40 overflow-y-auto bg-gray-900 border border-white/10 rounded shadow-lg">
+                          {suggestions.map((cand, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => handleSelectSuggestion(ev.eventId, cand)}
+                              className="text-left px-2.5 py-1.5 hover:bg-indigo-600/30 transition border-b border-white/5 last:border-0 flex flex-col"
+                            >
+                              <span className="font-bold text-white text-xs">{cand.label}</span>
+                              <span className="text-[10px] text-gray-400 truncate">{cand.display_name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -330,6 +557,51 @@ export function CommandCenterFeed({
                     &ldquo;{ev.summary || ev.originalTranscription}&rdquo;
                   </p>
                 )}
+
+                {/* Compact Inline Audio Player */}
+                {ev.audioPath && ev.audioPath !== 'file not saved' && (
+                  <div
+                    className="ss-cc-audio-row flex items-center gap-2 bg-black/40 px-2 py-1.5 rounded-lg border border-white/10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="w-6 h-6 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-[11px] shrink-0 transition shadow-sm"
+                      onClick={() => toggleAudio(ev.eventId, ev.audioPath!)}
+                      title={playingAudioId === ev.eventId ? 'Pause dispatch audio' : 'Play dispatch audio'}
+                    >
+                      {playingAudioId === ev.eventId ? '❚❚' : '▶'}
+                    </button>
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                      <input
+                        type="range"
+                        min={0}
+                        max={audioProgress[ev.eventId]?.duration || 1}
+                        step={0.1}
+                        value={audioProgress[ev.eventId]?.current || 0}
+                        onChange={(e) => handleAudioSeek(ev.eventId, Number(e.target.value))}
+                        className="w-full h-1 bg-white/20 rounded appearance-none cursor-pointer accent-indigo-400"
+                      />
+                      <div className="flex justify-between text-[9px] font-mono text-gray-400 mt-0.5">
+                        <span>{formatAudioTime(audioProgress[ev.eventId]?.current || 0)}</span>
+                        <span>{formatAudioTime(audioProgress[ev.eventId]?.duration || 0)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Card Footer: Event ID & Link to Incidents Hub */}
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5 text-[11px]">
+                  <span className="font-mono text-[10px] text-gray-500 truncate">{ev.eventId}</span>
+                  <Link
+                    to={`/events?incident_id=${encodeURIComponent(ev.eventId)}`}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-400 hover:text-indigo-200 transition"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Open in Incidents Hub"
+                  >
+                    <span>View Event</span> &rarr;
+                  </Link>
+                </div>
               </div>
             )
           })

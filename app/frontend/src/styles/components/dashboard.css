@@ -1,6 +1,6 @@
 @layer components {
   .ss-console-root {
-    @apply flex h-full flex-col bg-black/20 p-4;
+    @apply flex h-full flex-col bg-black/20 p-3;
   }
 
   .ss-console-title {

@@ -20,6 +20,15 @@ def test_clean_location_string():
     assert clean_location_string("near 1200 Elm Street") == "1200 Elm Street"
     assert clean_location_string("in front of 400 Oak Ave") == "400 Oak Ave"
     assert clean_location_string("approx 750 Maple Rd") == "750 Maple Rd"
+    assert clean_location_string("cross of Wood Lane and Main St") == "Wood Lane and Main St"
+    assert clean_location_string("crossroads of Wood Lane and Main St") == "Wood Lane and Main St"
+
+    # Cross street stripping from primary addresses
+    assert clean_location_string("9007 Crossman Road cross of Wood Lane") == "9007 Crossman Road"
+    assert clean_location_string("9007 Crossman Road cross street Wood Lane") == "9007 Crossman Road"
+    assert clean_location_string("9007 Crossman Road, cross of Wood Lane") == "9007 Crossman Road"
+    assert clean_location_string("9007 Crossman Road c/s Wood Lane") == "9007 Crossman Road"
+    assert clean_location_string("9007 Crossman Road cross streets Wood Lane and Main St") == "9007 Crossman Road"
 
     # Intersections
     assert clean_location_string("Route 59 & 75th St") == "Route 59 and 75th St"
@@ -32,10 +41,40 @@ def test_clean_location_string():
 
 
 def test_build_geocoding_query():
+    # Context appending
     assert build_geocoding_query("100 Main St", "Cook County, IL") == "100 Main St, Cook County, IL"
     assert build_geocoding_query("100 Main St, Cook County, IL", "Cook County, IL") == "100 Main St, Cook County, IL"
-    assert build_geocoding_query("100 Main St", None) == "100 Main St"
+    assert build_geocoding_query("100 Main St, Chicago, IL", None) == "100 Main St, Chicago, IL"
+    assert build_geocoding_query("12834 Springtown Road", None) == "12834 Springtown Road, Missouri"
+    assert build_geocoding_query("14588 State Highway U", "Iron County") == "14588 State Highway U, Iron County, Missouri"
+    assert build_geocoding_query("14588 State Highway U", "Iron County, Missouri") == "14588 State Highway U, Iron County, Missouri"
+    assert build_geocoding_query("9007 Crossman Road cross of Wood Lane", "St. Francois County") == "9007 Crossman Road, St. Francois County, Missouri"
     assert build_geocoding_query("", "Cook County, IL") == ""
+
+
+def test_build_fallback_queries():
+    from app.services.geocoder_service import build_fallback_queries
+
+    # 1. House number stripping
+    springtown_fallbacks = build_fallback_queries("12834 Springtown Road", None)
+    assert "12834 Springtown Road, Missouri" in springtown_fallbacks
+    assert "Springtown Road, Missouri" in springtown_fallbacks
+
+    # 2. Lettered / numbered highway variants
+    hwy_fallbacks = build_fallback_queries("14588 State Highway U", None)
+    assert "14588 State Highway U, Missouri" in hwy_fallbacks
+    assert "14588 MO-U, Missouri" in hwy_fallbacks
+    assert "14588 Highway U, Missouri" in hwy_fallbacks
+    assert "State Highway U, Missouri" in hwy_fallbacks
+    assert "MO-U, Missouri" in hwy_fallbacks
+    assert "Highway U, Missouri" in hwy_fallbacks
+
+    # 3. Cross street fallbacks
+    cross_fallbacks = build_fallback_queries("9007 Crossman Road cross of Wood Lane", "St. Francois County, Missouri")
+    assert "9007 Crossman Road, St. Francois County, Missouri" in cross_fallbacks
+    assert "Crossman Road, St. Francois County, Missouri" in cross_fallbacks
+    assert "Crossman Road and Wood Lane, St. Francois County, Missouri" in cross_fallbacks
+    assert "Wood Lane, St. Francois County, Missouri" in cross_fallbacks
 
 
 def test_geocoder_caching():

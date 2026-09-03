@@ -4,7 +4,8 @@ import yaml
 from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 from functools import lru_cache
-from typing import Any, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
+from pydantic import Field
 import logging
 
 logger = logging.getLogger(__name__)
@@ -162,10 +163,7 @@ def openrouter_base_url(cfg: Optional[OpenRouterConfig] = None) -> str:
 
 
 def openrouter_model(cfg: Optional[OpenRouterConfig] = None) -> str:
-    """Effective model name for OpenRouter."""
-    env = (os.getenv("OPENROUTER_MODEL") or "").strip()
-    if env:
-        return env
+    """Effective model name for OpenRouter. config.yml model_name wins over env defaults."""
     if cfg is not None:
         m = (
             getattr(cfg, "model_name", "")
@@ -176,6 +174,9 @@ def openrouter_model(cfg: Optional[OpenRouterConfig] = None) -> str:
         ).strip()
         if m:
             return m
+    env = (os.getenv("OPENROUTER_MODEL") or "").strip()
+    if env:
+        return env
     return "google/gemini-2.5-flash"
 
 
@@ -268,6 +269,7 @@ class Config(BaseModel):
     logging: LoggingConfig = LoggingConfig()
     advanced: AdvancedConfig = AdvancedConfig()
     timestamp: TimestampConfig = TimestampConfig()
+    landmarks: Dict[str, str] = Field(default_factory=dict)
 
 
 class Settings:

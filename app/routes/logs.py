@@ -198,6 +198,20 @@ async def export_logs_csv(
     )
 
 
+@router.delete("/reviewed")
+async def clear_reviewed_dataset(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_logs_db)
+):
+    """Unreview all logs in the fine-tuning dataset (sets is_reviewed = False)."""
+    updated_count = db.query(LogEntry).filter(LogEntry.is_reviewed == True).update(
+        {LogEntry.is_reviewed: False},
+        synchronize_session=False
+    )
+    db.commit()
+    return {"success": True, "count": updated_count, "message": f"Cleared {updated_count} spans from dataset"}
+
+
 @router.delete("/{log_id}")
 async def delete_log(
     log_id: int,

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
+import { Link } from 'react-router-dom'
 import type { PipelineEvent } from '@/pages/Events/IncidentsPage'
 import { formatTimeOnly, splitBadgeEntries, typeDisplayFor } from '@/pages/Events/IncidentsPage'
 
@@ -11,7 +12,34 @@ interface CommandCenterMapProps {
   onSelectEvent: (eventId: string) => void
   onGeocodeEvent?: (eventId: string) => void
   onRemoveGeocodeEvent?: (eventId: string) => void
+  onUpdateCoordinates?: (
+    eventId: string,
+    lat: number,
+    lng: number,
+    address?: string,
+    reverseLookup?: boolean,
+  ) => Promise<void> | void
+  isPlacingPin?: boolean
+  onMapClick?: (lat: number, lng: number) => void
+  onCancelPlacePin?: () => void
   isGeocoding?: boolean
+}
+
+function MapClickHandler({
+  isPlacingPin,
+  onMapClick,
+}: {
+  isPlacingPin?: boolean
+  onMapClick?: (lat: number, lng: number) => void
+}) {
+  useMapEvents({
+    click: (e) => {
+      if (isPlacingPin && onMapClick) {
+        onMapClick(e.latlng.lat, e.latlng.lng)
+      }
+    },
+  })
+  return null
 }
 
 // Controller component to smoothly fly map to selected event coordinates
@@ -106,6 +134,10 @@ export function CommandCenterMap({
   onSelectEvent,
   onGeocodeEvent,
   onRemoveGeocodeEvent,
+  onUpdateCoordinates,
+  isPlacingPin,
+  onMapClick,
+  onCancelPlacePin,
   isGeocoding,
 }: CommandCenterMapProps) {
 
@@ -177,15 +209,16 @@ export function CommandCenterMap({
         zoomControl={false}
         attributionControl={false}
       >
-        {/* CartoDB Dark Matter tile layer for high-contrast tactical dark dashboard */}
+        {/* Standard OpenStreetMap tiles inverted via CSS for a free dark mode map without API keys */}
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           maxZoom={19}
-          subdomains="abcd"
+          className="ss-map-tiles-dark"
         />
 
         <MapFlyController selectedEvent={selectedEvent} />
         <MapBoundsFitter events={mappedEvents} />
+        <MapClickHandler isPlacingPin={isPlacingPin} onMapClick={onMapClick} />
 
         {mappedEvents.map((ev) => {
           const isSelected = ev.eventId === selectedEventId
@@ -198,8 +231,16 @@ export function CommandCenterMap({
               key={`marker-${ev.eventId}`}
               position={[ev.latitude!, ev.longitude!]}
               icon={icon}
+              draggable={true}
               eventHandlers={{
                 click: () => onSelectEvent(ev.eventId),
+                dragend: (e) => {
+                  const marker = e.target
+                  const position = marker.getLatLng()
+                  if (onUpdateCoordinates) {
+                    void onUpdateCoordinates(ev.eventId, position.lat, position.lng, undefined, true)
+                  }
+                },
               }}
             >
               <Popup className="ss-map-popup">
@@ -261,6 +302,21 @@ export function CommandCenterMap({
                     </p>
                   )}
 
+                  <Link
+                    to={`/events?incident_id=${encodeURIComponent(ev.eventId)}`}
+                    className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 hover:text-white border border-indigo-500/40 text-xs font-semibold transition text-center shadow-sm"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span>📋</span> Open in Incidents Hub &rarr;
+                  </Link>
+
+                  <div className="flex items-center justify-between gap-1.5 text-[10px] text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20">
+                    <span className="flex items-center gap-1">
+                      <span>✋</span> Drag marker to adjust location
+                    </span>
+                    <span className="text-[9px] text-indigo-400/80">auto-reverse geocodes</span>
+                  </div>
+
                   <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10 text-[11px]">
                     <span className="text-gray-500 font-mono text-[10px]">
                       {ev.latitude?.toFixed(4)}, {ev.longitude?.toFixed(4)}
@@ -272,7 +328,9 @@ export function CommandCenterMap({
                           className="text-red-400 hover:text-red-300 font-medium underline transition"
                           onClick={(e) => {
                             e.stopPropagation()
-                            onRemoveGeocodeEvent(ev.eventId)
+                            if (window.confirm('Are you sure you want to remove this pin from the map? (The incident will not be deleted from the database)')) {
+                              onRemoveGeocodeEvent(ev.eventId)
+                            }
                           }}
                         >
                           Remove Pin
@@ -299,6 +357,23 @@ export function CommandCenterMap({
           )
         })}
       </MapContainer>
+
+      {/* Floating Pin-Drop Mode Banner */}
+      {isPlacingPin && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-indigo-950/95 border border-indigo-400/60 shadow-2xl text-white px-4 py-2 rounded-xl flex items-center gap-3 backdrop-blur-md animate-pulse">
+          <span className="text-base">📍</span>
+          <span className="text-xs font-semibold">Click anywhere on the map to set incident pin location</span>
+          {onCancelPlacePin && (
+            <button
+              type="button"
+              onClick={onCancelPlacePin}
+              className="text-xs bg-white/20 hover:bg-white/30 px-2.5 py-0.5 rounded text-white font-bold transition ml-2"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Floating Map Overlay Legend / Info */}
       <div className="absolute top-3 left-3 z-[400] flex flex-col gap-1.5 bg-gray-950/85 backdrop-blur-md px-3 py-2 rounded-lg border border-white/10 text-xs shadow-lg pointer-events-auto">

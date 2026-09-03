@@ -99,6 +99,44 @@ export const eventsApi = {
       { method: 'POST' },
     ),
 
+  setCoordinates: (
+    eventId: string,
+    body: { latitude: number; longitude: number; resolved_address?: string; reverse_lookup?: boolean },
+  ) =>
+    request<{ ok: boolean; latitude: number; longitude: number; resolved_address?: string }>(
+      `${EVENTS_API}/events/${encodeURIComponent(eventId)}/set-coordinates`,
+      {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify(body),
+      },
+    ),
+
+  autocomplete: (query: string, monitorId?: number, limit = 5) => {
+    const sp = new URLSearchParams()
+    sp.set('query', query)
+    if (typeof monitorId === 'number') sp.set('monitor_id', String(monitorId))
+    sp.set('limit', String(limit))
+    return request<{
+      candidates: Array<{
+        latitude: number
+        longitude: number
+        label: string
+        display_name: string
+        road?: string
+        city?: string
+        county?: string
+      }>
+    }>(`${EVENTS_API}/geocoder/autocomplete?${sp.toString()}`)
+  },
+
+  reverseGeocode: (latitude: number, longitude: number) =>
+    request<{ resolved_address?: string }>(`${EVENTS_API}/geocoder/reverse`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ latitude, longitude }),
+    }),
+
   spanStore: (args: {
     monitorId?: number
     talkgroup?: string

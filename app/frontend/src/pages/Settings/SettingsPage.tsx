@@ -139,6 +139,7 @@ export function SettingsPage() {
       addToast('Retention cleanup finished', 'success')
       void storageQuery.refetch()
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
     },
     onError: (e: unknown) =>
       setRetentionFeedback({ text: errorMessage(e, 'Cleanup failed'), error: true }),

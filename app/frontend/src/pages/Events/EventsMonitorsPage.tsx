@@ -25,12 +25,14 @@ export function EventsMonitorsPage() {
   const [createTg, setCreateTg] = useState('')
   const [createLabels, setCreateLabels] = useState('EVT_TYPE')
   const [createGeoRegion, setCreateGeoRegion] = useState('')
+  const [createKnownUnits, setCreateKnownUnits] = useState('')
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editTg, setEditTg] = useState('')
   const [editLabels, setEditLabels] = useState('')
   const [editGeoRegion, setEditGeoRegion] = useState('')
+  const [editKnownUnits, setEditKnownUnits] = useState('')
 
   const monitorsQuery = useQuery({
     queryKey: ['events-monitors'],
@@ -67,6 +69,7 @@ export function EventsMonitorsPage() {
         talkgroup_ids: parseTokens(createTg),
         start_event_labels: parseTokens(createLabels).length ? parseTokens(createLabels) : ['EVT_TYPE'],
         geo_region: createGeoRegion.trim() || undefined,
+        known_units: createKnownUnits.trim() || undefined,
       }),
     onSuccess: () => {
       addToast('Monitor created', 'success')
@@ -74,6 +77,7 @@ export function EventsMonitorsPage() {
       setCreateTg('')
       setCreateLabels('EVT_TYPE')
       setCreateGeoRegion('')
+      setCreateKnownUnits('')
       invalidate()
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Failed to create monitor'), 'error'),
@@ -105,6 +109,7 @@ export function EventsMonitorsPage() {
     setEditTg(tokensToLines(m.talkgroup_ids))
     setEditLabels(tokensToLines(m.start_event_labels))
     setEditGeoRegion(m.geo_region || '')
+    setEditKnownUnits(m.known_units || '')
   }
 
   const cancelEdit = () => setEditingId(null)
@@ -135,6 +140,7 @@ export function EventsMonitorsPage() {
         talkgroup_ids: parseTokens(editTg),
         start_event_labels: parseTokens(editLabels).length ? parseTokens(editLabels) : ['EVT_TYPE'],
         geo_region: editGeoRegion.trim() || undefined,
+        known_units: editKnownUnits.trim() || undefined,
       },
     })
   }
@@ -188,17 +194,31 @@ export function EventsMonitorsPage() {
                   autoComplete="off"
                 />
               </div>
-              <div className="grid gap-2 md:col-span-2">
-                <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-tg">
-                  Talkgroup IDs (comma or newline)
-                </label>
-                <textarea
-                  id="new-monitor-tg"
-                  className="ss-input min-h-[5rem] resize-y font-mono text-xs"
-                  value={createTg}
-                  onChange={(e) => setCreateTg(e.target.value)}
-                  placeholder="TG1&#10;TG2"
-                />
+              <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-tg">
+                    Talkgroup IDs (comma or newline)
+                  </label>
+                  <textarea
+                    id="new-monitor-tg"
+                    className="ss-input min-h-[5rem] resize-y font-mono text-xs"
+                    value={createTg}
+                    onChange={(e) => setCreateTg(e.target.value)}
+                    placeholder="TG1&#10;TG2"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-units">
+                    Known Units & Prefix Rules (Optional)
+                  </label>
+                  <textarea
+                    id="new-monitor-units"
+                    className="ss-input min-h-[5rem] resize-y font-mono text-xs"
+                    value={createKnownUnits}
+                    onChange={(e) => setCreateKnownUnits(e.target.value)}
+                    placeholder="e.g. 38xx = Park Hills&#10;100s = Farmington PD"
+                  />
+                </div>
               </div>
               <div className="grid gap-2 md:col-span-2">
                 <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-labels">
@@ -359,15 +379,28 @@ export function EventsMonitorsPage() {
                         placeholder="e.g. Cook County, IL"
                       />
                     </div>
-                    <div className="grid gap-2">
-                      <label className="text-[11px] uppercase tracking-wide text-gray-500">
-                        Talkgroup IDs (comma or newline)
-                      </label>
-                      <textarea
-                        className="ss-input min-h-[5rem] resize-y font-mono text-xs"
-                        value={editTg}
-                        onChange={(e) => setEditTg(e.target.value)}
-                      />
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div className="grid gap-2">
+                        <label className="text-[11px] uppercase tracking-wide text-gray-500">
+                          Talkgroup IDs (comma or newline)
+                        </label>
+                        <textarea
+                          className="ss-input min-h-[5rem] resize-y font-mono text-xs"
+                          value={editTg}
+                          onChange={(e) => setEditTg(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <label className="text-[11px] uppercase tracking-wide text-gray-500">
+                          Known Units & Prefix Rules
+                        </label>
+                        <textarea
+                          className="ss-input min-h-[5rem] resize-y font-mono text-xs"
+                          value={editKnownUnits}
+                          onChange={(e) => setEditKnownUnits(e.target.value)}
+                          placeholder="e.g. 38xx = Park Hills&#10;100s = Farmington PD"
+                        />
+                      </div>
                     </div>
                     <div className="grid gap-2">
                       <label className="text-[11px] uppercase tracking-wide text-gray-500">Start event labels</label>
@@ -435,6 +468,12 @@ function MonitorSummary({ m }: { m: MonitorResponse }) {
       <div className="min-w-0 flex-1">
         <p className="ss-events-monitor-meta-label">Region Context</p>
         <p className="text-xs text-gray-300">{m.geo_region || <span className="text-gray-600">None</span>}</p>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="ss-events-monitor-meta-label">Known Units</p>
+        <p className="text-xs text-gray-300 font-mono truncate" title={m.known_units || undefined}>
+          {m.known_units ? m.known_units.replace(/\s+/g, ' ') : <span className="text-gray-600 font-sans">None</span>}
+        </p>
       </div>
       <div className="min-w-0 flex-1">
         <p className="ss-events-monitor-meta-label">Talkgroups</p>

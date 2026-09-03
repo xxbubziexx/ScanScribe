@@ -63,7 +63,7 @@ export function DatasetPage() {
 
   const query = useQuery({
     queryKey: [
-      'database-logs',
+      'dataset-logs',
       page,
       pageSize,
       debouncedSearch,
@@ -94,6 +94,7 @@ export function DatasetPage() {
     mutationFn: (id: number) => logsApi.delete(id),
     onSuccess: () => {
       addToast('Log entry removed', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Delete failed'), 'error'),
@@ -108,6 +109,21 @@ export function DatasetPage() {
     [delMutation, isAdmin],
   )
 
+  const clearMutation = useMutation({
+    mutationFn: () => logsApi.clearReviewed(),
+    onSuccess: (res) => {
+      addToast(res.message || 'Dataset cleared', 'success')
+      setSelectedIds(new Set())
+      void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+    },
+    onError: (e: unknown) => addToast(errorMessage(e, 'Failed to clear dataset'), 'error'),
+  })
+
+  const onClearDataset = () => {
+    if (!window.confirm('Clear all spans from the dataset? This will unreview all entries and empty the dataset list.')) return
+    clearMutation.mutate()
+  }
 
   const onExportDataset = async () => {
     try {
@@ -182,19 +198,26 @@ export function DatasetPage() {
           </select>
         </div>
         <div className="flex items-end gap-2">
-          
+          <button
+            type="button"
+            className="ss-btn-ghost text-red-400 hover:bg-red-400/10 hover:text-red-300 border-red-500/30"
+            onClick={onClearDataset}
+            disabled={clearMutation.isPending || query.isFetching || total === 0}
+            title="Unreview and remove all spans from this dataset"
+          >
+            {clearMutation.isPending ? 'Clearing…' : 'Clear Dataset'}
+          </button>
           <button
             type="button"
             className="ss-btn-ghost"
             onClick={onExportDataset}
-            disabled={query.isFetching}
+            disabled={query.isFetching || total === 0}
           >
             Export Fine-Tuning Dataset
           </button>
         </div>
       </div>
 
-      
       {selectedIds.size > 0 && (
         <div className="bg-indigo-500/10 border border-indigo-500/30 p-2 rounded flex items-center justify-between mb-4">
           <span className="text-sm text-indigo-200 ml-2 font-bold">{selectedIds.size} spans selected</span>
@@ -204,7 +227,8 @@ export function DatasetPage() {
               for (const id of selectedIds) await logsApi.unreview(id)
               addToast('Removed selected spans', 'success')
               setSelectedIds(new Set())
-              queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+              void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
+              void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
             }}>Remove Selected</button>
             <button className="ss-btn-primary text-xs py-1" onClick={async () => {
               try {
@@ -255,12 +279,9 @@ export function DatasetPage() {
                 <tr>
                   <th className="ss-db-th w-10"></th>
                   <th className="ss-db-th">Time</th>
-                  
+                  <th className="ss-db-th">Talkgroup</th>
                   <th className="ss-db-th">Filename</th>
                   <th className="ss-db-th">Transcript</th>
-                  
-                  
-                  
                   <th className="ss-db-th text-right"> </th>
                 </tr>
               </thead>
@@ -286,7 +307,7 @@ export function DatasetPage() {
                     />
                     {expandedId === row.id && (
                       <tr>
-                        <td className="ss-db-td p-0" colSpan={8}>
+                        <td className="ss-db-td p-0" colSpan={6}>
                           <LogExpandedRow row={row} />
                         </td>
                       </tr>
@@ -374,7 +395,7 @@ function LogRow({
       <td className="ss-db-td" title={row.filename}>
         <span className="ss-db-filename-clip block">{row.filename || '—'}</span>
       </td>
-      <td className="ss-db-td" title={row.transcript || ''}>
+      <td className="ss-db-td">
         <span className="ss-db-td-clip block text-gray-400">
           
           {row.corrected_transcript || row.transcript || '—'}
@@ -447,6 +468,7 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
     mutationFn: () => logsApi.unreview(row.id),
     onSuccess: () => {
       addToast('Removed from dataset', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
     },
   })
@@ -455,6 +477,7 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
     mutationFn: (newText: string) => logsApi.review(row.id, newText),
     onSuccess: () => {
       addToast('Transcript updated', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Update failed'), 'error'),

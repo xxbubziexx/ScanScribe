@@ -16,6 +16,7 @@ import { EntitiesTable } from '@/pages/DataExplorer/Tables/EntitiesTable'
 import { EventsLayout } from '@/pages/Events/EventsLayout'
 import { EventsIncidentsPage } from '@/pages/Events/IncidentsPage'
 import { EventsMonitorsPage } from '@/pages/Events/EventsMonitorsPage'
+import { EventsDebugPage } from '@/pages/Events/EventsDebugPage'
 import { UsersPage } from '@/pages/Users/UsersPage'
 import { RequireAdmin } from '@/components/auth/RequireAdmin'
 import { DocumentTitle } from '@/components/layout/DocumentTitle'
@@ -60,7 +61,7 @@ export default function App() {
               <Route index element={<EventsIncidentsPage />} />
               <Route path="monitors" element={<EventsMonitorsPage />} />
               <Route path="span-store" element={<Navigate to="/data/spans" replace />} />
-              <Route path="debug" element={<Navigate to="/data/events" replace />} />
+              <Route path="debug" element={<EventsDebugPage />} />
             </Route>
             <Route path="/users" element={<UsersPage />} />
             <Route
