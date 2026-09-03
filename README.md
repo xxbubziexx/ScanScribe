@@ -32,26 +32,103 @@ An open source AI powered transcription system designed for public safety radio 
 
 ## Fast Interactive Setup (Recommended)
 
-After cloning the repository, simply run the setup wizard:
+ScanScribe features an automated setup wizard (`setup.sh` / `setup.ps1` / `setup.py`) that handles environment generation, security keys, hardware acceleration configuration, and Docker container initialization in under a minute.
 
-**Linux / macOS:**
+### Step 1: Install Docker Desktop & Prerequisites
+Before starting, ensure you have:
+1. **Docker & Docker Compose** installed and running:
+   - **Windows & macOS:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (ensure Docker Desktop is running before launching setup).
+   - **Linux:** [Docker Engine & Compose Plugin](https://docs.docker.com/engine/install/)
+2. **Python 3.8+** installed on your host system:
+   - **Windows:** Download from [python.org](https://www.python.org/downloads/) (make sure to check *"Add python.exe to PATH"* during installation).
+   - **Linux/macOS:** Pre-installed on most distributions (`python3 --version`).
+
+### Step 2: Clone the Repository
+Open your terminal (or PowerShell on Windows):
+
 ```bash
-./setup.sh
+git clone https://github.com/xxbubziexx/ScanScribe.git
+cd ScanScribe
 ```
 
-**Windows (PowerShell):**
-```powershell
-.\setup.ps1
+### Step 3: Run the Setup Wizard
+Launch the script for your operating system:
+
+- **Linux / macOS / Git Bash:**
+  ```bash
+  ./setup.sh
+  ```
+- **Windows (PowerShell):**
+  ```powershell
+  .\setup.ps1
+  ```
+  *(If PowerShell blocks the script with an execution policy notice, run: `powershell -ExecutionPolicy Bypass -File .\setup.ps1`)*
+- **Universal (Any OS with Python):**
+  ```bash
+  python setup.py
+  ```
+
+### Step 4: Follow the Interactive Prompts
+The wizard will walk you through 4 quick questions:
+
+1. **Hardware Acceleration Selection:**
+   - The wizard automatically checks whether an NVIDIA GPU is available (`nvidia-smi`).
+   - Select `[1] CPU` for standard Intel/AMD CPUs, or `[2] GPU` if you have an NVIDIA card with the Container Toolkit installed.
+   - *The script will automatically copy the matching `docker-compose.yml` and `requirements.txt` pair and set `device` in `config.yml`.*
+2. **Initial Administrator Password:**
+   - Enter your desired password for the default `admin` account (default: `admin`).
+3. **Local Timezone:**
+   - Enter your timezone name (e.g., `America/Chicago`, `America/New_York`, `UTC`).
+4. **Automatic Launch:**
+   - When asked *"Would you like to build and start ScanScribe now with Docker Compose? [Y/n]"*, press **Enter** to start immediately.
+
+### What the Setup Script Automates Behind the Scenes:
+- [x] Generates a cryptographically secure 64-character random `SECRET_KEY` in `.env`.
+- [x] Configures `docker-compose.yml` and `requirements.txt` for your chosen architecture (CPU or GPU).
+- [x] Configures `config.yml` with the correct `model.device` setting (`cpu` or `cuda`).
+- [x] Bootstraps initial administrator credentials in `.env`.
+- [x] Initializes all required runtime directories (`./data`, `./logs`, `./audio_storage`, `./models`).
+- [x] Checks `./models/` for existing Whisper and NER models.
+- [x] Runs `docker compose up -d --build` to launch the application.
+
+### Step 5: Access the Web Interface
+Once the build completes:
+1. Open your browser and navigate to: **`http://localhost:8000`**
+2. Log in using your administrator credentials:
+   - **Username:** `admin`
+   - **Password:** *(the password you entered during setup)*
+
+*(Note: If you ever register a new user on a clean installation, the very first user created is also automatically granted full Administrator privileges).*
+
+---
+
+### Non-Interactive & Automated Deployments (CLI Flags)
+For automated scripting, headless servers, or CI/CD pipelines, pass flags to bypass interactive prompts:
+
+```bash
+# Automated CPU setup and immediate launch
+python setup.py --cpu --yes --start
+
+# Automated GPU setup and immediate launch
+python setup.py --gpu --yes --start
 ```
 
-*(Or run `python setup.py` on any operating system)*
+---
 
-The wizard automatically:
-1. Checks for Docker and detects NVIDIA GPU / CUDA support.
-2. Generates a secure random `SECRET_KEY` in `.env`.
-3. Configures `docker-compose.yml`, `requirements.txt`, and `config.yml` for your selected runtime (CPU or GPU).
-4. Sets up your initial administrator credentials.
-5. Creates all required data/model directories and optionally boots Docker Compose!
+### Useful Post-Setup Commands
+```bash
+# View live container logs
+docker compose logs -f
+
+# Check container status
+docker compose ps
+
+# Restart ScanScribe
+docker compose restart scanscribe
+
+# Stop ScanScribe
+docker compose down
+```
 
 ---
 
