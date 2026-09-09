@@ -26,7 +26,7 @@ BROADCAST_TYPE_SLUGS = frozenset({
 })
 WORKER_BROADCAST_EVENT_TYPE = "BROADCAST"
 
-SYSTEM_PROMPT = """You are an expert 911 / Public Safety Dispatch Triage and Incident Routing Assistant.
+SYSTEM_PROMPT_TEMPLATE = """You are an expert 911 / Public Safety Dispatch Triage and Incident Routing Assistant.
 Your task is to analyze an incoming radio transmission transcript for a specific public safety monitor (department/talkgroup) alongside any currently open incidents, and decide the appropriate routing action in a single step.
 
 ### Routing Actions:
@@ -58,6 +58,24 @@ You MUST respond with a single valid JSON object strictly adhering to this schem
 - If the monitor has NO open incidents and the transmission is not an incident (or just static / non-emergency), choose "SKIP".
 - Output ONLY the JSON object. Do not include markdown preamble.
 """
+SYSTEM_PROMPT = SYSTEM_PROMPT_TEMPLATE
+
+
+def build_system_prompt(known_units: Optional[str] = None) -> str:
+    """Build the system prompt, injecting monitor-specific Known Units and Prefix Rules as authoritative ground truth."""
+    prompt = SYSTEM_PROMPT_TEMPLATE.strip()
+    if known_units and known_units.strip():
+        units_block = (
+            "\n\n### Known Unit Identifiers & Prefix Rules (AUTHORITATIVE GROUND TRUTH):\n"
+            "The following unit callsigns and prefix naming conventions are strictly defined for this monitor:\n"
+            f"[{known_units.strip()}]\n"
+            "- You MUST prioritize and normalize unit designations against these established identifiers.\n"
+            "- Do NOT invent, hallucinate, or misattribute unit callsigns that conflict with this list.\n"
+            "- When extracting the 'units' array, map noisy or phonetically transcribed callsigns to their matching known unit form."
+        )
+        prompt += units_block
+    return prompt
+
 
 
 def _clean_and_parse_json(text: str) -> Optional[Dict[str, Any]]:
@@ -144,9 +162,6 @@ def build_user_prompt(
         f"Talkgroup: {talkgroup or 'Unknown'}",
         f"Current Transmission Transcript:\n\"{transcript}\"",
     ]
-
-    if known_units and known_units.strip():
-        user_content.append(f"Known Units and Prefix Rules for this Monitor: [{known_units.strip()}]")
 
     if entities:
         ent_lines = []
@@ -247,7 +262,7 @@ class EventsRouter:
         payload: Dict[str, Any] = {
             "model": model,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": build_system_prompt(known_units=known_units)},
                 {"role": "user", "content": user_prompt},
             ],
             "response_format": {"type": "json_object"},
