@@ -81,6 +81,10 @@
     @apply max-h-[460px] space-y-1.5 overflow-y-auto pr-1;
   }
 
+  .ss-search-scroll {
+    @apply max-h-[850px] min-h-[460px] space-y-1.5 overflow-y-auto pr-1;
+  }
+
   .ss-tg-row {
     @apply flex w-full items-center gap-2 text-left sm:gap-4;
   }
@@ -158,5 +162,17 @@
 
   .ss-highlight {
     @apply rounded bg-yellow-500/30 px-0.5 text-yellow-200;
+  }
+
+  .ss-attached-badge {
+    @apply inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold tracking-wide transition-colors shrink-0;
+  }
+
+  .ss-attached-badge--open {
+    @apply border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:border-amber-400 hover:bg-amber-500/25;
+  }
+
+  .ss-attached-badge--closed {
+    @apply border border-white/15 bg-white/5 text-gray-400 hover:border-white/25 hover:text-gray-200;
   }
 }

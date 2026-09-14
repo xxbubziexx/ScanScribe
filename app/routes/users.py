@@ -3,7 +3,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
+from datetime import datetime, timezone
 
 from ..database import get_db
 from ..models.user import User
@@ -11,6 +12,14 @@ from .auth import get_current_active_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 logger = logging.getLogger(__name__)
+
+
+def _format_iso(dt: Optional[datetime]) -> Optional[str]:
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 
 class UserResponse(BaseModel):
@@ -21,6 +30,7 @@ class UserResponse(BaseModel):
     is_active: bool
     is_admin: bool
     created_at: str
+    last_seen_at: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -44,10 +54,12 @@ async def list_users(
             email=user.email,
             is_active=user.is_active,
             is_admin=user.is_admin,
-            created_at=user.created_at.isoformat() if user.created_at else ""
+            created_at=_format_iso(user.created_at) or "",
+            last_seen_at=_format_iso(user.last_seen_at),
         )
         for user in users
     ]
+
 
 
 @router.post("/{user_id}/promote")

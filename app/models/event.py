@@ -119,3 +119,13 @@ class EntityObservation(EventsBase):
         Index("idx_entobs_monitor_label_ts", "monitor_id", "label", "ts"),
         Index("idx_entobs_canonical_label", "canonical", "label"),
     )
+
+
+class SystemSetting(EventsBase):
+    """Global key-value system settings for the Events pipeline (e.g. global prompt rules, 10-codes)."""
+    __tablename__ = "system_settings"
+
+    key = Column(String(128), primary_key=True, index=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+

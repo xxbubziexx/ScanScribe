@@ -130,4 +130,25 @@ export async function downloadDatasetExport(): Promise<void> {
   URL.revokeObjectURL(url)
 }
 
+export async function downloadAudioFile(audioPath: string, filename?: string): Promise<void> {
+  const token = getToken()
+  const url = `/${audioPath}`
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!res.ok) {
+    throw new ApiError(`Failed to download audio file (${res.status})`, res.status)
+  }
+  const blob = await res.blob()
+  const blobUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  const finalFilename = filename || audioPath.split('/').pop() || 'audio.mp3'
+  a.download = finalFilename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(blobUrl)
+}
+
 export { buildListParams }

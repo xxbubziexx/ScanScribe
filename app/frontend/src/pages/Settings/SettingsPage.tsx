@@ -82,13 +82,18 @@ export function SettingsPage() {
     staleTime: 30_000,
   })
 
+  const [autoRestart, setAutoRestart] = useState(true)
+
   const saveMutation = useMutation({
-    mutationFn: () => settingsApi.saveConfig(yaml),
+    mutationFn: (restart: boolean) => settingsApi.saveConfig(yaml, restart),
     onSuccess: (r) => {
-      setStatusBanner({ message: r.message, variant: 'success' })
-      setNeedsRestart(true)
+      setStatusBanner({ message: r.message, variant: r.restarting ? 'warning' : 'success' })
+      setNeedsRestart(!r.restarting)
       void queryClient.invalidateQueries({ queryKey: ['settings-config'] })
-      addToast('Configuration saved', 'success')
+      addToast(r.restarting ? 'Configuration saved. Restarting ScanScribe…' : 'Configuration saved', r.restarting ? 'warning' : 'success')
+      if (r.restarting) {
+        window.setTimeout(() => window.location.reload(), 3500)
+      }
     },
     onError: (e: unknown) => {
       const msg = errorMessage(e, 'Failed to save config')
@@ -172,7 +177,7 @@ export function SettingsPage() {
   }, [yaml, addToast])
 
   const onSave = () => {
-    saveMutation.mutate()
+    saveMutation.mutate(autoRestart)
   }
 
   const onRestart = () => {
@@ -252,7 +257,16 @@ export function SettingsPage() {
           <h1 className="ss-db-title mb-0">Configuration editor</h1>
           <p className="mt-1 text-sm text-gray-500">Editing: config.yml</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="rounded border-white/20 bg-black/40 text-amber-500 focus:ring-amber-500/50"
+              checked={autoRestart}
+              onChange={(e) => setAutoRestart(e.target.checked)}
+            />
+            <span>Auto-restart to apply</span>
+          </label>
           {needsRestart && (
             <button
               type="button"

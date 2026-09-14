@@ -7,13 +7,13 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from ..config import get_settings
 from ..database import EventsSessionLocal, LogsSessionLocal
-from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore, EntityObservation
+from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore, EntityObservation, SystemSetting
 from ..models.log_entry import LogEntry
 from .events_common import event_work_lock, parse_json_list
 from .entity_normalize import normalize_entity, supported_labels as _entity_supported_labels
@@ -176,8 +176,8 @@ def _entity_observations_from_entities(
         for raw in values:
             if not raw:
                 continue
-            canonical = normalize_entity(label, raw)
-            if not canonical:
+            cleaned_span = raw.strip().strip(".,;:\"'()")
+            if not cleaned_span or not any(c.isalnum() for c in cleaned_span):
                 continue
             out.append(
                 EntityObservation(
@@ -187,8 +187,8 @@ def _entity_observations_from_entities(
                     log_entry_id=log_entry_id,
                     ts=ts or datetime.now(timezone.utc),
                     label=label,
-                    canonical=canonical[:500],
-                    raw=raw[:500],
+                    canonical=cleaned_span[:500],
+                    raw=cleaned_span[:500],
                 )
             )
     return out
@@ -246,6 +246,86 @@ def _sort_entities_together(parts: List[str]) -> List[str]:
     alpha = sorted([x for x in parts if x and not is_numeric(x)])
     numeric = sorted([x for x in parts if x and is_numeric(x)])
     return alpha + numeric
+
+
+_EMERGENCY_KEYWORD_RE = re.compile(
+    r"\b(?:"
+    r"helicopter|medevac|air\s*evac|airevac|lifeflight|flight|air\s*care|eta|"
+    r"crash|accident|collision|mva|mvc|overturned|rollover|"
+    r"fire|smoke|structure|alarm|flames|working\s+fire|brush\s+fire|"
+    r"scene|en\s*route|enroute|responding|arriving|arrived|staged|staging|clearing|"
+    r"entrapped|entrapment|extrication|pin-?in|pinned|"
+    r"patient|patients|injury|injuries|unresponsive|cpr|overdose|cardiac|"
+    r"transport|transporting|hospital|er|trauma|"
+    r"command|downgrade|second\s+page|second\s+tone|position|"
+    r"shooting|shots|robbery|assault|pursuit|custody|arrest|suspect|"
+    r"traffic\s+stop|standby|abort|"
+    r"ems|medic|engine|ladder|truck|rescue|squad|battalion|chief|deputy|officer|trooper"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_STANDALONE_CHATTER_PARTS = (
+    r"10[\s-]?4(?:\s+(?:copy|thanks|thank\s+you|roger))?"
+    r"|copy(?:\s+that|\s+thanks|\s+thank\s+you)?"
+    r"|copied"
+    r"|that'?s\s+clear"
+    r"|roger(?:\s+that)?"
+    r"|thanks?(?:\s+you)?"
+    r"|thank\s+you(?:\s+sir|\s+ma'?am)?"
+    r"|have\s+a\s+good\s+(?:night|one|day|shift)"
+    r"|good\s+(?:night|morning|afternoon|evening)"
+    r"|central\s+\d+"
+    r"|dispatch\s+\d+"
+    r"|ok(?:ay)?"
+    r"|affirmative"
+    r"|negative"
+    r"|check\s+mdt"
+    r"|\d{1,3}[\s,]+(?:\d{2}[:.]?\d{2}|\d{4})"
+    r"|(?:\d{2}[:.]\d{2})"
+)
+
+_STANDALONE_CHATTER_RE = re.compile(
+    rf"^(?:\s*(?:{_STANDALONE_CHATTER_PARTS})[\s.,!?-]*)+$",
+    re.IGNORECASE,
+)
+
+
+def _is_pure_chatter(
+    transcript: str,
+    entities: Optional[Dict[str, List[str]]] = None,
+) -> bool:
+    """
+    Zero-token pre-filter to detect pure acknowledgments, pleasantries,
+    or short non-operational traffic without invoking the LLM router.
+    """
+    if not transcript or not transcript.strip():
+        return True
+
+    text = transcript.strip()
+
+    # If any emergency or operational keywords are present, NEVER treat as pure chatter
+    if _EMERGENCY_KEYWORD_RE.search(text):
+        return False
+
+    # Check for standalone acknowledgments, pleasantries, callouts, or time checks
+    if _STANDALONE_CHATTER_RE.match(text):
+        return True
+
+    # Check for short text (< 5 words) with NO units, NO status, NO locations, and NO emergency keywords
+    words = re.findall(r"\b\w+\b", text)
+    if len(words) < 5:
+        has_entities = False
+        if entities:
+            for k in ("UNIT", "STATUS", "LOC", "ADDRESS", "EVT_TYPE"):
+                vals = entities.get(k)
+                if vals and any(bool(v and str(v).strip()) for v in vals):
+                    has_entities = True
+                    break
+        if not has_entities:
+            return True
+
+    return False
 
 
 def _build_header_from_entities(entities: Dict[str, List[str]], transcript: str) -> Dict[str, str]:
@@ -386,6 +466,95 @@ def start_event_cleanup_worker() -> None:
     threading.Thread(target=_loop, daemon=True, name="events-cleanup").start()
 
 
+def get_global_prompt_rules(events_db=None) -> str:
+    """Fetch global system prompt rules, checking DB SystemSetting first, then config.yml."""
+    if events_db is not None:
+        try:
+            setting = events_db.query(SystemSetting).filter(SystemSetting.key == "global_prompt_rules").first()
+            if setting and setting.value and setting.value.strip():
+                return setting.value.strip()
+        except Exception as e:
+            logger.debug("Failed reading global_prompt_rules from DB: %s", e)
+
+    cfg = getattr(get_settings().config, "events_pipeline", None)
+    cfg_rules = getattr(cfg, "global_prompt_rules", "") if cfg else ""
+    return (cfg_rules or "").strip()
+
+
+def summarize_event_attachments(
+    event: Event,
+    events_db,
+    logs_db,
+    force: bool = False,
+) -> Optional[str]:
+    """Fetch all chronological attachments for an event and generate an updated summary using the router's model."""
+    try:
+        # Debounce summary updates for active incidents: at most once every 90s unless forced or closing
+        if not force and event.status == "open" and event.summary and event.master_last_run_at:
+            last_run = _utc_from_event_created(event.master_last_run_at)
+            elapsed = (datetime.now(timezone.utc) - last_run).total_seconds()
+            if elapsed < 90.0:
+                logger.debug("Debouncing summary update for event_id=%s (last ran %ds ago)", event.event_id, int(elapsed))
+                return event.summary
+
+        links = (
+            events_db.query(EventTranscriptLink)
+            .filter(EventTranscriptLink.event_id == event.id)
+            .order_by(EventTranscriptLink.linked_at.asc(), EventTranscriptLink.id.asc())
+            .all()
+        )
+        if not links:
+            return event.summary
+
+        log_ids = [l.log_entry_id for l in links if l.log_entry_id is not None]
+        log_rows = {}
+        if log_ids:
+            for r in logs_db.query(LogEntry).filter(LogEntry.id.in_(log_ids)).all():
+                log_rows[r.id] = r
+
+        attachments = []
+        for l in links:
+            le = log_rows.get(l.log_entry_id)
+            if not le or not le.transcript or not le.transcript.strip():
+                continue
+            time_str = None
+            if le.timestamp:
+                try:
+                    time_str = le.timestamp.strftime("%H:%M:%S")
+                except Exception:
+                    pass
+            attachments.append({
+                "time": time_str,
+                "talkgroup": le.talkgroup or "",
+                "transcript": le.transcript.strip(),
+            })
+
+        if not attachments:
+            return event.summary
+
+        global_rules = get_global_prompt_rules(events_db)
+        new_summary = EventsRouter.generate_event_summary(
+            event_type=event.event_type,
+            location=event.resolved_address or event.location,
+            units=event.units,
+            status_detail=event.status_detail,
+            status=event.status,
+            attachments=attachments,
+            current_summary=event.summary,
+            global_rules=global_rules,
+        )
+
+        if new_summary and new_summary.strip():
+            event.summary = new_summary.strip()
+            event.master_last_run_at = datetime.now(timezone.utc)
+            events_db.commit()
+
+        return event.summary
+    except Exception as e:
+        logger.warning("Failed to generate summary for event_id=%s: %s", getattr(event, "event_id", ""), e)
+        return event.summary
+
+
 def _create_event_full(
     events_db,
     monitor_id: int,
@@ -441,6 +610,92 @@ def _create_event_full(
         ev_status = "open"
         closed_at = None
 
+        # Deduplication safeguard: check if a very recent open event of the same type exists on this monitor
+        recent_cutoff = datetime.now(timezone.utc) - timedelta(seconds=120)
+        existing_dup = (
+            events_db.query(Event)
+            .filter(
+                Event.monitor_id == monitor_id,
+                Event.status == "open",
+                Event.created_at >= recent_cutoff,
+            )
+            .first()
+        )
+        if existing_dup:
+            e1 = (existing_dup.event_type or "").lower()
+            e2 = (header["event_type"] or "").lower()
+            generic_words = {"call", "emergency", "incident", "report", "check", "in", "progress", "active", "investigation", "response", "detail", "dispatch", "alarm"}
+            e1_words = set(re.findall(r"[a-z0-9]+", e1)) - generic_words
+            e2_words = set(re.findall(r"[a-z0-9]+", e2)) - generic_words
+            same_type = bool(
+                (e1 and e2 and (e1 in e2 or e2 in e1))
+                or (e1_words and e2_words and (e1_words & e2_words))
+            )
+            same_loc = bool(existing_dup.location and header["location"] and existing_dup.location.lower() == header["location"].lower())
+            if same_type or same_loc:
+                logger.warning(
+                    "Events deduplication safeguard: merging into recent open event %s (%s) instead of creating duplicate",
+                    existing_dup.event_id,
+                    existing_dup.event_type,
+                )
+                events_db.add(
+                    EventTranscriptLink(
+                        event_id=existing_dup.id,
+                        log_entry_id=log_entry_id,
+                        entities_json=_entities_json(entities),
+                        llm_reason=(debug_reason or "").strip()[:2000] or None,
+                    )
+                )
+                loc_changed = False
+                if not existing_dup.location and header["location"]:
+                    existing_dup.location = header["location"]
+                    loc_changed = True
+                if header["units"]:
+                    if not existing_dup.units:
+                        existing_dup.units = header["units"]
+                    else:
+                        existing_units = set(u.strip() for u in existing_dup.units.split(",") if u.strip())
+                        for nu in header["units"].split(","):
+                            if nu.strip():
+                                existing_units.add(nu.strip())
+                        existing_dup.units = ", ".join(sorted(existing_units))
+                if header["status_detail"] and (not existing_dup.status_detail or existing_dup.status_detail == "Active"):
+                    existing_dup.status_detail = header["status_detail"]
+
+                existing_dup.master_last_run_at = datetime.now(timezone.utc)
+                events_db.commit()
+
+                logs_db = LogsSessionLocal()
+                try:
+                    summarize_event_attachments(existing_dup, events_db, logs_db)
+                except Exception as e:
+                    logger.warning("Failed updating event summary on deduplication merge: %s", e)
+                finally:
+                    logs_db.close()
+
+                if loc_changed and existing_dup.location:
+                    _dispatch_geocoding_for_event(existing_dup.event_id, existing_dup.location, monitor_id)
+
+                span_count = events_db.query(EventTranscriptLink).filter(EventTranscriptLink.event_id == existing_dup.id).count()
+                websocket_manager.broadcast_sync({
+                    "type": "event_update",
+                    "action": "attach",
+                    "data": {
+                        "id": existing_dup.id,
+                        "event_id": existing_dup.event_id,
+                        "monitor_id": monitor_id,
+                        "status": existing_dup.status,
+                        "event_type": existing_dup.event_type,
+                        "location": existing_dup.location,
+                        "resolved_address": existing_dup.resolved_address,
+                        "units": existing_dup.units,
+                        "status_detail": existing_dup.status_detail,
+                        "summary": existing_dup.summary,
+                        "spans_attached": span_count,
+                    }
+                })
+                return existing_dup.event_id
+
     event_id = uuid.uuid4().hex[:16]
     event = Event(
         event_id=event_id,
@@ -468,6 +723,15 @@ def _create_event_full(
     )
     events_db.commit()
 
+    # Generate initial summary based on the initial attachment
+    logs_db = LogsSessionLocal()
+    try:
+        summarize_event_attachments(event, events_db, logs_db)
+    except Exception as e:
+        logger.warning("Failed initial event summary generation: %s", e)
+    finally:
+        logs_db.close()
+
     _dispatch_geocoding_for_event(event_id, header.get("location"), monitor_id)
 
     websocket_manager.broadcast_sync({
@@ -487,7 +751,7 @@ def _create_event_full(
             "units": header["units"],
             "status_detail": header["status_detail"],
             "original_transcription": header["original_transcription"],
-            "summary": header["summary"],
+            "summary": event.summary,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "closed_at": closed_at.isoformat() if closed_at else None,
             "spans_attached": 1,
@@ -596,6 +860,23 @@ def process_transcript_for_monitor(
                 )
                 return
 
+        # Zero-token local pre-filter when open incidents exist
+        if open_events and _is_pure_chatter(transcript, entities):
+            append_pipeline_debug(
+                monitor_id=monitor_id,
+                log_entry_id=log_entry_id,
+                action="local_skip_chatter",
+                event_id="",
+                duration_ms=ner_duration_ms,
+                entities=entities,
+                error="",
+                raw_output=raw_output,
+                transcript=transcript,
+                llm_output="Filtered by zero-token local chatter pre-filter",
+            )
+            logger.info("Events: local chatter pre-filter skipped transcript=%r log_entry_id=%s", transcript, log_entry_id)
+            return
+
         # Fetch recent linked transcripts for open events to provide rich context to LLM
         open_incidents_payload: List[Dict[str, Any]] = []
         for ev in open_events:
@@ -616,22 +897,57 @@ def process_transcript_for_monitor(
                 "event_id": ev.event_id,
                 "event_type": ev.event_type,
                 "location": ev.location,
+                "resolved_address": ev.resolved_address,
                 "units": ev.units,
                 "status_detail": ev.status_detail,
+                "summary": ev.summary,
                 "recent_transcripts": recent_t_texts,
             })
 
-        # Fetch recent channel spans for conversational context
+        # Fetch recent channel spans for canonical conversational context
+        recent_limit = int(getattr(cfg, "recent_spans_limit", 6) or 6)
+        if recent_limit <= 0:
+            recent_limit = 6
+
         recent_spans_rows = (
-            events_db.query(SpanStore.transcript)
-            .filter(SpanStore.monitor_id == monitor_id, SpanStore.id < span_row.id)
+            events_db.query(SpanStore)
+            .filter(
+                SpanStore.monitor_id == monitor_id,
+                SpanStore.id < span_row.id,
+                SpanStore.transcript.isnot(None),
+                SpanStore.transcript != "",
+            )
             .order_by(SpanStore.id.desc())
-            .limit(3)
+            .limit(recent_limit)
             .all()
         )
-        recent_spans = [r[0] for r in reversed(recent_spans_rows) if r and r[0]]
+        recent_spans: List[Dict[str, Any]] = []
+        for s in reversed(recent_spans_rows):
+            t_text = (s.transcript or "").strip()
+            if not t_text:
+                continue
+            time_str = None
+            if getattr(s, "created_at", None):
+                ca = s.created_at
+                if isinstance(ca, datetime):
+                    time_str = ca.strftime("%H:%M:%S")
+                elif isinstance(ca, str):
+                    try:
+                        time_str = datetime.fromisoformat(ca.replace("Z", "+00:00")).strftime("%H:%M:%S")
+                    except Exception:
+                        time_str = ca[:8]
+
+            recent_spans.append({
+                "id": s.id,
+                "transcript": t_text,
+                "talkgroup": s.talkgroup or "",
+                "units": s.units or "",
+                "location": s.locations or s.addresses or "",
+                "time": time_str,
+            })
 
         # Call the single-pass OpenRouter LLM
+        global_rules = get_global_prompt_rules(events_db)
         decision = EventsRouter.route_transcript(
             monitor_name=monitor.name or "",
             talkgroup=talkgroup or "",
@@ -640,6 +956,7 @@ def process_transcript_for_monitor(
             open_incidents=open_incidents_payload,
             recent_spans=recent_spans,
             known_units=getattr(monitor, "known_units", None),
+            global_rules=global_rules,
         )
 
         action = decision.get("action", "SKIP")
@@ -762,9 +1079,16 @@ def process_transcript_for_monitor(
                     target_ev.master_last_run_at = datetime.now(timezone.utc)
                     events_db.commit()
 
+                    # Generate updated cumulative summary based on all attachments so far
+                    try:
+                        summarize_event_attachments(target_ev, events_db, logs_db)
+                    except Exception as e:
+                        logger.warning("Failed updating event summary on attach: %s", e)
+
                     if loc_changed and target_ev.location:
                         _dispatch_geocoding_for_event(target_ev.event_id, target_ev.location, monitor_id)
 
+                    span_count = events_db.query(EventTranscriptLink).filter(EventTranscriptLink.event_id == target_ev.id).count()
                     websocket_manager.broadcast_sync({
                         "type": "event_update",
                         "action": "attach",
@@ -784,6 +1108,7 @@ def process_transcript_for_monitor(
                             "original_transcription": target_ev.original_transcription,
                             "summary": target_ev.summary,
                             "talkgroup": talkgroup,
+                            "spans_attached": span_count,
                         }
                     })
 
@@ -855,6 +1180,12 @@ def process_transcript_for_monitor(
                     target_ev.master_last_run_at = datetime.now(timezone.utc)
                     events_db.commit()
 
+                    # Generate final closing summary based on all attachments including resolution
+                    try:
+                        summarize_event_attachments(target_ev, events_db, logs_db, force=True)
+                    except Exception as e:
+                        logger.warning("Failed updating event summary on close: %s", e)
+
                     websocket_manager.broadcast_sync({
                         "type": "event_update",
                         "action": "close",
@@ -864,6 +1195,7 @@ def process_transcript_for_monitor(
                             "monitor_id": target_ev.monitor_id,
                             "status": "closed",
                             "closed_at": target_ev.closed_at.isoformat() if target_ev.closed_at else None,
+                            "summary": target_ev.summary,
                         }
                     })
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { eventsApi } from '../../lib/events'
 import { logsApi } from '../../lib/logs'
@@ -21,6 +21,9 @@ export function EventsMonitorsPage() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
 
+  const [globalRules, setGlobalRules] = useState('')
+  const [globalRulesLoaded, setGlobalRulesLoaded] = useState(false)
+
   const [createName, setCreateName] = useState('')
   const [createTg, setCreateTg] = useState('')
   const [createLabels, setCreateLabels] = useState('EVT_TYPE')
@@ -33,6 +36,29 @@ export function EventsMonitorsPage() {
   const [editLabels, setEditLabels] = useState('')
   const [editGeoRegion, setEditGeoRegion] = useState('')
   const [editKnownUnits, setEditKnownUnits] = useState('')
+
+  const globalRulesQuery = useQuery({
+    queryKey: ['events-global-rules'],
+    queryFn: () => eventsApi.getGlobalRules(),
+    staleTime: 60_000,
+  })
+
+  useEffect(() => {
+    if (globalRulesQuery.data?.global_rules !== undefined && !globalRulesLoaded) {
+      setGlobalRules(globalRulesQuery.data.global_rules)
+      setGlobalRulesLoaded(true)
+    }
+  }, [globalRulesQuery.data?.global_rules, globalRulesLoaded])
+
+  const saveGlobalRulesMutation = useMutation({
+    mutationFn: () => eventsApi.saveGlobalRules(globalRules),
+    onSuccess: (data) => {
+      addToast('Global rules saved and active', 'success')
+      setGlobalRules(data.global_rules)
+      void queryClient.invalidateQueries({ queryKey: ['events-global-rules'] })
+    },
+    onError: (e: unknown) => addToast(errorMessage(e, 'Failed to save global rules'), 'error'),
+  })
 
   const monitorsQuery = useQuery({
     queryKey: ['events-monitors'],
@@ -329,6 +355,31 @@ export function EventsMonitorsPage() {
             </div>
           </aside>
         </div>
+      </section>
+
+      <section className="ss-events-monitor-create-card mb-6" aria-label="Global prompt rules">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-100">Global System Prompt Rules (10-Codes & Area Context)</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Authoritative rules injected into all monitors for the Events Router & Summaries. Ideal for 10-codes, signals, and regional area context.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="ss-btn-primary text-xs py-1.5 px-3"
+            disabled={saveGlobalRulesMutation.isPending}
+            onClick={() => saveGlobalRulesMutation.mutate()}
+          >
+            {saveGlobalRulesMutation.isPending ? 'Saving…' : 'Save Global Rules'}
+          </button>
+        </div>
+        <textarea
+          className="ss-input min-h-[5.5rem] resize-y font-mono text-xs w-full"
+          value={globalRules}
+          onChange={(e) => setGlobalRules(e.target.value)}
+          placeholder={`Example:\n10-4 = Acknowledged / Copy\n10-8 = In Service / Available\n10-23 = Arrived on Scene\n10-50 = Motor Vehicle Accident\n10-97 = On Scene\nArea Context: St. Francois County, Missouri (Farmington, Park Hills, Desloge, Bonne Terre)`}
+        />
       </section>
 
       <section aria-label="Monitor list">

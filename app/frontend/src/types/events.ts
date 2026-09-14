@@ -69,9 +69,23 @@ export interface EventListItem {
   audio_path?: string | null
 }
 
+export interface RateLimitStatus {
+  is_rate_limited: boolean
+  rate_limiter_enabled?: boolean
+  auto_start_events_after_timeout?: boolean
+  is_paused_waiting_start?: boolean
+  cooldown_until: number | null
+  cooldown_until_iso: string | null
+  seconds_remaining: number
+  reason: string | null
+  limit_source: string | null
+  reset_time_formatted: string | null
+}
+
 export interface EventsListResponse {
   items: EventListItem[]
   total: number
+  rate_limit?: RateLimitStatus
 }
 
 export interface EventDetailHeader {

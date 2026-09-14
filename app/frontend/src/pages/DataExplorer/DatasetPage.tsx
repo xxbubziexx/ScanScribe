@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/context/ToastContext'
-import { buildListParams, downloadDatasetExport, logsApi } from '@/lib/logs'
+import { buildListParams, downloadAudioFile, downloadDatasetExport, logsApi } from '@/lib/logs'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { errorMessage } from '@/types/api'
 import type { LogListEntry, LogsSortBy } from '@/types/logs'
@@ -407,17 +407,20 @@ function LogRow({
       <td className="ss-db-td text-right">
         <div className="ss-db-actions">
           {hasAudio && (
-            <a
+            <button
+              type="button"
               className="ss-text-link"
-              href={`/${row.audio_path}`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Download audio"
-              aria-label="Download audio"
+              onClick={(e) => {
+                e.stopPropagation()
+                void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
+                  console.error('Download failed:', err)
+                })
+              }}
+              title="Download audio file directly"
+              aria-label="Download audio file directly"
             >
               ⬇️
-            </a>
+            </button>
           )}
           {isAdmin && (
             <button

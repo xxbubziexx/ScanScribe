@@ -6,7 +6,7 @@ import re
 import os
 from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -17,6 +17,7 @@ from .transcription_engine import get_engine
 from .websocket import websocket_manager
 from .watcher import get_watcher_service
 from .events_worker import get_matching_monitor_ids, process_transcript_for_monitor
+from .redaction_service import redact_ssn
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +80,16 @@ def parse_timestamp_from_filename(filename: str) -> Optional[datetime]:
     return None
 
 
+_monitor_locks: Dict[int, asyncio.Lock] = {}
+
+
+def _get_monitor_lock(monitor_id: int) -> asyncio.Lock:
+    """Return an asyncio.Lock dedicated to the specified monitor to serialize background event routing."""
+    if monitor_id not in _monitor_locks:
+        _monitor_locks[monitor_id] = asyncio.Lock()
+    return _monitor_locks[monitor_id]
+
+
 async def _dispatch_events_pipeline(
     talkgroup: str,
     transcript_text: str,
@@ -93,14 +104,16 @@ async def _dispatch_events_pipeline(
         finally:
             events_db.close()
         for mid in monitor_ids:
-            await asyncio.to_thread(
-                process_transcript_for_monitor,
-                mid,
-                talkgroup,
-                transcript_text,
-                log_entry_id,
-                timestamp,
-            )
+            lock = _get_monitor_lock(mid)
+            async with lock:
+                await asyncio.to_thread(
+                    process_transcript_for_monitor,
+                    mid,
+                    talkgroup,
+                    transcript_text,
+                    log_entry_id,
+                    timestamp,
+                )
     except Exception as e:
         logger.warning("Events pipeline background task failed: %s", e)
 
@@ -289,6 +302,10 @@ class QueueProcessor:
                 audio_path.unlink()
                 file_handled = True
                 return
+            
+            # Apply PII/SSN redaction immediately so raw SSNs are never stored, logged, or broadcasted
+            if result.get("transcript"):
+                result["transcript"] = redact_ssn(result["transcript"])
             
             # Use file creation timestamp (extracted earlier)
             timestamp = file_timestamp

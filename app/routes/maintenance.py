@@ -3,6 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from typing import Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -124,3 +125,26 @@ async def purge_old_data(
         "audio_files_deleted": audio_files_deleted,
         "cutoff_date": cutoff_date
     }
+
+
+class RedactSsnRequest(BaseModel):
+    replacement: Optional[str] = None
+    dry_run: bool = False
+
+
+@router.post("/redact-ssn")
+async def trigger_ssn_redaction(
+    request: RedactSsnRequest = RedactSsnRequest(),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Scan and redact historical SSNs from all database tables. Admin only."""
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    from ..services.redaction_service import scrub_database_ssn
+    try:
+        stats = scrub_database_ssn(replacement=request.replacement, dry_run=request.dry_run)
+        return {"ok": True, "stats": stats}
+    except Exception as exc:
+        logger.exception("SSN scrub failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+

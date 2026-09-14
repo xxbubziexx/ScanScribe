@@ -40,9 +40,10 @@ async def get_config_file(
 @router.post("/config")
 async def save_config_file(
     config: ConfigContent,
+    restart: bool = False,
     current_user: User = Depends(get_current_admin_user)
 ):
-    """Save raw config.yml content."""
+    """Save raw config.yml content and optionally auto-restart application."""
     settings = get_settings()
     
     # Validate YAML syntax
@@ -63,7 +64,19 @@ async def save_config_file(
         # Reload settings
         reload_settings()
         
-        return {"message": "Configuration saved successfully. Click 'Restart' to apply changes."}
+        if restart:
+            import asyncio
+            async def _deferred_restart():
+                await asyncio.sleep(0.5)
+                os.kill(os.getpid(), signal.SIGTERM)
+
+            asyncio.create_task(_deferred_restart())
+            return {
+                "message": "Configuration saved successfully. ScanScribe is auto-restarting to apply settings...",
+                "restarting": True,
+            }
+
+        return {"message": "Configuration saved successfully. Click 'Restart' to apply changes.", "restarting": False}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save config: {str(e)}")

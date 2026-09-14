@@ -15,17 +15,8 @@ interface ControlPanelProps {
   readOnly?: boolean
 }
 
-function ResourceBar({
-  pct,
-  label,
-  value,
-}: {
-  pct: number
-  label: string
-  value: ReactNode
-}) {
-  const color =
-    pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-400' : 'bg-indigo-500'
+function ResourceBar({ pct, label, value }: { pct: number; label: string; value: ReactNode }) {
+  const color = pct >= 90 ? 'bg-red-500' : pct >= 70 ? 'bg-yellow-400' : 'bg-indigo-500'
 
   return (
     <div className="ss-rbar">
@@ -64,11 +55,11 @@ export function ControlPanel({
   return (
     <div className="ss-control">
       {!readOnly && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mb-4 grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2">
           <button
             onClick={onStart}
             disabled={loading || watcherState === 'running'}
-            className="ss-btn-start"
+            className="ss-btn-start min-h-[44px] flex items-center justify-center cursor-pointer"
             type="button"
           >
             Start Watcher
@@ -76,7 +67,7 @@ export function ControlPanel({
           <button
             onClick={onStop}
             disabled={loading || watcherState === 'stopped'}
-            className="ss-btn-stop"
+            className="ss-btn-stop min-h-[44px] flex items-center justify-center cursor-pointer"
             type="button"
           >
             Stop Watcher
@@ -84,7 +75,7 @@ export function ControlPanel({
           <button
             onClick={onTogglePause}
             disabled={loading || watcherState === 'stopped'}
-            className="ss-btn-ghost"
+            className="ss-btn-ghost min-h-[44px] flex items-center justify-center cursor-pointer"
             type="button"
           >
             {isPaused ? 'Resume' : 'Pause'}
@@ -123,7 +114,13 @@ export function ControlPanel({
         <ResourceBar
           label="CPU"
           pct={status?.cpu_percent ?? 0}
-          value={status ? <OdometerValue value={status.cpu_percent} decimals={1} suffix="%" /> : 'Loading…'}
+          value={
+            status ? (
+              <OdometerValue value={status.cpu_percent} decimals={1} suffix="%" />
+            ) : (
+              'Loading…'
+            )
+          }
         />
       </div>
     </div>

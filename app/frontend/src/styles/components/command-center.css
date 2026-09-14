@@ -9,15 +9,15 @@
   }
 
   .ss-cc-header {
-    @apply flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-black/40 border-b border-white/10 backdrop-blur-md shrink-0;
+    @apply flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-black/40 border-b border-white/10 backdrop-blur-md shrink-0;
   }
 
   .ss-cc-title-group {
-    @apply flex items-center gap-3;
+    @apply flex items-center gap-2.5 sm:gap-3;
   }
 
   .ss-cc-title {
-    @apply text-base font-bold tracking-tight text-white flex items-center gap-2;
+    @apply text-sm sm:text-base font-bold tracking-tight text-white flex items-center gap-2;
   }
 
   .ss-cc-live-badge {
@@ -28,8 +28,24 @@
     @apply w-2 h-2 rounded-full bg-emerald-400 animate-pulse;
   }
 
+  .ss-cc-mobile-toggle {
+    @apply flex items-center bg-white/5 p-1 rounded-lg border border-white/10 shrink-0;
+  }
+
+  .ss-cc-toggle-btn {
+    @apply px-3 py-1 text-xs font-semibold rounded-md text-gray-400 hover:text-gray-200 transition cursor-pointer;
+  }
+
+  .ss-cc-toggle-btn--active {
+    @apply bg-indigo-600 text-white shadow-sm hover:text-white;
+  }
+
   .ss-cc-controls {
-    @apply flex flex-wrap items-center gap-2;
+    @apply flex flex-wrap items-center gap-1.5 sm:gap-2;
+  }
+
+  .ss-cc-controls > * {
+    @apply shrink-0;
   }
 
   .ss-cc-body {
@@ -37,11 +53,35 @@
   }
 
   .ss-cc-map-container {
-    @apply relative flex-1 h-full min-h-[300px] w-full bg-[#12161f];
+    @apply relative flex-1 h-full min-h-0 w-full bg-[#12161f];
   }
 
   .ss-cc-feed-sidebar {
     @apply w-full lg:w-96 xl:w-[28rem] h-full flex flex-col bg-gray-950/80 border-t lg:border-t-0 lg:border-l border-white/10 backdrop-blur-md shrink-0;
+  }
+
+  /* Mobile view switching: screens smaller than desktop (< 1024px / lg breakpoint) */
+  @media (max-width: 1023px) {
+    .ss-cc-body--map .ss-cc-feed-sidebar {
+      display: none !important;
+    }
+    .ss-cc-body--map .ss-cc-map-container {
+      display: flex !important;
+      height: 100% !important;
+      width: 100% !important;
+      flex: 1 1 0% !important;
+    }
+
+    .ss-cc-body--feed .ss-cc-map-container {
+      display: none !important;
+    }
+    .ss-cc-body--feed .ss-cc-feed-sidebar {
+      display: flex !important;
+      height: 100% !important;
+      width: 100% !important;
+      flex: 1 1 0% !important;
+      border-top: none !important;
+    }
   }
 
   .ss-cc-feed-header {
@@ -74,24 +114,45 @@
 }
 
 /* Leaflet Dark Popups */
+.leaflet-popup {
+  margin-bottom: 20px !important;
+}
+
 .leaflet-popup-content-wrapper {
-  background: rgba(17, 24, 39, 0.95) !important;
+  background: rgba(17, 24, 39, 0.96) !important;
   color: #f3f4f6 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 0.75rem !important;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 0.875rem !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6) !important;
   backdrop-filter: blur(12px) !important;
   padding: 0 !important;
+  max-width: calc(100vw - 28px) !important;
+  box-sizing: border-box !important;
 }
 
 .leaflet-popup-content {
   margin: 0 !important;
   line-height: 1.4 !important;
+  max-width: calc(100vw - 28px) !important;
+  box-sizing: border-box !important;
+}
+
+.ss-map-card-popup {
+  width: min(380px, calc(100vw - 40px));
+  max-width: calc(100vw - 40px);
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .ss-map-card-popup {
+    width: min(350px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+  }
 }
 
 .leaflet-popup-tip {
-  background: rgba(17, 24, 39, 0.95) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: rgba(17, 24, 39, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
 }
 
 .leaflet-container a.leaflet-popup-close-button {
@@ -172,6 +233,17 @@
 .ss-map-pin--animating .ss-map-pin-circle {
   animation: ss-pin-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) 3;
   box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.5);
+}
+
+.ss-map-pin--editable .ss-map-pin-circle {
+  cursor: grab;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.8), 0 0 15px rgba(245, 158, 11, 0.5);
+  animation: ss-pin-pulse-amber 1.5s ease-in-out infinite;
+}
+
+@keyframes ss-pin-pulse-amber {
+  0%, 100% { transform: scale(1.15); }
+  50% { transform: scale(1.3); }
 }
 
 /* Dark mode map tiles via CSS filter over standard OpenStreetMap */

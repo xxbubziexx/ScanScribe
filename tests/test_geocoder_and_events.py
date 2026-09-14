@@ -76,6 +76,31 @@ def test_build_fallback_queries():
     assert "Crossman Road and Wood Lane, St. Francois County, Missouri" in cross_fallbacks
     assert "Wood Lane, St. Francois County, Missouri" in cross_fallbacks
 
+    # 4. State route prioritization: 'MO 8' and 'MO-8' must appear before 'Highway 8'
+    hwy8_fallbacks = build_fallback_queries("12834 Highway 8", "Washington County, Missouri")
+    mo_8_idx = hwy8_fallbacks.index("12834 MO 8, Washington County, Missouri")
+    mo_dash_8_idx = hwy8_fallbacks.index("12834 MO-8, Washington County, Missouri")
+    raw_hwy_8_idx = hwy8_fallbacks.index("12834 Highway 8, Washington County, Missouri")
+    assert mo_8_idx < raw_hwy_8_idx, "MO 8 variant must be queried before raw Highway 8"
+    assert mo_dash_8_idx < raw_hwy_8_idx, "MO-8 variant must be queried before raw Highway 8"
+
+
+def test_get_state_from_region():
+    from app.services.geocoder_service import get_state_from_region, has_state_context
+
+    assert get_state_from_region("Washington County, Missouri") == "Missouri"
+    assert get_state_from_region("Washington County, MO") == "Missouri"
+    assert get_state_from_region("Washington County") == "Missouri"
+    assert get_state_from_region("Cook County, IL") == "Illinois"
+    assert get_state_from_region("Harris County, Texas") == "Texas"
+    assert get_state_from_region(None) == "Missouri"
+
+    # has_state_context
+    assert has_state_context("Washington County, Missouri") is True
+    assert has_state_context("Washington County") is False
+    assert has_state_context("100 Main St, Chicago, IL") is True
+    assert has_state_context("12834 Springtown Road") is False
+
 
 def test_geocoder_caching():
     with _cache_lock:

@@ -47,6 +47,16 @@ export default function App() {
           <Route path="/" element={<CommandCenterPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/insights" element={<InsightsPage />} />
+          <Route path="/events" element={<EventsLayout />}>
+            <Route index element={<EventsIncidentsPage />} />
+            <Route element={<RequireAdmin />}>
+              <Route path="monitors" element={<EventsMonitorsPage />} />
+              <Route path="debug" element={<EventsDebugPage />} />
+            </Route>
+            <Route path="span-store" element={<Navigate to="/data/spans" replace />} />
+          </Route>
+
+          {/* Desktop-only Admin Routes */}
           <Route element={<RequireAdmin />}>
             <Route path="/data" element={<DataExplorerLayout />}>
               <Route index element={<Navigate to="events" replace />} />
@@ -57,12 +67,6 @@ export default function App() {
               <Route path="dataset" element={<DatasetPage />} />
             </Route>
             <Route path="/logs" element={<Navigate to="/data/logs" replace />} />
-            <Route path="/events" element={<EventsLayout />}>
-              <Route index element={<EventsIncidentsPage />} />
-              <Route path="monitors" element={<EventsMonitorsPage />} />
-              <Route path="span-store" element={<Navigate to="/data/spans" replace />} />
-              <Route path="debug" element={<EventsDebugPage />} />
-            </Route>
             <Route path="/users" element={<UsersPage />} />
             <Route
               path="/settings"

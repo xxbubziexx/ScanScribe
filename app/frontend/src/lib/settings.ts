@@ -31,12 +31,15 @@ export interface AudioPurgeResult {
 export const settingsApi = {
   getConfig: () => request<ConfigPayload>('/api/settings/config'),
 
-  saveConfig: (content: string) =>
-    request<{ message: string }>('/api/settings/config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
-    }),
+  saveConfig: (content: string, restart = false) =>
+    request<{ message: string; restarting?: boolean }>(
+      `/api/settings/config${restart ? '?restart=true' : ''}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      },
+    ),
 
   restart: () => request<{ message: string }>('/api/settings/restart', { method: 'POST' }),
 

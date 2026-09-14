@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { downloadEventsExportHeaders, eventsApi } from '../../lib/events'
 import { errorMessage } from '../../types/api'
 import { logsApi } from '../../lib/logs'
 import { useToast } from '../../context/ToastContext'
+import { useAdminCapability } from '@/hooks/useAdminCapability'
 import type {
   EventDetailResponse,
   EventListItem,
@@ -47,11 +48,46 @@ export function typeDisplayFor(event: Pick<PipelineEvent, 'eventType' | 'broadca
   return t || '—'
 }
 
+export function formatRelativeTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—'
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return dateStr
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+
+  const datePart = date.toLocaleString('en-US', {
+    month: 'numeric',
+    day: 'numeric',
+    year: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+
+  let rel = 'just now'
+  if (diffMs > 0) {
+    const diffSec = Math.floor(diffMs / 1000)
+    if (diffSec < 60) {
+      rel = `${diffSec}s ago`
+    } else {
+      const diffMin = Math.floor(diffSec / 60)
+      if (diffMin < 60) {
+        rel = `${diffMin}m ago`
+      } else {
+        const diffHour = Math.floor(diffMin / 60)
+        if (diffHour < 24) {
+          rel = `${diffHour}h ago`
+        } else {
+          rel = 'over 24h ago'
+        }
+      }
+    }
+  }
+
+  return `${datePart} • ${rel}`
+}
+
 export function formatTime(iso: string | null | undefined) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+  return formatRelativeTime(iso)
 }
 
 export function formatTimeLong(iso: string | null | undefined) {
@@ -164,7 +200,10 @@ export function toPipelineEvent(item: EventListItem): PipelineEvent {
   }
 }
 
-export function toDetailEvent(detail: EventDetailResponse, listEvent: PipelineEvent | null): PipelineEvent {
+export function toDetailEvent(
+  detail: EventDetailResponse,
+  listEvent: PipelineEvent | null,
+): PipelineEvent {
   const e = detail.event
   return {
     id: listEvent?.id ?? 0,
@@ -200,37 +239,50 @@ function nerEntityChips(entities: EventTranscript['entities']): string[] {
   })
 }
 
-
-function EditableTranscript({ logId, initialText }: { logId: number; initialText: string }) {
+function EditableTranscript({
+  logId,
+  initialText,
+  canEdit = true,
+}: {
+  logId: number
+  initialText: string
+  canEdit?: boolean
+}) {
   const [editing, setEditing] = useState(false)
   const [text, setText] = useState(initialText)
-  
+
   const { addToast } = useToast()
-  
+
   const mutation = useMutation({
     mutationFn: (newText: string) => logsApi.review(logId, newText),
     onSuccess: () => setEditing(false),
-    onError: (e: any) => addToast(e?.message || 'Failed to save transcript', 'error')
+    onError: (e: any) => addToast(e?.message || 'Failed to save transcript', 'error'),
   })
+
+  if (!canEdit) {
+    return <p className="ss-events-kv-value min-w-0 flex-1 text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{text || '—'}</p>
+  }
 
   if (editing) {
     return (
-      <div className="flex flex-col gap-2 mt-1">
+      <div className="ss-events-kv-value min-w-0 flex-1 w-full flex flex-col gap-2 mt-0.5">
         <textarea
-          className="ss-input text-sm w-full h-24"
+          className="ss-input text-sm w-full min-h-[5.5rem] resize-y leading-relaxed font-normal"
+          rows={3}
           value={text}
           onChange={(e) => setText(e.target.value)}
+          autoFocus
         />
         <div className="flex items-center gap-2">
           <button
-            className="ss-btn-primary text-xs py-1 px-2"
+            className="ss-btn-primary text-xs py-1 px-2.5"
             disabled={mutation.isPending}
             onClick={() => mutation.mutate(text)}
           >
             {mutation.isPending ? 'Saving...' : 'Save & Mark Reviewed'}
           </button>
           <button
-            className="ss-btn-ghost text-xs py-1 px-2"
+            className="ss-btn-ghost text-xs py-1 px-2.5"
             disabled={mutation.isPending}
             onClick={() => {
               setEditing(false)
@@ -245,11 +297,11 @@ function EditableTranscript({ logId, initialText }: { logId: number; initialText
   }
 
   return (
-    <div className="group relative">
-      <p className="ss-events-kv-value text-sm text-gray-300 pr-8">{text || '—'}</p>
+    <div className="ss-events-kv-value group relative min-w-0 flex-1">
+      <p className="text-sm text-gray-300 pr-8 whitespace-pre-wrap leading-relaxed">{text || '—'}</p>
       <button
         onClick={() => setEditing(true)}
-        className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 text-indigo-400 hover:text-indigo-300 text-xs transition underline"
+        className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 text-indigo-400 hover:text-indigo-300 text-xs transition underline cursor-pointer"
       >
         Edit
       </button>
@@ -257,17 +309,167 @@ function EditableTranscript({ logId, initialText }: { logId: number; initialText
   )
 }
 
+export function formatCountdown(sec: number): string {
+  if (sec <= 0) return '00:00:00'
+  const hours = Math.floor(sec / 3600)
+  const minutes = Math.floor((sec % 3600) / 60)
+  const seconds = sec % 60
+  const pad = (n: number) => String(n).padStart(2, '0')
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24)
+    const remHours = hours % 24
+    return `${days}d ${pad(remHours)}:${pad(minutes)}:${pad(seconds)}`
+  }
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+}
+
+export function OpenRouterRateLimitBanner() {
+  const rateLimitQuery = useQuery({
+    queryKey: ['events-rate-limit-status'],
+    queryFn: () => eventsApi.rateLimitStatus(),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+  })
+
+  const [remainingSec, setRemainingSec] = useState<number>(0)
+
+  useEffect(() => {
+    const status = rateLimitQuery.data
+    if (!status?.is_rate_limited) {
+      setRemainingSec(0)
+      return
+    }
+
+    // Prefer server-provided seconds_remaining to avoid client clock skew issues
+    const initSec =
+      status.seconds_remaining != null && status.seconds_remaining > 0
+        ? Math.max(0, Math.ceil(status.seconds_remaining))
+        : status.cooldown_until
+          ? Math.max(0, Math.ceil(status.cooldown_until - Date.now() / 1000))
+          : 0
+
+    setRemainingSec(initSec)
+
+    const timer = setInterval(() => {
+      setRemainingSec((prev) => {
+        if (prev <= 1) {
+          void rateLimitQuery.refetch()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [rateLimitQuery.data])
+
+  const status = rateLimitQuery.data
+  if (!status?.is_rate_limited) {
+    return null
+  }
+
+  const resetDate = status.cooldown_until ? new Date(status.cooldown_until * 1000) : null
+  const localResetTime = resetDate
+    ? resetDate.toLocaleTimeString([], {
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+        timeZoneName: 'short',
+      })
+    : ''
+  const utcResetTime = status.reset_time_formatted ? status.reset_time_formatted : ''
+
+  return (
+    <div className="ss-rate-limit-banner">
+      <div className="ss-rate-limit-banner__main">
+        <div className="ss-rate-limit-banner__left">
+          <div className="ss-rate-limit-badge">
+            <span className="ss-rate-limit-pulse"></span>
+            <span>
+              {status.is_paused_waiting_start ? 'EVENTS ROUTING PAUSED' : 'OPENROUTER RATE LIMIT'}
+            </span>
+          </div>
+          <div className="ss-rate-limit-timer">
+            <span className="ss-rate-limit-timer__label">
+              {status.is_paused_waiting_start
+                ? 'AUTO-START DISABLED'
+                : remainingSec > 0
+                  ? 'RESETS IN'
+                  : 'COOLDOWN'}
+            </span>
+            <span className="ss-rate-limit-timer__clock">
+              {status.is_paused_waiting_start
+                ? 'RESTART REQUIRED'
+                : remainingSec > 0
+                  ? `T-${formatCountdown(remainingSec)}`
+                  : 'COOLDOWN EXPIRED'}
+            </span>
+          </div>
+        </div>
+
+        <div className="ss-rate-limit-banner__info">
+          <div className="ss-rate-limit-target">
+            <span>⏱️ Target Reset Time:</span>
+            <strong className="text-amber-200">{localResetTime || utcResetTime}</strong>
+            {localResetTime && utcResetTime && (
+              <span className="text-amber-400/70 text-xs font-mono">({utcResetTime})</span>
+            )}
+          </div>
+          <p className="ss-rate-limit-reason" title={status.reason || undefined}>
+            {status.reason ||
+              'Rate limit cooldown active. Events pipeline LLM routing is paused to prevent wasted requests.'}
+          </p>
+        </div>
+
+        <div className="ss-rate-limit-banner__actions">
+          <button
+            type="button"
+            className="ss-btn-ghost text-xs py-1.5 px-3 flex items-center gap-1 shrink-0"
+            onClick={() => void rateLimitQuery.refetch()}
+            disabled={rateLimitQuery.isFetching}
+            title="Check if rate limit has expired"
+          >
+            <span>🔄</span> {rateLimitQuery.isFetching ? 'Checking…' : 'Check Now'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function EventsIncidentsPage() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  const { canAdmin } = useAdminCapability()
   const [searchParams, setSearchParams] = useSearchParams()
-  const incidentParam = searchParams.get('incident_id') || searchParams.get('event_id') || ''
   const [query, setQuery] = useState('')
   const [monitor, setMonitor] = useState<number | 'all'>('all')
-  const [status, setStatus] = useState<'all' | 'open' | 'closed'>('open')
+  const [status, setStatus] = useState<'all' | 'open' | 'closed'>(() => {
+    const s = searchParams.get('status')
+    if (s === 'all' || s === 'open' || s === 'closed') return s
+    return 'open'
+  })
+
+  useEffect(() => {
+    const s = searchParams.get('status')
+    if (s === 'all' || s === 'open' || s === 'closed') {
+      setStatus(s)
+    }
+  }, [searchParams])
   const [cardCount, setCardCount] = useState<number>(50)
   const [activeTab, setActiveTab] = useState<DetailTab>('event-thread')
-  const [selectedId, setSelectedId] = useState<string>(incidentParam)
+
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false,
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const onChange = () => setIsDesktop(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
 
   const monitorsQuery = useQuery({
     queryKey: ['events-monitors'],
@@ -284,6 +486,13 @@ export function EventsIncidentsPage() {
         limit: cardCount,
         offset: 0,
       }),
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: true,
+  })
+
+  const rateLimitQuery = useQuery({
+    queryKey: ['events-rate-limit-status'],
+    queryFn: () => eventsApi.rateLimitStatus(),
     refetchInterval: 10_000,
     refetchIntervalInBackground: true,
   })
@@ -320,26 +529,33 @@ export function EventsIncidentsPage() {
     })
   }, [events, query])
 
-  useEffect(() => {
-    const urlEventId = searchParams.get('incident_id') || searchParams.get('event_id')
-    if (urlEventId && urlEventId !== selectedId) {
-      setSelectedId(urlEventId)
-      return
-    }
-    if (filtered.length === 0) {
-      if (!urlEventId) {
-        setSelectedId('')
-      }
-      return
-    }
-    if (!selectedId || !filtered.some((e) => e.eventId === selectedId)) {
-      if (!urlEventId) {
-        setSelectedId(filtered[0].eventId)
-      }
-    }
-  }, [filtered, selectedId, searchParams])
+  const urlEventId = searchParams.get('incident_id') || searchParams.get('event_id') || ''
 
-  const selectedListEvent = useMemo(() => filtered.find((e) => e.eventId === selectedId) ?? null, [filtered, selectedId])
+  // Derived selectedId: Single source of truth.
+  // - If URL has an explicit incident ID, use it.
+  // - If desktop (dual pane) and incidents exist, default to the first incident.
+  // - On mobile (< 1024px) without a URL param, nothing is selected (user sees the list).
+  const selectedId = useMemo(() => {
+    if (urlEventId) return urlEventId
+    if (isDesktop && filtered.length > 0) return filtered[0].eventId
+    return ''
+  }, [urlEventId, isDesktop, filtered])
+
+  const selectEvent = useCallback(
+    (eventId: string) => {
+      setSearchParams({ incident_id: eventId }, { replace: true })
+    },
+    [setSearchParams],
+  )
+
+  const clearSelectedEvent = useCallback(() => {
+    setSearchParams({}, { replace: true })
+  }, [setSearchParams])
+
+  const selectedListEvent = useMemo(
+    () => (selectedId ? filtered.find((e) => e.eventId === selectedId) ?? null : null),
+    [filtered, selectedId],
+  )
 
   const detailQuery = useQuery({
     queryKey: ['events-detail', selectedId],
@@ -350,13 +566,30 @@ export function EventsIncidentsPage() {
   })
 
   const selected = useMemo(() => {
+    if (!selectedId) return null
     if (!selectedListEvent) {
       if (detailQuery.data) return toDetailEvent(detailQuery.data, null)
       return null
     }
     if (!detailQuery.data) return selectedListEvent
     return toDetailEvent(detailQuery.data, selectedListEvent)
-  }, [selectedListEvent, detailQuery.data])
+  }, [selectedListEvent, detailQuery.data, selectedId])
+
+  // Body scroll lock & Escape key handling for mobile sheet
+  useEffect(() => {
+    if (!selected || isDesktop) return
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        clearSelectedEvent()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = ''
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [selected, isDesktop, clearSelectedEvent])
   const openInView = useMemo(
     () => filtered.reduce((n, e) => n + (e.status === 'open' ? 1 : 0), 0),
     [filtered],
@@ -368,7 +601,10 @@ export function EventsIncidentsPage() {
     })
   }
 
-  const spanLinks = useMemo(() => detailQuery.data?.transcripts ?? [], [detailQuery.data?.transcripts])
+  const spanLinks = useMemo(
+    () => detailQuery.data?.transcripts ?? [],
+    [detailQuery.data?.transcripts],
+  )
 
   const closeMutation = useMutation({
     mutationFn: (eventId: string) => eventsApi.close(eventId),
@@ -384,10 +620,20 @@ export function EventsIncidentsPage() {
     mutationFn: (eventId: string) => eventsApi.remove(eventId),
     onSuccess: () => {
       addToast('Event deleted', 'success')
-      setSelectedId('')
+      clearSelectedEvent()
       void queryClient.invalidateQueries({ queryKey: ['events-list'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Failed to delete event'), 'error'),
+  })
+
+  const summarizeMutation = useMutation({
+    mutationFn: (eventId: string) => eventsApi.summarize(eventId),
+    onSuccess: (data) => {
+      addToast('Generated updated event summary from attachments', 'success')
+      void queryClient.invalidateQueries({ queryKey: ['events-list'] })
+      void queryClient.invalidateQueries({ queryKey: ['events-detail', data.event_id] })
+    },
+    onError: (e: unknown) => addToast(errorMessage(e, 'Failed to generate event summary'), 'error'),
   })
 
   return (
@@ -397,6 +643,33 @@ export function EventsIncidentsPage() {
         <div className="ss-events-live">
           <span className="ss-events-rate">{listQuery.isFetching ? 'Refreshing…' : 'Live'}</span>
           <span className="ss-events-pill-tiny">{openInView} open in view</span>
+          {rateLimitQuery.data?.is_paused_waiting_start ? (
+            <span
+              className="ss-events-pill-rate-limit cursor-pointer"
+              title={
+                rateLimitQuery.data.reason || 'Auto-start disabled: restart ScanScribe to resume'
+              }
+              onClick={() => void rateLimitQuery.refetch()}
+            >
+              ⏸️ Router Paused (Auto-Start Off)
+            </span>
+          ) : rateLimitQuery.data?.is_rate_limited ? (
+            <span
+              className="ss-events-pill-rate-limit cursor-pointer"
+              title={
+                rateLimitQuery.data.reason ||
+                'OpenRouter rate limit timeout active — click to check now'
+              }
+              onClick={() => void rateLimitQuery.refetch()}
+            >
+              ⏳ Rate Limited (T-
+              {formatCountdown(Math.ceil(rateLimitQuery.data.seconds_remaining ?? 0))})
+            </span>
+          ) : (
+            <span className="ss-events-pill-ok" title="OpenRouter AI router is operational">
+              ● Router Active
+            </span>
+          )}
           <button
             type="button"
             className="ss-btn-ghost"
@@ -413,9 +686,11 @@ export function EventsIncidentsPage() {
         </div>
       </div>
       <p className="ss-events-sub">
-        Monitored radio / scanner pipeline: monitors (departments), span-linked transcripts, and event headers from the
-        events service — not application error logs.
+        Monitored radio / scanner pipeline: monitors (departments), span-linked transcripts, and
+        event headers from the events service — not application error logs.
       </p>
+
+      <OpenRouterRateLimitBanner />
 
       <div className="ss-events-filters">
         <input
@@ -486,7 +761,9 @@ export function EventsIncidentsPage() {
             </div>
           </div>
           {listQuery.isError && (
-            <p className="ss-form-error px-4 py-2">{errorMessage(listQuery.error, 'Failed to load events')}</p>
+            <p className="ss-form-error px-4 py-2">
+              {errorMessage(listQuery.error, 'Failed to load events')}
+            </p>
           )}
           {filtered.length === 0 ? (
             <p className="ss-empty not-italic">No events match current filters.</p>
@@ -497,15 +774,16 @@ export function EventsIncidentsPage() {
                 return (
                   <li
                     key={event.eventId}
-                    className={active ? 'ss-events-row-item ss-events-row-item--active' : 'ss-events-row-item'}
+                    className={
+                      active
+                        ? 'ss-events-row-item ss-events-row-item--active'
+                        : 'ss-events-row-item'
+                    }
                   >
                     <EventListCard
                       event={event}
                       active={active}
-                      onSelect={() => {
-                        setSelectedId(event.eventId)
-                        setSearchParams({ incident_id: event.eventId }, { replace: true })
-                      }}
+                      onSelect={() => selectEvent(event.eventId)}
                     />
                   </li>
                 )
@@ -514,210 +792,364 @@ export function EventsIncidentsPage() {
           )}
         </section>
 
-        <section className="ss-events-detail-pane" aria-label="Event detail">
+        {/* Mobile Detail Modal / Sheet (< 1024px) */}
+        {!isDesktop && selected && (
+          <div
+            className="lg:hidden fixed inset-0 z-50 flex flex-col bg-[#0f1117]"
+            style={{ backgroundColor: '#0f1117' }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Incident details"
+          >
+            {/* Sticky Mobile Detail Header */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-[#141821] shrink-0 min-h-[52px]">
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-white transition py-1.5 px-2.5 rounded-lg hover:bg-white/10 bg-white/5 border border-white/10 min-h-[40px] cursor-pointer"
+                onClick={clearSelectedEvent}
+              >
+                <span className="text-base">←</span>
+                <span>Back to Incidents</span>
+              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-mono text-[11px] text-gray-400 truncate max-w-[120px]">
+                  {selected.eventId}
+                </span>
+                <span
+                  className={`capitalize px-2 py-0.5 rounded text-[11px] font-semibold ${
+                    selected.status.toLowerCase() === 'open'
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}
+                >
+                  {selected.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Scrollable Detail Body */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <EventDetailContent
+                selected={selected}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                closeMutation={closeMutation}
+                deleteMutation={deleteMutation}
+                summarizeMutation={summarizeMutation}
+                detailQuery={detailQuery}
+                spanLinks={spanLinks}
+                canAdmin={canAdmin}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Desktop Detail Pane (>= 1024px) */}
+        <section className="ss-events-detail-pane hidden lg:block" aria-label="Event detail">
           <div className="ss-events-pane-head">
             <span>Incident / broadcast</span>
             <span className="font-mono text-xs text-gray-500">{selected?.eventId ?? '—'}</span>
           </div>
 
-          <div className="ss-events-tabs">
-            <div className="ss-events-tabs-left" role="tablist">
-              {(
-                [
-                  { id: 'event-thread' as const, label: 'Event Thread' },
-                  { id: 'transcription' as const, label: 'Transcription' },
-                  { id: 'raw' as const, label: 'Raw' },
-                ] as const
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === tab.id}
-                  className={activeTab === tab.id ? 'ss-events-tab ss-events-tab--active' : 'ss-events-tab'}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            {selected ? (
-              <div className="ss-events-tabs-actions">
-                <button
-                  type="button"
-                  className="ss-btn-ghost"
-                  disabled={selected.status === 'closed' || closeMutation.isPending}
-                  onClick={() => closeMutation.mutate(selected.eventId)}
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  className="ss-btn-danger-soft"
-                  disabled={deleteMutation.isPending}
-                  onClick={() => {
-                    if (!window.confirm(`Delete ${selected.eventId}?`)) return
-                    deleteMutation.mutate(selected.eventId)
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            ) : null}
-          </div>
-
           {!selected ? (
             <p className="ss-empty not-italic">Select an event on the left.</p>
-          ) : activeTab === 'event-thread' ? (
-            <div className="ss-events-thread-wrap">
-              <h3 className="ss-events-section-title">HEADER</h3>
-              <div className="grid grid-cols-[140px_1fr] gap-y-4 text-[13px] md:text-sm mb-8 mt-2">
-                <div className="font-semibold text-gray-200">Created</div>
-                <div className="text-gray-300 font-mono">{formatTimeOnly(selected.createdAt)}</div>
-                
-                {selected.closedAt && (
-                  <>
-                    <div className="font-semibold text-gray-200">Closed</div>
-                    <div className="text-gray-300 font-mono">{formatTimeOnly(selected.closedAt)}</div>
-                  </>
-                )}
-
-                <div className="font-semibold text-gray-200">Event ID</div>
-                <div className="text-gray-300 font-mono">{selected.eventId}</div>
-
-                <div className="font-semibold text-gray-200">Type</div>
-                <div className="flex">
-                  <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-500/20 text-orange-100 border border-orange-500/30">
-                    {typeDisplayFor(selected)}
-                  </span>
-                </div>
-
-                <div className="font-semibold text-gray-200">Monitor</div>
-                <div className="text-gray-300">{selected.monitorName}</div>
-
-                <div className="font-semibold text-gray-200">Status</div>
-                <div className="flex items-center gap-2">
-                  <span className={`capitalize px-2 py-0.5 rounded text-xs font-semibold ${
-                    selected.status.toLowerCase() === 'open' 
-                      ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                  }`}>
-                    {selected.status}
-                  </span>
-                  {selected.statusDetail ? <span className="ss-events-low-badge !mt-0">{selected.statusDetail}</span> : null}
-                </div>
-
-                <div className="font-semibold text-gray-200">Location</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {selected.location ? (
-                    <span className="ss-events-kv-badge">{selected.location}</span>
-                  ) : <span className="text-gray-500">—</span>}
-                </div>
-
-                <div className="font-semibold text-gray-200">Units</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {splitBadgeEntries(selected.units).length > 0 ? (
-                    splitBadgeEntries(selected.units).map(unit => <span key={unit} className="ss-events-kv-badge">{unit}</span>)
-                  ) : <span className="text-gray-500">—</span>}
-                </div>
-
-                <div className="font-semibold text-gray-200">Talkgroups</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {splitBadgeEntries(selected.talkgroup).length > 0 ? (
-                    splitBadgeEntries(selected.talkgroup).map(tg => <span key={tg} className="ss-events-kv-badge">{tg}</span>)
-                  ) : <span className="text-gray-500">—</span>}
-                </div>
-
-                <div className="font-semibold text-gray-200">Spans</div>
-                <div className="text-gray-300">{selected.spansAttached}</div>
-
-                {selected.summary ? (
-                  <>
-                    <div className="font-semibold text-gray-200">Summary</div>
-                    <div className="text-gray-300 leading-relaxed max-w-3xl">
-                      {selected.summary}
-                    </div>
-                  </>
-                ) : null}
-              </div>
-
-              <h3 className="ss-events-section-title mt-6">SPAN LINKS</h3>
-              <div className="ss-events-spans-list-wrap">
-                {detailQuery.isFetching && !detailQuery.data ? (
-                  <p className="ss-empty not-italic">Loading span links…</p>
-                ) : spanLinks.length === 0 ? (
-                  <p className="ss-events-placeholder">No span links attached.</p>
-                ) : (
-                  <ul className="ss-events-spans-list">
-                    {spanLinks.map((span, idx) => (
-                      <li key={span.log_entry_id ?? `${selected?.eventId}-span-${idx + 1}`} className="ss-events-span-item">
-                        <div className="ss-events-span-item-head">
-                          <p className="ss-events-k mb-0">Span #{idx + 1}</p>
-                          <p className="text-sm text-gray-300">{formatTimeLong(span.timestamp)}</p>
-                        </div>
-                        <p className="ss-events-talkgroup-badge mt-1">{span.talkgroup || 'N/A'}</p>
-
-                        <div className="ss-events-span-section mt-2">
-                          <div className="ss-events-kv">
-                            <p className="ss-events-k mb-0.5">NER extractions</p>
-                            <div className="ss-events-kv-value ss-events-ner-list">
-                              {nerEntityChips(span.entities).length === 0 ? (
-                                <span className="text-xs text-gray-500">None</span>
-                              ) : (
-                                nerEntityChips(span.entities).map((entity) => (
-                                  <span key={entity} className="ss-events-ner-chip">
-                                    {entity}
-                                  </span>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="ss-events-span-section ss-events-span-section--transcript mt-2">
-                          <div className="ss-events-kv">
-                            <p className="ss-events-k mb-0.5">Transcript</p>
-                            {span.log_entry_id ? (
-                              <EditableTranscript logId={span.log_entry_id} initialText={span.transcript || ''} />
-                            ) : (
-                              <p className="ss-events-kv-value text-sm text-gray-300">{span.transcript || '—'}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="ss-events-span-section ss-events-span-section--attach mt-2">
-                          <div className="ss-events-kv">
-                            <p className="ss-events-k mb-0.5">Attach reason</p>
-                            <p className="ss-events-kv-value text-sm text-indigo-200/90">
-                              {span.llm_reason || (span.is_trigger ? 'Trigger span matched event header extraction' : 'Linked context span')}
-                            </p>
-                          </div>
-                        </div>
-
-                        {span.has_playback && span.audio_path ? (
-                          <div className="mt-2">
-                            <p className="ss-events-k mb-0.5">Audio</p>
-                            <audio className="ss-events-span-audio" controls preload="none" src={`/${span.audio_path}`}>
-                              Your browser does not support audio playback.
-                            </audio>
-                          </div>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          ) : activeTab === 'transcription' ? (
-            <div className="ss-events-txt-block">
-              <p className="ss-events-hint">Trigger / header text stored on the event (first span is highlighted in API responses).</p>
-              <p className="ss-events-body">{selected.originalTranscription || '—'}</p>
-            </div>
           ) : (
-            <pre className="ss-events-pre">{JSON.stringify(selected, null, 2)}</pre>
+            <EventDetailContent
+              selected={selected}
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              closeMutation={closeMutation}
+              deleteMutation={deleteMutation}
+              summarizeMutation={summarizeMutation}
+              detailQuery={detailQuery}
+              spanLinks={spanLinks}
+              canAdmin={canAdmin}
+            />
           )}
         </section>
       </div>
     </div>
+  )
+}
+
+function EventDetailContent({
+  selected,
+  activeTab,
+  setActiveTab,
+  closeMutation,
+  deleteMutation,
+  summarizeMutation,
+  detailQuery,
+  spanLinks,
+  canAdmin = true,
+}: {
+  selected: PipelineEvent
+  activeTab: 'event-thread' | 'transcription' | 'raw'
+  setActiveTab: (tab: 'event-thread' | 'transcription' | 'raw') => void
+  closeMutation: { mutate: (id: string) => void; isPending: boolean }
+  deleteMutation: { mutate: (id: string) => void; isPending: boolean }
+  summarizeMutation: { mutate: (id: string) => void; isPending: boolean }
+  detailQuery: { data?: unknown; isFetching: boolean }
+  spanLinks: EventTranscript[]
+  canAdmin?: boolean
+}) {
+  return (
+    <>
+      <div className="ss-events-tabs flex-wrap gap-2">
+        <div className="ss-events-tabs-left" role="tablist">
+          {(
+            [
+              { id: 'event-thread' as const, label: 'Event Thread' },
+              { id: 'transcription' as const, label: 'Transcription' },
+              { id: 'raw' as const, label: 'Raw' },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`min-h-[38px] px-3 py-1.5 cursor-pointer rounded-lg text-xs font-medium transition ${
+                activeTab === tab.id ? 'ss-events-tab ss-events-tab--active' : 'ss-events-tab'
+              }`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        {canAdmin && (
+          <div className="ss-events-tabs-actions">
+            <button
+              type="button"
+              className="ss-btn-ghost min-h-[38px] px-3 cursor-pointer"
+              disabled={selected.status === 'closed' || closeMutation.isPending}
+              onClick={() => closeMutation.mutate(selected.eventId)}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              className="ss-btn-danger-soft min-h-[38px] px-3 cursor-pointer"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (!window.confirm(`Delete ${selected.eventId}?`)) return
+                deleteMutation.mutate(selected.eventId)
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+
+      {activeTab === 'event-thread' ? (
+        <div className="ss-events-thread-wrap">
+          <h3 className="ss-events-section-title">HEADER</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-y-3 sm:gap-y-4 text-[13px] md:text-sm mb-8 mt-2">
+            <div className="font-semibold text-gray-200">Created</div>
+            <div className="text-gray-300 font-mono">{formatTimeOnly(selected.createdAt)}</div>
+
+            {selected.closedAt && (
+              <>
+                <div className="font-semibold text-gray-200">Closed</div>
+                <div className="text-gray-300 font-mono">{formatTimeOnly(selected.closedAt)}</div>
+              </>
+            )}
+
+            <div className="font-semibold text-gray-200">Event ID</div>
+            <div className="text-gray-300 font-mono break-all">{selected.eventId}</div>
+
+            <div className="font-semibold text-gray-200">Type</div>
+            <div className="flex">
+              <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-500/20 text-orange-100 border border-orange-500/30">
+                {typeDisplayFor(selected)}
+              </span>
+            </div>
+
+            <div className="font-semibold text-gray-200">Monitor</div>
+            <div className="text-gray-300">{selected.monitorName}</div>
+
+            <div className="font-semibold text-gray-200">Status</div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`capitalize px-2 py-0.5 rounded text-xs font-semibold ${
+                  selected.status.toLowerCase() === 'open'
+                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                }`}
+              >
+                {selected.status}
+              </span>
+              {selected.statusDetail ? (
+                <span className="ss-events-low-badge !mt-0">{selected.statusDetail}</span>
+              ) : null}
+            </div>
+
+            <div className="font-semibold text-gray-200">Location</div>
+            <div className="flex flex-wrap gap-1.5">
+              {selected.location ? (
+                <span className="ss-events-kv-badge">{selected.location}</span>
+              ) : (
+                <span className="text-gray-500">—</span>
+              )}
+            </div>
+
+            <div className="font-semibold text-gray-200">Units</div>
+            <div className="flex flex-wrap gap-1.5">
+              {splitBadgeEntries(selected.units).length > 0 ? (
+                splitBadgeEntries(selected.units).map((unit) => (
+                  <span key={unit} className="ss-events-kv-badge">
+                    {unit}
+                  </span>
+                ))
+              ) : (
+                <span className="text-gray-500">—</span>
+              )}
+            </div>
+
+            <div className="font-semibold text-gray-200">Talkgroups</div>
+            <div className="flex flex-wrap gap-1.5">
+              {splitBadgeEntries(selected.talkgroup).length > 0 ? (
+                splitBadgeEntries(selected.talkgroup).map((tg) => (
+                  <span key={tg} className="ss-events-kv-badge">
+                    {tg}
+                  </span>
+                ))
+              ) : (
+                <span className="text-gray-500">—</span>
+              )}
+            </div>
+
+            <div className="font-semibold text-gray-200">Spans</div>
+            <div className="text-gray-300">{selected.spansAttached}</div>
+
+            <div className="flex flex-wrap items-center justify-between col-span-1 sm:col-span-2 pt-2 border-t border-white/10 gap-2">
+              <div className="font-semibold text-gray-200 flex items-center gap-2">
+                <span>Summary</span>
+              </div>
+              {canAdmin && (
+                <button
+                  type="button"
+                  onClick={() => summarizeMutation.mutate(selected.eventId)}
+                  className="text-xs text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded border border-white/10 min-h-[36px] cursor-pointer"
+                  disabled={summarizeMutation.isPending}
+                  title="Generate or update the summary using the router LLM based on all attached transcripts"
+                >
+                  <span>🔄</span>{' '}
+                  {summarizeMutation.isPending
+                    ? 'Generating…'
+                    : selected.summary
+                      ? 'Regenerate'
+                      : 'Generate Summary'}
+                </button>
+              )}
+            </div>
+            <div className="col-span-1 sm:col-span-2 text-gray-300 leading-relaxed max-w-3xl bg-black/20 p-2.5 rounded-lg border border-white/5 text-sm">
+              {selected.summary ? (
+                <p className="m-0">{selected.summary}</p>
+              ) : (
+                <span className="text-gray-500 italic">
+                  No summary generated yet. Click Generate Summary to synthesize all attachments.
+                </span>
+              )}
+            </div>
+          </div>
+
+          <h3 className="ss-events-section-title mt-6">SPAN LINKS</h3>
+          <div className="ss-events-spans-list-wrap">
+            {detailQuery.isFetching && !detailQuery.data ? (
+              <p className="ss-empty not-italic">Loading span links…</p>
+            ) : spanLinks.length === 0 ? (
+              <p className="ss-events-placeholder">No span links attached.</p>
+            ) : (
+              <ul className="ss-events-spans-list">
+                {spanLinks.map((span, idx) => (
+                  <li
+                    key={span.log_entry_id ?? `${selected?.eventId}-span-${idx + 1}`}
+                    className="ss-events-span-item"
+                  >
+                    <div className="ss-events-span-item-head">
+                      <p className="ss-events-k mb-0">Span #{idx + 1}</p>
+                      <p className="text-sm text-gray-300">{formatTimeLong(span.timestamp)}</p>
+                    </div>
+                    <p className="ss-events-talkgroup-badge mt-1">{span.talkgroup || 'N/A'}</p>
+
+                    <div className="ss-events-span-section mt-2">
+                      <div className="ss-events-kv">
+                        <p className="ss-events-k mb-0.5">NER extractions</p>
+                        <div className="ss-events-kv-value ss-events-ner-list">
+                          {nerEntityChips(span.entities).length === 0 ? (
+                            <span className="text-xs text-gray-500">None</span>
+                          ) : (
+                            nerEntityChips(span.entities).map((entity) => (
+                              <span key={entity} className="ss-events-ner-chip">
+                                {entity}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ss-events-span-section ss-events-span-section--transcript mt-2">
+                      <div className="ss-events-kv">
+                        <p className="ss-events-k mb-0.5">Transcript</p>
+                        {span.log_entry_id ? (
+                          <EditableTranscript
+                            logId={span.log_entry_id}
+                            initialText={span.transcript || ''}
+                            canEdit={canAdmin}
+                          />
+                        ) : (
+                          <p className="ss-events-kv-value text-sm text-gray-300">
+                            {span.transcript || '—'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="ss-events-span-section ss-events-span-section--attach mt-2">
+                      <div className="ss-events-kv">
+                        <p className="ss-events-k mb-0.5">Attach reason</p>
+                        <p className="ss-events-kv-value text-sm text-indigo-200/90">
+                          {span.llm_reason ||
+                            (span.is_trigger
+                              ? 'Trigger span matched event header extraction'
+                              : 'Linked context span')}
+                        </p>
+                      </div>
+                    </div>
+
+                    {span.has_playback && span.audio_path ? (
+                      <div className="mt-2">
+                        <p className="ss-events-k mb-0.5">Audio</p>
+                        <audio
+                          className="ss-events-span-audio"
+                          controls
+                          preload="none"
+                          src={`/${span.audio_path}`}
+                        >
+                          Your browser does not support audio playback.
+                        </audio>
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      ) : activeTab === 'transcription' ? (
+        <div className="ss-events-txt-block">
+          <p className="ss-events-hint">
+            Trigger / header text stored on the event (first span is highlighted in API responses).
+          </p>
+          <p className="ss-events-body">{selected.originalTranscription || '—'}</p>
+        </div>
+      ) : (
+        <pre className="ss-events-pre">{JSON.stringify(selected, null, 2)}</pre>
+      )}
+    </>
   )
 }

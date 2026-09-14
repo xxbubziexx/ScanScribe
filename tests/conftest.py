@@ -44,3 +44,20 @@ try:
     get_settings.cache_clear()
 except ImportError:
     pass
+
+import pytest
+
+@pytest.fixture(autouse=True)
+def reset_rate_limit_cooldown():
+    try:
+        from app.services.events_router_engine import OpenRouterRateLimitManager
+        OpenRouterRateLimitManager.reset()
+    except ImportError:
+        pass
+    yield
+    try:
+        from app.services.events_router_engine import OpenRouterRateLimitManager
+        OpenRouterRateLimitManager.reset()
+    except ImportError:
+        pass
+

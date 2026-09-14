@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/context/ToastContext'
-import { buildListParams, downloadLogsExport, logsApi } from '@/lib/logs'
+import { buildListParams, downloadAudioFile, downloadLogsExport, logsApi } from '@/lib/logs'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { errorMessage } from '@/types/api'
 import type { LogListEntry, LogsSortBy } from '@/types/logs'
@@ -61,15 +61,7 @@ export function DatabasePage() {
   }, [page, pageSize, debouncedSearch, dateFrom, dateTo, sortBy])
 
   const query = useQuery({
-    queryKey: [
-      'database-logs',
-      page,
-      pageSize,
-      debouncedSearch,
-      dateFrom,
-      dateTo,
-      sortBy,
-    ],
+    queryKey: ['database-logs', page, pageSize, debouncedSearch, dateFrom, dateTo, sortBy],
     queryFn: () =>
       logsApi.list(
         buildListParams({
@@ -122,72 +114,76 @@ export function DatabasePage() {
       <p className="mb-4 text-sm text-gray-500">Browse and search transcription log entries.</p>
 
       <div className="ss-db-filters">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 w-full md:flex-1">
           <label className="ss-form-label" htmlFor="db-search">
             Search
           </label>
           <input
             id="db-search"
             type="search"
-            className="ss-input"
+            className="ss-input min-h-[40px]"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Transcript, filename, talkgroup…"
             autoComplete="off"
           />
         </div>
-        <DatabaseDateRangePicker
-          from={dateFrom}
-          to={dateTo}
-          onChange={(a, b) => {
-            setDateFrom(a)
-            setDateTo(b)
-          }}
-          activeDates={activeDateList}
-        />
-        <div>
-          <label className="ss-form-label" htmlFor="db-sort">
-            Sort
-          </label>
-          <select
-            id="db-sort"
-            className="ss-select min-w-[10rem]"
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as LogsSortBy)}
-          >
-            {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+        <div className="w-full sm:w-auto">
+          <DatabaseDateRangePicker
+            from={dateFrom}
+            to={dateTo}
+            onChange={(a, b) => {
+              setDateFrom(a)
+              setDateTo(b)
+            }}
+            activeDates={activeDateList}
+          />
         </div>
-        <div>
-          <label className="ss-form-label" htmlFor="db-ps">
-            Per page
-          </label>
-          <select
-            id="db-ps"
-            className="ss-select w-[4.5rem]"
-            value={String(pageSize)}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-          >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-end gap-2">
-          <button
-            type="button"
-            className="ss-btn-ghost"
-            onClick={onExport}
-            disabled={query.isFetching}
-          >
-            Export CSV
-          </button>
+        <div className="flex flex-wrap items-end gap-2.5 w-full sm:w-auto">
+          <div className="flex-1 sm:flex-initial">
+            <label className="ss-form-label" htmlFor="db-sort">
+              Sort
+            </label>
+            <select
+              id="db-sort"
+              className="ss-select w-full sm:min-w-[10rem] min-h-[40px]"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as LogsSortBy)}
+            >
+              {SORT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="ss-form-label" htmlFor="db-ps">
+              Per page
+            </label>
+            <select
+              id="db-ps"
+              className="ss-select w-[4.5rem] min-h-[40px]"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              className="ss-btn-ghost min-h-[40px] px-3.5 flex items-center justify-center cursor-pointer"
+              onClick={onExport}
+              disabled={query.isFetching}
+            >
+              Export CSV
+            </button>
+          </div>
         </div>
       </div>
 
@@ -205,7 +201,8 @@ export function DatabasePage() {
 
       {!query.isLoading && !query.isError && rows.length > 0 && (
         <>
-          <div className="ss-db-table-wrap">
+          {/* Desktop Table View (hidden on screens < 768px) */}
+          <div className="hidden md:block ss-db-table-wrap">
             <table className="ss-db-table">
               <thead>
                 <tr>
@@ -245,27 +242,42 @@ export function DatabasePage() {
             </table>
           </div>
 
+          {/* Mobile Cards View (shown only on screens < 768px) */}
+          <div className="md:hidden flex flex-col gap-3">
+            {rows.map((row) => (
+              <MobileLogCard
+                key={row.id}
+                row={row}
+                isAdmin={isAdmin}
+                onDelete={onDelete}
+                deleting={delMutation.isPending}
+                expanded={expandedId === row.id}
+                onToggleExpand={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+              />
+            ))}
+          </div>
+
           <div className="ss-db-pager">
-            <span>
+            <span className="w-full sm:w-auto text-center sm:text-left text-xs sm:text-sm">
               {total} entries
               {query.isFetching && !query.isLoading ? ' · …' : ''}
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
               <button
                 type="button"
-                className="ss-btn-ghost"
+                className="ss-btn-ghost min-h-[42px] px-4 flex-1 sm:flex-initial cursor-pointer"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1 || query.isFetching}
               >
                 Previous
               </button>
-              <span className="text-gray-400">
+              <span className="text-gray-400 text-xs sm:text-sm px-1">
                 Page {page}
                 {totalPages > 0 ? ` of ${totalPages}` : ''}
               </span>
               <button
                 type="button"
-                className="ss-btn-ghost"
+                className="ss-btn-ghost min-h-[42px] px-4 flex-1 sm:flex-initial cursor-pointer"
                 onClick={() => setPage((p) => p + 1)}
                 disabled={totalPages === 0 || page >= totalPages || query.isFetching}
               >
@@ -276,6 +288,146 @@ export function DatabasePage() {
         </>
       )}
     </div>
+  )
+}
+
+function MobileLogCard({
+  row,
+  isAdmin,
+  onDelete,
+  deleting,
+  expanded,
+  onToggleExpand,
+}: {
+  row: LogListEntry
+  isAdmin: boolean
+  onDelete: (id: number) => void
+  deleting: boolean
+  expanded: boolean
+  onToggleExpand: () => void
+}) {
+  const hasAudio = row.audio_path && row.audio_path !== 'file not saved'
+  const confidencePercent = row.confidence != null ? Math.round(row.confidence * 100) : null
+  const confidenceColor =
+    confidencePercent != null
+      ? confidencePercent >= 85
+        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+        : confidencePercent >= 60
+          ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+          : 'bg-red-500/20 text-red-300 border-red-500/30'
+      : 'bg-white/10 text-gray-400 border-white/10'
+
+  return (
+    <article
+      className={`p-3.5 rounded-xl border transition flex flex-col gap-2.5 ${
+        expanded
+          ? 'bg-indigo-950/30 border-indigo-500/40 shadow-lg'
+          : 'bg-white/[0.02] border-white/10 hover:border-white/20'
+      }`}
+    >
+      {/* Top Row: Talkgroup pill, Timestamp, Confidence Badge */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-semibold font-mono truncate max-w-[140px]">
+            {row.talkgroup || 'No Talkgroup'}
+          </span>
+          {confidencePercent != null && (
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${confidenceColor}`}
+            >
+              {confidencePercent}%
+            </span>
+          )}
+        </div>
+        <time className="text-xs font-mono text-gray-400 shrink-0">
+          {row.timestamp
+            ? new Date(row.timestamp).toLocaleString(undefined, {
+                dateStyle: 'short',
+                timeStyle: 'short',
+              })
+            : '—'}
+        </time>
+      </div>
+
+      {/* Transcript text preview */}
+      <div className="text-sm text-gray-200 leading-relaxed break-words bg-black/20 p-2.5 rounded-lg border border-white/5">
+        {row.is_reviewed && (
+          <span className="text-green-400 font-bold mr-1.5" title="Reviewed">
+            ✓
+          </span>
+        )}
+        <span className={expanded ? '' : 'line-clamp-3'}>
+          {row.corrected_transcript || row.transcript || (
+            <span className="text-gray-500 italic">No transcript</span>
+          )}
+        </span>
+      </div>
+
+      {/* File meta row: Filename, Duration, Size */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-gray-400">
+        <span
+          className="truncate max-w-[200px] font-mono text-[11px] text-gray-400"
+          title={row.filename}
+        >
+          📄 {row.filename || '—'}
+        </span>
+        <div className="flex items-center gap-2 text-[11px] font-mono shrink-0 text-gray-400">
+          <span>⏱️ {typeof row.duration === 'number' ? `${row.duration.toFixed(1)}s` : '—'}</span>
+          <span>·</span>
+          <span>💾 {formatBytes(row.file_size || 0)}</span>
+        </div>
+      </div>
+
+      {/* Action Buttons Toolbar: Audio Download, Delete (if admin), Details/Edit Toggle */}
+      <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1.5 min-h-[38px] px-2 py-1 rounded hover:bg-white/5 cursor-pointer"
+          aria-expanded={expanded}
+        >
+          <span>{expanded ? '▲ Hide Details & Edit' : '▼ Details & Audio'}</span>
+        </button>
+
+        <div className="flex items-center gap-2">
+          {hasAudio && (
+            <button
+              type="button"
+              className="w-10 h-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-gray-200 transition text-sm cursor-pointer"
+              onClick={() => {
+                void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
+                  console.error('Download failed:', err)
+                })
+              }}
+              title="Download audio file directly"
+              aria-label="Download audio file"
+            >
+              ⬇️
+            </button>
+          )}
+
+          {isAdmin && (
+            <button
+              type="button"
+              className="w-10 h-10 flex items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-300 transition text-sm cursor-pointer disabled:opacity-40"
+              onClick={() => onDelete(row.id)}
+              disabled={deleting}
+              title="Remove log entry"
+              aria-label="Remove log entry"
+            >
+              🗑️
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded Details Tray */}
+      {expanded && (
+        <div className="pt-2 border-t border-white/10">
+          <LogExpandedRow row={row} />
+        </div>
+      )}
+    </article>
   )
 }
 
@@ -304,11 +456,17 @@ function LogRow({
       <td className="ss-db-td font-mono text-xs text-gray-400">
         <span className={`ss-db-expand-icon ${expanded ? 'ss-db-expand-icon--open' : ''}`}>▶</span>{' '}
         {row.timestamp
-          ? new Date(row.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+          ? new Date(row.timestamp).toLocaleString(undefined, {
+              dateStyle: 'short',
+              timeStyle: 'short',
+            })
           : '—'}
       </td>
       <td className="ss-db-td">
-        <span className="inline-block max-w-[12rem] truncate text-indigo-200" title={row.talkgroup ?? ''}>
+        <span
+          className="inline-block max-w-[12rem] truncate text-indigo-200"
+          title={row.talkgroup ?? ''}
+        >
           {row.talkgroup || '—'}
         </span>
       </td>
@@ -317,7 +475,11 @@ function LogRow({
       </td>
       <td className="ss-db-td">
         <span className="ss-db-td-clip block text-gray-400">
-          {row.is_reviewed && <span className="text-green-500 mr-1" title="Reviewed">✓</span>}
+          {row.is_reviewed && (
+            <span className="text-green-500 mr-1" title="Reviewed">
+              ✓
+            </span>
+          )}
           {row.corrected_transcript || row.transcript || '—'}
         </span>
       </td>
@@ -331,17 +493,20 @@ function LogRow({
       <td className="ss-db-td text-right">
         <div className="ss-db-actions">
           {hasAudio && (
-            <a
+            <button
+              type="button"
               className="ss-text-link"
-              href={`/${row.audio_path}`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              title="Download audio"
-              aria-label="Download audio"
+              onClick={(e) => {
+                e.stopPropagation()
+                void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
+                  console.error('Download failed:', err)
+                })
+              }}
+              title="Download audio file directly"
+              aria-label="Download audio file directly"
             >
               ⬇️
-            </a>
+            </button>
           )}
           {isAdmin && (
             <button
@@ -404,7 +569,10 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
         {kv('Filename', row.filename || '—')}
         {kv('Talkgroup', row.talkgroup || '—')}
         {kv('Date & time', ts)}
-        {kv('Duration', typeof row.duration === 'number' ? `${row.duration.toFixed(2)} seconds` : '—')}
+        {kv(
+          'Duration',
+          typeof row.duration === 'number' ? `${row.duration.toFixed(2)} seconds` : '—',
+        )}
         {kv('File size', formatBytes(row.file_size || 0))}
         {kv('Confidence', confidence)}
         {kv('Audio path', row.audio_path || '—')}
@@ -412,7 +580,8 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
 
       <div className="ss-db-expand-field mt-4">
         <span className="ss-db-expand-label flex items-center gap-2">
-          Full transcript {row.is_reviewed && <span className="text-green-500 text-sm">✓ Reviewed</span>}
+          Full transcript{' '}
+          {row.is_reviewed && <span className="text-green-500 text-sm">✓ Reviewed</span>}
         </span>
         <textarea
           className="ss-input mt-1 w-full min-h-[100px] font-mono text-sm"
@@ -681,7 +850,11 @@ function ScAudioPlayer({ src }: { src: string }) {
           >
             Stop
           </button>
-          <button type="button" className="sc-audio-player__btn sc-audio-player__btn--mute" onClick={onMute}>
+          <button
+            type="button"
+            className="sc-audio-player__btn sc-audio-player__btn--mute"
+            onClick={onMute}
+          >
             {muted ? 'Unmute' : 'Mute'}
           </button>
           <span className="sc-audio-player__vol-label">Vol</span>

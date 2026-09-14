@@ -23,6 +23,8 @@ interface CommandCenterMapProps {
   onMapClick?: (lat: number, lng: number) => void
   onCancelPlacePin?: () => void
   isGeocoding?: boolean
+  unlockAllPins?: boolean
+  activeTab?: 'map' | 'feed'
 }
 
 function MapClickHandler({
@@ -42,22 +44,144 @@ function MapClickHandler({
   return null
 }
 
-// Controller component to smoothly fly map to selected event coordinates
-function MapFlyController({ selectedEvent }: { selectedEvent: PipelineEvent | null }) {
-  const map = useMap()
-  const lastFlyId = useRef<string | null>(null)
+/**
+ * Ensures that the popup element is fully visible within the map container's bounds.
+ * If any edge is clipped (e.g. top cut off above the map header), it smoothly pans the map
+ * by the exact pixel delta needed so that the entire card is visible without scrollbars.
+ */
+export function ensurePopupInView(
+  map: L.Map,
+  popupEl: HTMLElement,
+  options: { padding?: number; animate?: boolean } = {},
+): boolean {
+  const padding = options.padding ?? 20
+  const container = map.getContainer()
+  if (!container || !popupEl) return false
 
+  const mapRect = container.getBoundingClientRect()
+  const popupRect = popupEl.getBoundingClientRect()
+
+  // Zero dimensions check (e.g. hidden tab during initial render)
+  if (mapRect.width === 0 || mapRect.height === 0 || popupRect.width === 0 || popupRect.height === 0) {
+    return false
+  }
+
+  let dx = 0
+  let dy = 0
+
+  // Vertical check
+  if (popupRect.top < mapRect.top + padding) {
+    dy = popupRect.top - (mapRect.top + padding)
+  } else if (popupRect.bottom > mapRect.bottom - padding) {
+    const headroomTop = Math.max(0, popupRect.top - (mapRect.top + padding))
+    const overflowBottom = popupRect.bottom - (mapRect.bottom - padding)
+    dy = Math.min(overflowBottom, headroomTop)
+  }
+
+  // Horizontal check
+  if (popupRect.left < mapRect.left + padding) {
+    dx = popupRect.left - (mapRect.left + padding)
+  } else if (popupRect.right > mapRect.right - padding) {
+    const headroomLeft = Math.max(0, popupRect.left - (mapRect.left + padding))
+    const overflowRight = popupRect.right - (mapRect.right - padding)
+    dx = Math.min(overflowRight, headroomLeft)
+  }
+
+  if (dx !== 0 || dy !== 0) {
+    map.panBy([dx, dy], { animate: options.animate ?? true })
+    return true
+  }
+  return false
+}
+
+/**
+ * Controller component to automatically position the map so that the selected
+ * event card and pin are fully visible in the screen/viewport without being cut off.
+ */
+function MapCardFitController({
+  selectedEvent,
+  markerRefs,
+}: {
+  selectedEvent: PipelineEvent | null
+  markerRefs: React.MutableRefObject<Map<string, L.Marker>>
+}) {
+  const map = useMap()
+
+  // Triggered when selectedEvent changes (e.g. from feed or pin selection)
   useEffect(() => {
-    if (!selectedEvent || typeof selectedEvent.latitude !== 'number' || typeof selectedEvent.longitude !== 'number') {
+    if (
+      !selectedEvent ||
+      typeof selectedEvent.latitude !== 'number' ||
+      typeof selectedEvent.longitude !== 'number'
+    ) {
       return
     }
-    if (lastFlyId.current !== selectedEvent.eventId) {
-      lastFlyId.current = selectedEvent.eventId
-      map.flyTo([selectedEvent.latitude, selectedEvent.longitude], Math.max(map.getZoom(), 15), {
-        duration: 1.2,
+
+    const eventId = selectedEvent.eventId
+    const marker = markerRefs.current.get(eventId)
+    const targetLatLng: [number, number] = [selectedEvent.latitude, selectedEvent.longitude]
+    const targetZoom = Math.max(map.getZoom(), 15)
+
+    // Center on target pin
+    map.setView(targetLatLng, targetZoom)
+
+    if (marker && !marker.isPopupOpen()) {
+      marker.openPopup()
+    }
+
+    // Measure and ensure popup is fully in view
+    const raf = requestAnimationFrame(() => {
+      const popupEl = map.getContainer().querySelector<HTMLElement>('.leaflet-popup')
+      if (popupEl) {
+        ensurePopupInView(map, popupEl, { animate: true })
+      }
+    })
+
+    // Safety timeout in case map container just transitioned to visible (e.g. mobile tab switch)
+    const timer = setTimeout(() => {
+      const popupEl = map.getContainer().querySelector<HTMLElement>('.leaflet-popup')
+      if (popupEl) {
+        ensurePopupInView(map, popupEl, { animate: true })
+      }
+    }, 120)
+
+    return () => {
+      cancelAnimationFrame(raf)
+      clearTimeout(timer)
+    }
+  }, [selectedEvent, map, markerRefs])
+
+  // Listen for popupopen events (e.g. when user clicks marker pin directly on the map)
+  useEffect(() => {
+    const onPopupOpen = (e: L.PopupEvent) => {
+      requestAnimationFrame(() => {
+        const popupEl = e.popup.getElement()
+        if (popupEl) {
+          ensurePopupInView(map, popupEl, { animate: true })
+        }
       })
     }
-  }, [selectedEvent, map])
+
+    map.on('popupopen', onPopupOpen)
+    return () => {
+      map.off('popupopen', onPopupOpen)
+    }
+  }, [map])
+
+  // Re-adjust view on map resize or orientation change
+  useEffect(() => {
+    const onResize = () => {
+      const popupEl = map.getContainer().querySelector<HTMLElement>('.leaflet-popup')
+      if (popupEl) {
+        ensurePopupInView(map, popupEl, { animate: false })
+      }
+    }
+
+    map.on('resize', onResize)
+    return () => {
+      map.off('resize', onResize)
+    }
+  }, [map])
 
   return null
 }
@@ -83,7 +207,32 @@ function MapBoundsFitter({ events }: { events: PipelineEvent[] }) {
   return null
 }
 
-function getMarkerColor(eventType: string | null, broadcastType: string | null): {
+function MapResizeInvalidator({ activeTab }: { activeTab?: 'map' | 'feed' }) {
+  const map = useMap()
+  useEffect(() => {
+    if (activeTab === 'map' || !activeTab) {
+      const timer = setTimeout(() => {
+        map.invalidateSize()
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [activeTab, map])
+
+  useEffect(() => {
+    const handleResize = () => {
+      map.invalidateSize()
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [map])
+
+  return null
+}
+
+function getMarkerColor(
+  eventType: string | null,
+  broadcastType: string | null,
+): {
   bg: string
   border: string
   pulse: string
@@ -92,29 +241,54 @@ function getMarkerColor(eventType: string | null, broadcastType: string | null):
   const typeStr = (eventType || '').toLowerCase()
   const bcStr = (broadcastType || '').toLowerCase()
 
-  if (typeStr.includes('fire') || typeStr.includes('smoke') || typeStr.includes('alarm') || typeStr.includes('hazmat')) {
+  if (
+    typeStr.includes('fire') ||
+    typeStr.includes('smoke') ||
+    typeStr.includes('alarm') ||
+    typeStr.includes('hazmat')
+  ) {
     return { bg: '#ef4444', border: '#fca5a5', pulse: 'rgba(239, 68, 68, 0.4)', icon: '🔥' }
   }
-  if (typeStr.includes('police') || typeStr.includes('traffic') || typeStr.includes('chase') || bcStr.includes('attempt_to_locate')) {
+  if (
+    typeStr.includes('police') ||
+    typeStr.includes('traffic') ||
+    typeStr.includes('chase') ||
+    bcStr.includes('attempt_to_locate')
+  ) {
     return { bg: '#3b82f6', border: '#93c5fd', pulse: 'rgba(59, 130, 246, 0.4)', icon: '🚔' }
   }
-  if (typeStr.includes('med') || typeStr.includes('ems') || typeStr.includes('injury') || typeStr.includes('rescue')) {
+  if (
+    typeStr.includes('med') ||
+    typeStr.includes('ems') ||
+    typeStr.includes('injury') ||
+    typeStr.includes('rescue')
+  ) {
     return { bg: '#f59e0b', border: '#fcd34d', pulse: 'rgba(245, 158, 11, 0.4)', icon: '🚑' }
   }
-  if (bcStr.includes('storm_warning') || typeStr.includes('weather') || typeStr.includes('tornado')) {
+  if (
+    bcStr.includes('storm_warning') ||
+    typeStr.includes('weather') ||
+    typeStr.includes('tornado')
+  ) {
     return { bg: '#8b5cf6', border: '#c4b5fd', pulse: 'rgba(139, 92, 246, 0.4)', icon: '⚠️' }
   }
   return { bg: '#06b6d4', border: '#67e8f9', pulse: 'rgba(6, 182, 212, 0.4)', icon: '📍' }
 }
 
-function createIncidentDivIcon(event: PipelineEvent, isSelected: boolean, isMostRecent: boolean, isAnimating: boolean) {
+function createIncidentDivIcon(
+  event: PipelineEvent,
+  isSelected: boolean,
+  isMostRecent: boolean,
+  isAnimating: boolean,
+  isEditable: boolean = false,
+) {
   const color = getMarkerColor(event.eventType, event.broadcastType)
 
   const html = `
-    <div class="ss-map-pin ${isSelected ? 'ss-map-pin--selected' : ''} ${isAnimating ? 'ss-map-pin--animating' : ''}">
+    <div class="ss-map-pin ${isSelected ? 'ss-map-pin--selected' : ''} ${isAnimating ? 'ss-map-pin--animating' : ''} ${isEditable ? 'ss-map-pin--editable' : ''}">
       ${isMostRecent ? `<div class="ss-map-pin-pulse" style="background: ${color.pulse};"></div>` : ''}
-      <div class="ss-map-pin-circle" style="background: ${color.bg}; border-color: ${isSelected ? '#eab308' : color.border};">
-        <span>${color.icon}</span>
+      <div class="ss-map-pin-circle" style="background: ${color.bg}; border-color: ${isEditable ? '#f59e0b' : isSelected ? '#eab308' : color.border};">
+        <span>${isEditable ? '✋' : color.icon}</span>
       </div>
     </div>
   `
@@ -139,10 +313,13 @@ export function CommandCenterMap({
   onMapClick,
   onCancelPlacePin,
   isGeocoding,
+  unlockAllPins = false,
+  activeTab,
 }: CommandCenterMapProps) {
-
+  const markerRefs = useRef<Map<string, L.Marker>>(new Map())
   const prevSpans = useRef<Record<string, number>>({})
   const [animating, setAnimating] = useState<Record<string, number>>({})
+  const [editableEventId, setEditableEventId] = useState<string | null>(null)
 
   useEffect(() => {
     let changed = false
@@ -216,7 +393,8 @@ export function CommandCenterMap({
           className="ss-map-tiles-dark"
         />
 
-        <MapFlyController selectedEvent={selectedEvent} />
+        <MapResizeInvalidator activeTab={activeTab} />
+        <MapCardFitController selectedEvent={selectedEvent} markerRefs={markerRefs} />
         <MapBoundsFitter events={mappedEvents} />
         <MapClickHandler isPlacingPin={isPlacingPin} onMapClick={onMapClick} />
 
@@ -224,28 +402,53 @@ export function CommandCenterMap({
           const isSelected = ev.eventId === selectedEventId
           const isMostRecent = ev.eventId === mostRecentEventId
           const isAnimating = !!animating[ev.eventId]
-          const icon = createIncidentDivIcon(ev, isSelected, isMostRecent, isAnimating)
+          const isEditable = Boolean(unlockAllPins || editableEventId === ev.eventId)
+          const icon = createIncidentDivIcon(ev, isSelected, isMostRecent, isAnimating, isEditable)
 
           return (
             <Marker
               key={`marker-${ev.eventId}`}
+              ref={(marker) => {
+                if (marker) {
+                  markerRefs.current.set(ev.eventId, marker)
+                } else {
+                  markerRefs.current.delete(ev.eventId)
+                }
+              }}
               position={[ev.latitude!, ev.longitude!]}
               icon={icon}
-              draggable={true}
+              draggable={isEditable}
               eventHandlers={{
                 click: () => onSelectEvent(ev.eventId),
                 dragend: (e) => {
                   const marker = e.target
                   const position = marker.getLatLng()
-                  if (onUpdateCoordinates) {
-                    void onUpdateCoordinates(ev.eventId, position.lat, position.lng, undefined, true)
+                  const confirmMsg = `Move pin for "${typeDisplayFor(ev)}" to this new location?\n\nLatitude: ${position.lat.toFixed(5)}\nLongitude: ${position.lng.toFixed(5)}\n\n(Address will be automatically updated and reverse-geocoded)`
+                  if (window.confirm(confirmMsg)) {
+                    if (onUpdateCoordinates) {
+                      void onUpdateCoordinates(
+                        ev.eventId,
+                        position.lat,
+                        position.lng,
+                        undefined,
+                        true,
+                      )
+                    }
+                    setEditableEventId(null)
+                  } else {
+                    marker.setLatLng([ev.latitude!, ev.longitude!])
                   }
                 },
               }}
             >
-              <Popup className="ss-map-popup">
-                <div className="p-3.5 max-w-xs flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2 pr-5">
+              <Popup
+                className="ss-map-popup"
+                autoPan={false}
+                maxWidth={420}
+                minWidth={280}
+              >
+                <div className="ss-map-card-popup p-3 sm:p-3.5 flex flex-col gap-2">
+                  <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-2 pr-6 shrink-0">
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide ${
                         ev.status === 'open'
@@ -256,11 +459,16 @@ export function CommandCenterMap({
                       {ev.status}
                     </span>
                     <span className="text-[11px] font-medium text-gray-400">
-                      {ev.monitorName || 'Monitor'} · {formatTimeOnly(ev.incidentAt ?? ev.createdAt)}
+                      {ev.monitorName || 'Monitor'} ·{' '}
+                      {typeof ev.spansAttached === 'number' ? ev.spansAttached : 1}{' '}
+                      {(typeof ev.spansAttached === 'number' ? ev.spansAttached : 1) === 1
+                        ? 'span'
+                        : 'spans'}{' '}
+                      · {formatTimeOnly(ev.incidentAt ?? ev.createdAt)}
                     </span>
                   </div>
 
-                  <div>
+                  <div className="shrink-0">
                     <h4 className="text-sm font-bold text-white leading-tight">
                       {typeDisplayFor(ev)}
                     </h4>
@@ -271,7 +479,7 @@ export function CommandCenterMap({
                     )}
                   </div>
 
-                  <div className="bg-black/30 rounded p-2 border border-white/5 flex flex-col gap-1 text-xs">
+                  <div className="bg-black/30 rounded p-2 border border-white/5 flex flex-col gap-1 text-xs shrink-0">
                     <p className="font-semibold text-gray-200 flex items-center gap-1">
                       <span>📍</span> {ev.location || 'Unknown location'}
                     </p>
@@ -283,7 +491,7 @@ export function CommandCenterMap({
                   </div>
 
                   {splitBadgeEntries(ev.units).length > 0 && (
-                    <div className="flex flex-wrap gap-1 items-center">
+                    <div className="flex flex-wrap gap-1 items-center shrink-0">
                       <span className="text-[10px] uppercase text-gray-500 font-bold">Units:</span>
                       {splitBadgeEntries(ev.units).map((u) => (
                         <span
@@ -297,27 +505,57 @@ export function CommandCenterMap({
                   )}
 
                   {(ev.summary || ev.originalTranscription) && (
-                    <p className="text-xs text-gray-300 italic bg-white/[0.02] p-1.5 rounded border border-white/5">
+                    <p className="text-xs text-gray-300 italic bg-white/[0.02] p-2 rounded border border-white/5 leading-relaxed">
                       &ldquo;{ev.summary || ev.originalTranscription}&rdquo;
                     </p>
                   )}
 
                   <Link
                     to={`/events?incident_id=${encodeURIComponent(ev.eventId)}`}
-                    className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 hover:text-white border border-indigo-500/40 text-xs font-semibold transition text-center shadow-sm"
+                    className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 hover:text-white border border-indigo-500/40 text-xs font-semibold transition text-center shadow-sm shrink-0 min-h-[38px]"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <span>📋</span> Open in Incidents Hub &rarr;
                   </Link>
 
-                  <div className="flex items-center justify-between gap-1.5 text-[10px] text-indigo-300 bg-indigo-500/10 px-2 py-1 rounded border border-indigo-500/20">
-                    <span className="flex items-center gap-1">
-                      <span>✋</span> Drag marker to adjust location
-                    </span>
-                    <span className="text-[9px] text-indigo-400/80">auto-reverse geocodes</span>
-                  </div>
+                  {isEditable ? (
+                    <div className="flex items-center justify-between gap-1.5 text-[10px] text-amber-300 bg-amber-500/15 px-2.5 py-1.5 rounded border border-amber-500/30 shrink-0">
+                      <span className="flex items-center gap-1 font-semibold">
+                        <span>✋</span> Marker Unlocked: Drag to reposition
+                      </span>
+                      {editableEventId === ev.eventId && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditableEventId(null)
+                          }}
+                          className="text-[10px] text-amber-200 hover:text-white underline font-bold"
+                        >
+                          Lock Pin
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2 text-[10px] bg-white/5 px-2.5 py-1.5 rounded border border-white/10 shrink-0">
+                      <span className="text-gray-400 flex items-center gap-1">
+                        <span>🔒</span> Pin location locked
+                      </span>
+                      <button
+                        type="button"
+                        className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 transition hover:underline"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditableEventId(ev.eventId)
+                        }}
+                        title="Unlock marker to move its location"
+                      >
+                        <span>✏️</span> Move Pin
+                      </button>
+                    </div>
+                  )}
 
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10 text-[11px]">
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10 text-[11px] shrink-0">
                     <span className="text-gray-500 font-mono text-[10px]">
                       {ev.latitude?.toFixed(4)}, {ev.longitude?.toFixed(4)}
                     </span>
@@ -325,10 +563,14 @@ export function CommandCenterMap({
                       {onRemoveGeocodeEvent && (
                         <button
                           type="button"
-                          className="text-red-400 hover:text-red-300 font-medium underline transition"
+                          className="text-red-400 hover:text-red-300 font-medium underline transition min-h-[28px]"
                           onClick={(e) => {
                             e.stopPropagation()
-                            if (window.confirm('Are you sure you want to remove this pin from the map? (The incident will not be deleted from the database)')) {
+                            if (
+                              window.confirm(
+                                'Are you sure you want to remove this pin from the map? (The incident will not be deleted from the database)',
+                              )
+                            ) {
                               onRemoveGeocodeEvent(ev.eventId)
                             }
                           }}
@@ -339,7 +581,7 @@ export function CommandCenterMap({
                       {onGeocodeEvent && (
                         <button
                           type="button"
-                          className="text-indigo-400 hover:text-indigo-300 font-medium underline transition"
+                          className="text-indigo-400 hover:text-indigo-300 font-medium underline transition min-h-[28px]"
                           disabled={isGeocoding}
                           onClick={(e) => {
                             e.stopPropagation()
@@ -358,16 +600,37 @@ export function CommandCenterMap({
         })}
       </MapContainer>
 
+      {/* Floating Pin-Repositioning Mode Banner */}
+      {editableEventId && (
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100vw-2rem)] max-w-md bg-amber-950/95 border border-amber-400/60 shadow-2xl text-white px-3 py-2 rounded-xl flex items-center justify-between gap-2 backdrop-blur-md animate-pulse">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base shrink-0">✋</span>
+            <span className="text-xs font-semibold text-amber-200 truncate">
+              Drag marker to reposition pin
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditableEventId(null)}
+            className="text-xs bg-amber-500/30 hover:bg-amber-500/50 px-2.5 py-1 rounded text-white font-bold transition border border-amber-400/40 shrink-0 min-h-[32px] cursor-pointer"
+          >
+            Done
+          </button>
+        </div>
+      )}
+
       {/* Floating Pin-Drop Mode Banner */}
       {isPlacingPin && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-indigo-950/95 border border-indigo-400/60 shadow-2xl text-white px-4 py-2 rounded-xl flex items-center gap-3 backdrop-blur-md animate-pulse">
-          <span className="text-base">📍</span>
-          <span className="text-xs font-semibold">Click anywhere on the map to set incident pin location</span>
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100vw-2rem)] max-w-md bg-indigo-950/95 border border-indigo-400/60 shadow-2xl text-white px-3 py-2 rounded-xl flex items-center justify-between gap-2 backdrop-blur-md animate-pulse">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-base shrink-0">📍</span>
+            <span className="text-xs font-semibold truncate">Click on map to drop pin</span>
+          </div>
           {onCancelPlacePin && (
             <button
               type="button"
               onClick={onCancelPlacePin}
-              className="text-xs bg-white/20 hover:bg-white/30 px-2.5 py-0.5 rounded text-white font-bold transition ml-2"
+              className="text-xs bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded text-white font-bold transition shrink-0 min-h-[32px] cursor-pointer"
             >
               Cancel
             </button>
@@ -376,12 +639,12 @@ export function CommandCenterMap({
       )}
 
       {/* Floating Map Overlay Legend / Info */}
-      <div className="absolute top-3 left-3 z-[400] flex flex-col gap-1.5 bg-gray-950/85 backdrop-blur-md px-3 py-2 rounded-lg border border-white/10 text-xs shadow-lg pointer-events-auto">
+      <div className="absolute top-3 left-3 z-[400] flex flex-col gap-1 bg-gray-950/85 backdrop-blur-md px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg border border-white/10 text-xs shadow-lg pointer-events-auto">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span className="font-semibold text-white">Live Incident Map</span>
+          <span className="font-semibold text-white text-[11px] sm:text-xs">Live Incident Map</span>
         </div>
-        <div className="flex items-center gap-3 text-[11px] text-gray-400">
+        <div className="flex items-center gap-2 text-[10px] sm:text-[11px] text-gray-400">
           <span>{mappedEvents.length} Plotted</span>
           <span>·</span>
           <span>{events.length - mappedEvents.length} Unmapped</span>

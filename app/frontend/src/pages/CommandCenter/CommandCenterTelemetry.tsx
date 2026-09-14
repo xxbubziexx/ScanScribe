@@ -18,29 +18,34 @@ export function CommandCenterTelemetry({
   const [isOpen, setIsOpen] = useState(false)
 
   const openIncidentsCount = events.filter((e) => e.status === 'open').length
-  const mappedCount = events.filter((e) => typeof e.latitude === 'number' && typeof e.longitude === 'number').length
+  const mappedCount = events.filter(
+    (e) => typeof e.latitude === 'number' && typeof e.longitude === 'number',
+  ).length
   const mappingRate = events.length > 0 ? Math.round((mappedCount / events.length) * 100) : 0
 
   return (
     <div className="ss-cc-drawer">
       {/* Drawer Handle Bar */}
       <div
-        className="ss-cc-drawer-bar"
+        className="ss-cc-drawer-bar min-h-[44px]"
         onClick={() => setIsOpen((prev) => !prev)}
         role="button"
         tabIndex={0}
         aria-expanded={isOpen}
         aria-label="Toggle Insights Telemetry"
       >
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 sm:gap-6 min-w-0">
+          <div className="flex items-center gap-2 shrink-0">
             <span className="text-sm">📈</span>
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-200">
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-200 hidden sm:inline">
               Live Telemetry & Insights
+            </span>
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-200 sm:hidden">
+              Telemetry
             </span>
           </div>
 
-          {/* Quick inline metric ticker when collapsed */}
+          {/* Quick inline metric ticker when collapsed on desktop */}
           <div className="hidden sm:flex items-center gap-4 text-xs">
             <div className="flex items-center gap-1.5 bg-black/30 px-2 py-0.5 rounded border border-white/5">
               <span className="text-gray-400">Calls / min:</span>
@@ -57,11 +62,21 @@ export function CommandCenterTelemetry({
               <span className="font-bold text-cyan-400">{mappingRate}%</span>
             </div>
           </div>
+
+          {/* Quick compact metric ticker on mobile */}
+          <div className="flex sm:hidden items-center gap-1.5 text-[10px] min-w-0 truncate">
+            <span className="bg-black/40 px-1.5 py-0.5 rounded border border-white/5 text-emerald-400 font-bold shrink-0">
+              {liveCpm ?? 0} CPM
+            </span>
+            <span className="bg-black/40 px-1.5 py-0.5 rounded border border-white/5 text-indigo-300 font-semibold shrink-0">
+              {openIncidentsCount} Open
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-indigo-300 hover:text-indigo-200 transition">
-            {isOpen ? 'Minimize ▼' : 'Expand Insights ▲'}
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="text-xs text-indigo-300 hover:text-indigo-200 transition font-medium">
+            {isOpen ? 'Minimize ▼' : 'Expand ▲'}
           </span>
         </div>
       </div>
@@ -88,7 +103,8 @@ export function CommandCenterTelemetry({
             <div className="ss-metric-card bg-black/40 border-white/10">
               <p className="ss-metric-label">Map Resolution</p>
               <p className="ss-metric-value text-cyan-400">
-                {mappedCount} <span className="text-xs text-gray-500 font-normal">/ {events.length}</span>
+                {mappedCount}{' '}
+                <span className="text-xs text-gray-500 font-normal">/ {events.length}</span>
               </p>
             </div>
 

@@ -98,6 +98,14 @@ def init_db():
     from .models import event  # noqa: F401
     EventsBase.metadata.create_all(bind=events_engine)
 
+    # Users DB Migrations
+    with engine.connect() as conn:
+        r = conn.execute(text("PRAGMA table_info(users)"))
+        user_cols = [row[1] for row in r.fetchall()]
+        if "last_seen_at" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN last_seen_at DATETIME"))
+            conn.commit()
+
     # Logs DB Migrations
     with logs_engine.connect() as conn:
         r = conn.execute(text("PRAGMA table_info(log_entries)"))

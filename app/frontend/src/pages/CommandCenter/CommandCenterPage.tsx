@@ -19,12 +19,13 @@ const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${win
 export function CommandCenterPage() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  
+
   const containerRef = useRef<HTMLDivElement>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [liveCpm, setLiveCpm] = useState<number | null>(null)
+  const [activeTab, setActiveTab] = useState<'map' | 'feed'>('map')
 
   // Listen for fullscreenchange events to update state
   useEffect(() => {
@@ -100,7 +101,10 @@ export function CommandCenterPage() {
     mutationFn: (eventId: string) => eventsApi.geocode(eventId),
     onSuccess: (res) => {
       if (res.ok && res.latitude && res.longitude) {
-        addToast(`Address resolved: ${res.resolved_address || `${res.latitude}, ${res.longitude}`}`, 'success')
+        addToast(
+          `Address resolved: ${res.resolved_address || `${res.latitude}, ${res.longitude}`}`,
+          'success',
+        )
       } else {
         addToast(res.message || 'Address could not be geocoded', 'warning')
       }
@@ -154,9 +158,7 @@ export function CommandCenterPage() {
       }),
     onSuccess: (res) => {
       addToast(
-        res.resolved_address
-          ? `Pin updated: ${res.resolved_address}`
-          : 'Pin updated successfully',
+        res.resolved_address ? `Pin updated: ${res.resolved_address}` : 'Pin updated successfully',
         'success',
       )
       void queryClient.invalidateQueries({ queryKey: ['events-list'] })
@@ -188,12 +190,25 @@ export function CommandCenterPage() {
   const handleMapClickToPin = useCallback(
     async (lat: number, lng: number) => {
       if (pinPlacementEventId) {
-        await handleUpdateCoordinates(pinPlacementEventId, lat, lng, undefined, true)
+        const ev = (eventsQuery.data?.items ?? []).find((e) => e.event_id === pinPlacementEventId)
+        const label = ev ? ev.event_type || 'this incident' : 'this incident'
+        if (
+          window.confirm(
+            `Set pin for "${label}" at coordinates (${lat.toFixed(5)}, ${lng.toFixed(5)})?`,
+          )
+        ) {
+          await handleUpdateCoordinates(pinPlacementEventId, lat, lng, undefined, true)
+        }
         setPinPlacementEventId(null)
       }
     },
-    [pinPlacementEventId, handleUpdateCoordinates],
+    [pinPlacementEventId, eventsQuery.data?.items, handleUpdateCoordinates],
   )
+
+  const handleSelectEvent = useCallback((id: string) => {
+    setSelectedEventId(id)
+    setActiveTab('map')
+  }, [])
 
   // Real-time WebSocket event handling
   const handleWsMessage = useCallback(
@@ -211,7 +226,6 @@ export function CommandCenterPage() {
 
   useWebSocket(WS_URL, handleWsMessage)
 
-
   // Filter state (hoisted so Map can share it)
   const [search, setSearch] = useState('')
   const [selectedMonitor, setSelectedMonitor] = useState<number | 'all'>('all')
@@ -219,8 +233,11 @@ export function CommandCenterPage() {
   const [timeframe, setTimeframe] = useState<Timeframe>('24h')
 
   const [mapOptionsOpen, setMapOptionsOpen] = useState(false)
-  const [mapOptions, setMapOptions] = useState({ showLabels: true, clusterPins: false })
-
+  const [mapOptions, setMapOptions] = useState({
+    showLabels: true,
+    clusterPins: false,
+    unlockAllPins: false,
+  })
 
   // Transform raw event items into PipelineEvents with monitor names
   const rawItems: EventListItem[] = eventsQuery.data?.items ?? []
@@ -241,13 +258,13 @@ export function CommandCenterPage() {
       if (filterMode === 'open' && ev.status !== 'open') return false
       if (filterMode === 'closed' && ev.status !== 'closed') return false
       if (filterMode === 'mapped' && (ev.latitude == null || ev.longitude == null)) return false
-      
+
       // Timeframe filter
       const evTime = new Date(ev.incidentAt ?? ev.createdAt).getTime()
       if (timeframe === '24h' && now - evTime > 24 * 60 * 60 * 1000) return false
       if (timeframe === '3day' && now - evTime > 3 * 24 * 60 * 60 * 1000) return false
       if (timeframe === '7day' && now - evTime > 7 * 24 * 60 * 60 * 1000) return false
-      
+
       // Text search
       if (search.trim()) {
         const q = search.toLowerCase()
@@ -268,91 +285,162 @@ export function CommandCenterPage() {
           .toLowerCase()
         if (!textToSearch.includes(q)) return false
       }
-      
+
       return true
     })
   }, [pipelineEvents, selectedMonitor, filterMode, timeframe, search])
 
   return (
-    <div className={`ss-command-center ${isFullscreen ? 'ss-cc-fullscreen' : ''}`} ref={containerRef}>
+    <div
+      className={`ss-command-center ${isFullscreen ? 'ss-cc-fullscreen' : ''}`}
+      ref={containerRef}
+    >
       {/* Command Center Top Navigation Toolbar */}
       <header className="ss-cc-header">
-        <div className="ss-cc-title-group">
-          <h1 className="ss-cc-title">
-            <span className="text-xl">🗺️</span> Command Center
-          </h1>
-          <div className="ss-cc-live-badge">
-            <span className="ss-cc-live-dot"></span>
-            <span>LIVE FEED</span>
+        <div className="flex w-full items-center justify-between gap-2">
+          <div className="ss-cc-title-group">
+            <h1 className="ss-cc-title">
+              <span className="text-xl">🗺️</span> Command Center
+            </h1>
+            <div className="ss-cc-live-badge">
+              <span className="ss-cc-live-dot"></span>
+              <span className="hidden sm:inline">LIVE FEED</span>
+              <span className="sm:hidden">LIVE</span>
+            </div>
+          </div>
+
+          <div className="ss-cc-controls">
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                className="ss-btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1 whitespace-nowrap min-h-[38px] cursor-pointer"
+                onClick={() => setMapOptionsOpen(!mapOptionsOpen)}
+                aria-expanded={mapOptionsOpen}
+                aria-label="Map Options"
+              >
+                <span>⚙️</span> <span className="hidden sm:inline">Map Options</span>
+              </button>
+              {mapOptionsOpen && (
+                <div className="absolute top-full right-0 mt-1.5 w-56 bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl p-3 z-[9999] flex flex-col gap-2.5 backdrop-blur-md">
+                  <label className="flex items-center gap-2 text-xs text-gray-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mapOptions.showLabels}
+                      onChange={(e) =>
+                        setMapOptions({ ...mapOptions, showLabels: e.target.checked })
+                      }
+                    />
+                    Show Pin Labels
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mapOptions.clusterPins}
+                      onChange={(e) =>
+                        setMapOptions({ ...mapOptions, clusterPins: e.target.checked })
+                      }
+                    />
+                    Cluster Pins
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-200 cursor-pointer pt-1.5 border-t border-white/10">
+                    <input
+                      type="checkbox"
+                      checked={mapOptions.unlockAllPins}
+                      onChange={(e) =>
+                        setMapOptions({ ...mapOptions, unlockAllPins: e.target.checked })
+                      }
+                    />
+                    <span
+                      className={mapOptions.unlockAllPins ? 'text-amber-400 font-semibold' : ''}
+                    >
+                      {mapOptions.unlockAllPins ? '🔓 All Pins Unlocked' : '🔒 Lock All Pins'}
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              className="ss-btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[38px] cursor-pointer"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+              aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
+            >
+              <span>{isFullscreen ? '⛶' : '🖵'}</span>{' '}
+              <span className="hidden sm:inline">{isFullscreen ? 'Exit' : 'Fullscreen'}</span>
+            </button>
+
+            <button
+              type="button"
+              className="ss-btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[38px] cursor-pointer"
+              onClick={() => {
+                void queryClient.invalidateQueries({ queryKey: ['events-list'] })
+                void queryClient.invalidateQueries({ queryKey: ['insights-stats'] })
+              }}
+              title="Refresh All"
+              aria-label="Refresh All"
+            >
+              <span>🔄</span> <span className="hidden sm:inline">Refresh</span>
+            </button>
+
+            <Link
+              to="/events"
+              className="ss-btn-ghost text-xs py-1.5 px-2.5 hidden sm:flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[38px]"
+              title="Incidents Hub"
+            >
+              <span>📋</span> Incidents Hub
+            </Link>
+
+            <Link
+              to="/dashboard"
+              className="ss-btn-ghost text-xs py-1.5 px-2.5 hidden sm:flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[38px]"
+              title="Audio Console"
+            >
+              <span>🎧</span> Audio Console
+            </Link>
           </div>
         </div>
 
-        <div className="ss-cc-controls">
-          <div className="relative">
+        {/* Mobile View Toggle Bar: Full width segmented control for < 1024px screens */}
+        <div className="w-full lg:hidden pt-0.5" role="tablist" aria-label="Mobile view switcher">
+          <div className="grid grid-cols-2 bg-white/5 p-1 rounded-xl border border-white/10 w-full gap-1">
             <button
               type="button"
-              className="ss-btn-ghost text-xs py-1 px-2.5 flex items-center gap-1"
-              onClick={() => setMapOptionsOpen(!mapOptionsOpen)}
+              role="tab"
+              aria-selected={activeTab === 'map'}
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition min-h-[42px] cursor-pointer ${
+                activeTab === 'map'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              onClick={() => setActiveTab('map')}
             >
-              <span>⚙️</span> Map Options
+              <span>🗺️</span> <span>Map</span>
             </button>
-            {mapOptionsOpen && (
-              <div className="absolute top-full right-0 mt-1 w-48 bg-gray-900 border border-white/10 rounded shadow-xl p-2 z-[9999] flex flex-col gap-2">
-                <label className="flex items-center gap-2 text-xs text-gray-200 cursor-pointer">
-                  <input type="checkbox" checked={mapOptions.showLabels} onChange={(e) => setMapOptions({ ...mapOptions, showLabels: e.target.checked })} />
-                  Show Pin Labels
-                </label>
-                <label className="flex items-center gap-2 text-xs text-gray-200 cursor-pointer">
-                  <input type="checkbox" checked={mapOptions.clusterPins} onChange={(e) => setMapOptions({ ...mapOptions, clusterPins: e.target.checked })} />
-                  Cluster Pins
-                </label>
-              </div>
-            )}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'feed'}
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition min-h-[42px] cursor-pointer ${
+                activeTab === 'feed'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              onClick={() => setActiveTab('feed')}
+            >
+              <span>📋</span> <span>Feed ({filteredEvents.length})</span>
+            </button>
           </div>
-
-          <button
-            type="button"
-            className="ss-btn-ghost text-xs py-1 px-2.5 flex items-center gap-1"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
-          >
-            <span>{isFullscreen ? '⛶' : '🖵'}</span> {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-          </button>
-
-          <button
-            type="button"
-            className="ss-btn-ghost text-xs py-1 px-2.5 flex items-center gap-1"
-            onClick={() => {
-              void queryClient.invalidateQueries({ queryKey: ['events-list'] })
-              void queryClient.invalidateQueries({ queryKey: ['insights-stats'] })
-            }}
-            title="Refresh All"
-          >
-            <span>🔄</span> Refresh
-          </button>
-
-          <Link
-            to="/events"
-            className="ss-btn-ghost text-xs py-1 px-2.5 flex items-center gap-1"
-          >
-            <span>📋</span> Incidents Hub
-          </Link>
-
-          <Link
-            to="/dashboard"
-            className="ss-btn-ghost text-xs py-1 px-2.5 flex items-center gap-1"
-          >
-            <span>🎧</span> Audio Console
-          </Link>
         </div>
       </header>
 
       {/* Main 2-Pane Body: Map on the Left/Center, Feed Sidebar on the Right */}
-      <div className="ss-cc-body">
+      <div className={`ss-cc-body ${activeTab === 'map' ? 'ss-cc-body--map' : 'ss-cc-body--feed'}`}>
         <CommandCenterMap
           events={filteredEvents}
           selectedEventId={selectedEventId}
-          onSelectEvent={(id) => setSelectedEventId(id)}
+          onSelectEvent={handleSelectEvent}
           onGeocodeEvent={handleGeocode}
           onRemoveGeocodeEvent={handleRemoveGeocode}
           onUpdateCoordinates={handleUpdateCoordinates}
@@ -360,6 +448,8 @@ export function CommandCenterPage() {
           onMapClick={handleMapClickToPin}
           onCancelPlacePin={() => setPinPlacementEventId(null)}
           isGeocoding={geocodeMutation.isPending || setCoordinatesMutation.isPending}
+          unlockAllPins={mapOptions.unlockAllPins}
+          activeTab={activeTab}
         />
 
         <CommandCenterFeed
@@ -367,7 +457,7 @@ export function CommandCenterPage() {
           rawEvents={pipelineEvents}
           monitors={monitors}
           selectedEventId={selectedEventId}
-          onSelectEvent={(id) => setSelectedEventId(id)}
+          onSelectEvent={handleSelectEvent}
           onGeocodeEvent={handleGeocode}
           onUpdateCoordinates={handleUpdateCoordinates}
           onStartPlacePin={(id) => setPinPlacementEventId(id)}

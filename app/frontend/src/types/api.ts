@@ -12,6 +12,7 @@ export interface UserResponse {
   is_active: boolean
   is_admin: boolean
   created_at: string
+  last_seen_at?: string | null
 }
 
 export interface ApiError {

@@ -99,11 +99,52 @@ export function ResizableSplit({
     }
   }, [minLeftPct, maxLeftPct, minHeight])
 
+  const [mobileTab, setMobileTab] = useState<'transcriptions' | 'console'>('transcriptions')
+
   if (isMobile) {
     return (
-      <div className="ss-panel ss-panel--stacked">
-        <div className="ss-panel-pane">{left}</div>
-        <div className="ss-panel-pane">{right}</div>
+      <div className="ss-panel ss-panel--stacked flex flex-col">
+        {/* Mobile View Switcher */}
+        <div
+          className="p-2 border-b border-white/10 bg-white/[0.02]"
+          role="tablist"
+          aria-label="Dashboard views"
+        >
+          <div className="grid grid-cols-2 bg-white/5 p-1 rounded-xl border border-white/10 w-full gap-1">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileTab === 'transcriptions'}
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition min-h-[42px] cursor-pointer ${
+                mobileTab === 'transcriptions'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              onClick={() => setMobileTab('transcriptions')}
+            >
+              <span>📻</span>
+              <span>Transcriptions</span>
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileTab === 'console'}
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition min-h-[42px] cursor-pointer ${
+                mobileTab === 'console'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-gray-200'
+              }`}
+              onClick={() => setMobileTab('console')}
+            >
+              <span>💻</span>
+              <span>Console</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="ss-panel-pane flex-1 min-h-[440px]">
+          {mobileTab === 'transcriptions' ? left : right}
+        </div>
       </div>
     )
   }
@@ -111,13 +152,14 @@ export function ResizableSplit({
   return (
     <div className="flex flex-col">
       <div ref={containerRef} className="ss-panel" style={{ height }}>
-        <div className="flex flex-col overflow-hidden" style={{ width: `${leftPct}%`, flexShrink: 0 }}>
+        <div
+          className="flex flex-col overflow-hidden"
+          style={{ width: `${leftPct}%`, flexShrink: 0 }}
+        >
           {left}
         </div>
 
-        {canResize && (
-          <div onMouseDown={onColDown} className="ss-resize-col" role="separator" />
-        )}
+        {canResize && <div onMouseDown={onColDown} className="ss-resize-col" role="separator" />}
         {!canResize && <div className="w-px shrink-0 bg-white/10" aria-hidden />}
 
         <div className="flex flex-col overflow-hidden" style={{ flex: 1 }}>
@@ -125,9 +167,7 @@ export function ResizableSplit({
         </div>
       </div>
 
-      {canResize && (
-        <div onMouseDown={onRowDown} className="ss-resize-row" role="separator" />
-      )}
+      {canResize && <div onMouseDown={onRowDown} className="ss-resize-row" role="separator" />}
     </div>
   )
 }

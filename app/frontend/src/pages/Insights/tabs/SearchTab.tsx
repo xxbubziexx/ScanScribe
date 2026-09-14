@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import type { LogEntry, SearchFilters, TalkgroupEntry } from '@/types/insights'
 import { insights } from '@/lib/insights'
 
@@ -73,7 +74,7 @@ export function SearchTab({
           keyword: f.keyword,
           hour: f.hour,
           sort: f.sort,
-          limit: f.hour ? '10000' : '100',
+          limit: String(f.limit ?? 50),
         })
         f.talkgroups.forEach((tg) => params.append('talkgroup', tg))
         const data = await insights.search(params)
@@ -129,7 +130,7 @@ export function SearchTab({
   }
 
   function clearFilters() {
-    onFiltersChange({ keyword: '', talkgroups: [], hour: '', sort: 'newest' })
+    onFiltersChange({ keyword: '', talkgroups: [], hour: '', sort: 'newest', limit: filters.limit ?? 50 })
   }
 
   function toggleAudio(id: number, path: string) {
@@ -231,6 +232,21 @@ export function SearchTab({
           )}
         </div>
 
+        {/* Limiter */}
+        <select
+          value={filters.limit ?? 50}
+          onChange={(e) => onFiltersChange({ ...filters, limit: Number(e.target.value) })}
+          className="ss-select"
+          title="Result limit"
+          aria-label="Result limit"
+        >
+          {[20, 50, 100, 500].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+
         {/* Hour filter */}
         <select
           value={filters.hour}
@@ -292,11 +308,15 @@ export function SearchTab({
 
       {/* Results count */}
       <p className="mb-2 text-xs text-gray-500">
-        {loading ? 'Searching…' : `${total} results`}
+        {loading
+          ? 'Searching…'
+          : total > results.length
+            ? `Showing ${results.length} of ${total.toLocaleString()} results`
+            : `${total.toLocaleString()} results`}
       </p>
 
       {/* Results list */}
-      <div className="ss-rec-scroll">
+      <div className="ss-search-scroll">
         {results.length === 0 && !loading && (
           <p className="text-sm text-gray-500">
             {hasFilters
@@ -348,6 +368,35 @@ export function SearchTab({
                   >
                     {entry.talkgroup || 'N/A'}
                   </button>
+                )}
+
+                {entry.attached_events && entry.attached_events.length > 0 && (
+                  <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5">
+                    {entry.attached_events.map((ev) => {
+                      const isOpen = ev.status === 'open'
+                      return (
+                        <Link
+                          key={ev.id || ev.event_id}
+                          to={`/events?incident_id=${encodeURIComponent(ev.event_id)}${isOpen ? '' : '&status=all'}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className={`ss-attached-badge ${
+                            isOpen ? 'ss-attached-badge--open' : 'ss-attached-badge--closed'
+                          }`}
+                          title={`Attached to ${isOpen ? 'open' : 'closed'} event: ${ev.event_type || ev.event_id} (${ev.event_id})`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              isOpen ? 'bg-amber-400 animate-pulse' : 'bg-gray-400'
+                            }`}
+                          />
+                          <span className="whitespace-nowrap">attached to event</span>
+                          <span className="text-[10px] opacity-75 font-mono uppercase">
+                            ({ev.status || 'open'})
+                          </span>
+                        </Link>
+                      )
+                    })}
+                  </div>
                 )}
 
                 <p className="min-w-0 flex-1 leading-snug text-gray-300">

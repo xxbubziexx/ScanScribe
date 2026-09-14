@@ -17,6 +17,7 @@ from sqlalchemy import or_
 from ..database import get_logs_db
 from ..models.user import User
 from ..models.log_entry import LogEntry
+from ..services.redaction_service import redact_ssn
 from .auth import get_current_active_user
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
@@ -375,7 +376,7 @@ async def review_log(
     if not log:
         raise HTTPException(status_code=404, detail="Log entry not found")
     
-    log.corrected_transcript = request.corrected_transcript
+    log.corrected_transcript = redact_ssn(request.corrected_transcript)
     log.is_reviewed = True
     
     db.commit()

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import get_events_db, get_logs_db
-from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore, EntityObservation
+from ..models.event import Monitor, Event, EventTranscriptLink, SpanStore, EntityObservation, SystemSetting
 from ..models.log_entry import LogEntry
 from ..models.user import User
 from ..services.events_common import parse_json_list
@@ -223,7 +223,7 @@ async def get_units_today(
 ):
     """Get distinct UNIT canonical values logged today (for the config UI defaults)."""
     today_start = dt.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    rows = db.query(EntityObservation.canonical).filter(
+    rows = db.query(EntityObservation.raw).filter(
         EntityObservation.label == 'UNIT',
         EntityObservation.ts >= today_start
     ).distinct().all()
@@ -538,7 +538,8 @@ async def list_events(
             talkgroup=talkgroup_str,
             audio_path=audio_path_by_event.get(e.id),
         ))
-    return {"items": out, "total": total}
+    from ..services.events_router_engine import OpenRouterRateLimitManager
+    return {"items": out, "total": total, "rate_limit": OpenRouterRateLimitManager.get_status()}
 
 
 @router.get("/events/export-headers")
@@ -804,6 +805,7 @@ async def set_event_coordinates(
 
     if address:
         event.resolved_address = address
+        event.location = address
 
     events_db.commit()
 
@@ -819,11 +821,29 @@ async def set_event_coordinates(
             "resolved_address": event.resolved_address,
         }
     })
+    websocket_manager.broadcast_sync({
+        "type": "event_update",
+        "action": "update",
+        "data": {
+            "id": event.id,
+            "event_id": event.event_id,
+            "monitor_id": event.monitor_id,
+            "status": event.status,
+            "event_type": event.event_type,
+            "location": event.location,
+            "resolved_address": event.resolved_address,
+            "latitude": event.latitude,
+            "longitude": event.longitude,
+            "units": event.units,
+            "status_detail": event.status_detail,
+        }
+    })
     return {
         "ok": True,
         "latitude": event.latitude,
         "longitude": event.longitude,
         "resolved_address": event.resolved_address,
+        "location": event.location,
     }
 
 
@@ -901,6 +921,117 @@ async def reopen_event(
     return {"ok": True, "status": "open"}
 
 
+class EventUpdateRequest(BaseModel):
+    location: Optional[str] = None
+    event_type: Optional[str] = None
+    status_detail: Optional[str] = None
+    units: Optional[str] = None
+
+
+@router.patch("/events/{event_id}")
+async def update_event_details(
+    event_id: str,
+    payload: EventUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    events_db: Session = Depends(get_events_db),
+):
+    """Update canonical fields of an event (location, event_type, units, status_detail)."""
+    event = events_db.query(Event).filter(Event.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    loc_changed = False
+    if payload.location is not None:
+        new_loc = payload.location.strip() or None
+        if new_loc != event.location:
+            event.location = new_loc
+            loc_changed = True
+
+    if payload.event_type is not None:
+        event.event_type = payload.event_type.strip() or event.event_type
+
+    if payload.status_detail is not None:
+        event.status_detail = payload.status_detail.strip() or None
+
+    if payload.units is not None:
+        event.units = payload.units.strip() or None
+
+    events_db.commit()
+
+    if loc_changed and event.location:
+        from ..services.events_worker import _dispatch_geocoding_for_event
+        _dispatch_geocoding_for_event(event.event_id, event.location, event.monitor_id)
+
+    from ..services.websocket import websocket_manager
+    websocket_manager.broadcast_sync({
+        "type": "event_update",
+        "action": "update",
+        "data": {
+            "id": event.id,
+            "event_id": event.event_id,
+            "monitor_id": event.monitor_id,
+            "status": event.status,
+            "event_type": event.event_type,
+            "location": event.location,
+            "resolved_address": event.resolved_address,
+            "units": event.units,
+            "status_detail": event.status_detail,
+        }
+    })
+
+    return {
+        "ok": True,
+        "event_id": event.event_id,
+        "location": event.location,
+        "event_type": event.event_type,
+        "units": event.units,
+        "status_detail": event.status_detail,
+    }
+
+
+@router.post("/events/{event_id}/summarize")
+@router.post("/{event_id}/summarize")
+async def summarize_event_endpoint(
+    event_id: str,
+    current_user: User = Depends(get_current_active_user),
+    events_db: Session = Depends(get_events_db),
+    logs_db: Session = Depends(get_logs_db),
+):
+    """Generate or refresh the event header summary based on all its linked attachments."""
+    from ..services.events_worker import summarize_event_attachments
+    from ..services.websocket import websocket_manager
+
+    event = events_db.query(Event).filter(Event.event_id == event_id).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    summary = summarize_event_attachments(event, events_db, logs_db)
+
+    websocket_manager.broadcast_sync({
+        "type": "event_update",
+        "action": "attach",
+        "data": {
+            "id": event.id,
+            "event_id": event.event_id,
+            "monitor_id": event.monitor_id,
+            "status": event.status,
+            "event_type": event.event_type,
+            "broadcast_type": getattr(event, "broadcast_type", None),
+            "location": event.location,
+            "latitude": event.latitude,
+            "longitude": event.longitude,
+            "resolved_address": event.resolved_address,
+            "units": event.units,
+            "status_detail": event.status_detail,
+            "original_transcription": event.original_transcription,
+            "summary": event.summary,
+            "talkgroup": "",
+        }
+    })
+
+    return {"ok": True, "event_id": event.event_id, "summary": summary}
+
+
 @router.delete("/events/{event_id}")
 async def delete_event(
     event_id: str,
@@ -956,3 +1087,68 @@ async def events_llm_status(
     if is_loaded():
         return {"enabled": True, "ner_model_path": cfg.ner_model_path, "status": "ok"}
     return {"enabled": True, "ner_model_path": cfg.ner_model_path, "status": "unreachable", "message": "NER model not loaded"}
+
+
+class GlobalRulesUpdate(BaseModel):
+    global_rules: str
+
+
+@router.get("/global-rules")
+async def get_global_rules_endpoint(
+    current_user: User = Depends(get_current_active_user),
+    events_db: Session = Depends(get_events_db),
+):
+    """Retrieve global system prompt rules (checking DB SystemSetting first, falling back to config.yml)."""
+    setting = events_db.query(SystemSetting).filter(SystemSetting.key == "global_prompt_rules").first()
+    if setting and setting.value is not None:
+        return {"global_rules": setting.value}
+    
+    settings = get_settings()
+    cfg = getattr(settings.config, "events_pipeline", None)
+    rules = getattr(cfg, "global_prompt_rules", "") if cfg else ""
+    return {"global_rules": rules or ""}
+
+
+@router.post("/global-rules")
+async def update_global_rules_endpoint(
+    payload: GlobalRulesUpdate,
+    current_user: User = Depends(get_current_admin_user),
+    events_db: Session = Depends(get_events_db),
+):
+    """Update global system prompt rules in DB SystemSetting and sync to in-memory config."""
+    cleaned_rules = payload.global_rules.strip()
+    setting = events_db.query(SystemSetting).filter(SystemSetting.key == "global_prompt_rules").first()
+    if not setting:
+        setting = SystemSetting(key="global_prompt_rules", value=cleaned_rules)
+        events_db.add(setting)
+    else:
+        setting.value = cleaned_rules
+    events_db.commit()
+
+    # Sync to current running in-memory config as well
+    settings = get_settings()
+    if getattr(settings.config, "events_pipeline", None):
+        settings.config.events_pipeline.global_prompt_rules = cleaned_rules
+
+    return {"ok": True, "global_rules": cleaned_rules}
+
+
+@router.get("/rate-limit-status")
+async def get_rate_limit_status(
+    current_user: User = Depends(get_current_active_user),
+) -> Dict[str, Any]:
+    """Retrieve current OpenRouter rate limit status and remaining cooldown timer."""
+    from ..services.events_router_engine import OpenRouterRateLimitManager
+    return OpenRouterRateLimitManager.get_status()
+
+
+@router.post("/rate-limit-status/reset")
+async def reset_rate_limit_status(
+    current_user: User = Depends(get_current_admin_user),
+) -> Dict[str, Any]:
+    """Reset the OpenRouter rate limit cooldown manually in memory and DB (admin only)."""
+    from ..services.events_router_engine import OpenRouterRateLimitManager
+    OpenRouterRateLimitManager.reset()
+    return {"ok": True, "message": "Rate limit cooldown reset successfully"}
+
+

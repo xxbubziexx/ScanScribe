@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { eventsApi } from '@/lib/events'
 import type { MonitorResponse } from '@/types/events'
 import type { PipelineEvent } from '@/pages/Events/IncidentsPage'
-import { splitBadgeEntries, typeDisplayFor } from '@/pages/Events/IncidentsPage'
+import { splitBadgeEntries, typeDisplayFor, formatRelativeTime } from '@/pages/Events/IncidentsPage'
 
 export type FilterMode = 'open' | 'closed' | 'mapped' | 'all'
 export type Timeframe = '24h' | '3day' | '7day' | 'all'
@@ -34,43 +34,6 @@ interface CommandCenterFeedProps {
   setTimeframe: (t: Timeframe) => void
 }
 
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr)
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
-  
-  const datePart = date.toLocaleString('en-US', {
-    month: 'numeric',
-    day: 'numeric',
-    year: '2-digit',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-  
-  let rel = 'just now'
-  if (diffMs > 0) {
-    const diffSec = Math.floor(diffMs / 1000)
-    if (diffSec < 60) {
-      rel = `${diffSec}s ago`
-    } else {
-      const diffMin = Math.floor(diffSec / 60)
-      if (diffMin < 60) {
-        rel = `${diffMin}m ago`
-      } else {
-        const diffHour = Math.floor(diffMin / 60)
-        if (diffHour < 24) {
-          rel = `${diffHour}h ago`
-        } else {
-          rel = 'over 24h ago'
-        }
-      }
-    }
-  }
-  
-  return `${datePart} • ${rel}`
-}
-
 function formatAudioTime(seconds: number): string {
   if (!seconds || isNaN(seconds)) return '0:00'
   const m = Math.floor(seconds / 60)
@@ -97,10 +60,11 @@ export function CommandCenterFeed({
   timeframe,
   setTimeframe,
 }: CommandCenterFeedProps) {
-
   // Audio Playback State
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null)
-  const [audioProgress, setAudioProgress] = useState<Record<string, { current: number; duration: number }>>({})
+  const [audioProgress, setAudioProgress] = useState<
+    Record<string, { current: number; duration: number }>
+  >({})
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   const toggleAudio = (eventId: string, audioPath: string) => {
@@ -221,19 +185,20 @@ export function CommandCenterFeed({
     const now = Date.now()
     const base = rawEvents.filter((ev) => {
       if (selectedMonitor !== 'all' && ev.monitorId !== selectedMonitor) return false
-      
+
       const evTime = new Date(ev.incidentAt ?? ev.createdAt).getTime()
       if (timeframe === '24h' && now - evTime > 24 * 60 * 60 * 1000) return false
       if (timeframe === '3day' && now - evTime > 3 * 24 * 60 * 60 * 1000) return false
       if (timeframe === '7day' && now - evTime > 7 * 24 * 60 * 60 * 1000) return false
-      
+
       return true
     })
 
     return {
       open: base.filter((e) => e.status === 'open').length,
       closed: base.filter((e) => e.status === 'closed').length,
-      mapped: base.filter((e) => typeof e.latitude === 'number' && typeof e.longitude === 'number').length,
+      mapped: base.filter((e) => typeof e.latitude === 'number' && typeof e.longitude === 'number')
+        .length,
       all: base.length,
     }
   }, [rawEvents, selectedMonitor, timeframe])
@@ -241,7 +206,6 @@ export function CommandCenterFeed({
   return (
     <aside className="ss-cc-feed-sidebar" aria-label="Live Incident Feed">
       <div className="ss-cc-feed-header gap-3">
-        
         {/* Top Header Row with Title and Stats */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -262,7 +226,7 @@ export function CommandCenterFeed({
           </span>
           <input
             type="text"
-            className="ss-input text-xs pl-8 py-1.5 w-full bg-white/[0.03]"
+            className="ss-input text-xs pl-8 pr-8 py-2 w-full bg-white/[0.03] min-h-[38px]"
             placeholder="Search address, units, types..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -270,8 +234,9 @@ export function CommandCenterFeed({
           {search && (
             <button
               type="button"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-xs"
+              className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-xs w-8 h-8 flex items-center justify-center rounded cursor-pointer"
               onClick={() => setSearch('')}
+              aria-label="Clear search"
             >
               ✕
             </button>
@@ -281,9 +246,11 @@ export function CommandCenterFeed({
         {/* Filter Toolbar (Row 1) */}
         <div className="flex items-center gap-2">
           <select
-            className="ss-input text-xs py-1 flex-1 min-w-0"
+            className="ss-input text-xs py-1.5 flex-1 min-w-0 min-h-[38px]"
             value={selectedMonitor}
-            onChange={(e) => setSelectedMonitor(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            onChange={(e) =>
+              setSelectedMonitor(e.target.value === 'all' ? 'all' : Number(e.target.value))
+            }
           >
             <option value="all">All Monitors ({monitors.length})</option>
             {monitors.map((m) => (
@@ -294,12 +261,14 @@ export function CommandCenterFeed({
           </select>
 
           {/* Quick Filter Mode Selector */}
-          <div className="flex rounded-lg border border-white/10 bg-white/[0.04] p-0.5 text-[11px] shrink-0">
+          <div className="flex rounded-lg border border-white/10 bg-white/[0.04] p-0.5 text-xs shrink-0">
             <button
               type="button"
               onClick={() => setFilterMode('open')}
-              className={`px-2 py-0.5 rounded ${
-                filterMode === 'open' ? 'bg-indigo-600 text-white font-semibold' : 'text-gray-400 hover:text-white'
+              className={`px-2.5 py-1.5 rounded-md min-h-[34px] cursor-pointer transition ${
+                filterMode === 'open'
+                  ? 'bg-indigo-600 text-white font-semibold shadow-sm'
+                  : 'text-gray-400 hover:text-white'
               }`}
             >
               Open ({counts.open})
@@ -307,8 +276,10 @@ export function CommandCenterFeed({
             <button
               type="button"
               onClick={() => setFilterMode('closed')}
-              className={`px-2 py-0.5 rounded ${
-                filterMode === 'closed' ? 'bg-indigo-600 text-white font-semibold' : 'text-gray-400 hover:text-white'
+              className={`px-2.5 py-1.5 rounded-md min-h-[34px] cursor-pointer transition ${
+                filterMode === 'closed'
+                  ? 'bg-indigo-600 text-white font-semibold shadow-sm'
+                  : 'text-gray-400 hover:text-white'
               }`}
             >
               Closed ({counts.closed})
@@ -316,8 +287,10 @@ export function CommandCenterFeed({
             <button
               type="button"
               onClick={() => setFilterMode('all')}
-              className={`px-2 py-0.5 rounded ${
-                filterMode === 'all' ? 'bg-indigo-600 text-white font-semibold' : 'text-gray-400 hover:text-white'
+              className={`px-2.5 py-1.5 rounded-md min-h-[34px] cursor-pointer transition ${
+                filterMode === 'all'
+                  ? 'bg-indigo-600 text-white font-semibold shadow-sm'
+                  : 'text-gray-400 hover:text-white'
               }`}
             >
               All
@@ -363,16 +336,16 @@ export function CommandCenterFeed({
                     : 'border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]'
                 }`}
               >
-                {/* Top Row: Status + Monitor + Time */}
+                {/* Top Row: Status + Monitor + Spans + Time */}
                 <div className="flex items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                     <span
-                      className={`w-2 h-2 rounded-full ${
+                      className={`w-2 h-2 rounded-full shrink-0 ${
                         ev.status === 'open' ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'
                       }`}
                     />
                     <span
-                      className={`font-semibold uppercase tracking-wider text-[10px] ${
+                      className={`font-semibold uppercase tracking-wider text-[10px] shrink-0 ${
                         ev.status === 'open' ? 'text-emerald-400' : 'text-gray-400'
                       }`}
                     >
@@ -382,9 +355,22 @@ export function CommandCenterFeed({
                     <span className="text-gray-300 font-medium truncate max-w-[120px]">
                       {ev.monitorName || 'Monitor'}
                     </span>
+                    <span className="text-gray-600">·</span>
+                    <span
+                      className="px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-300 text-[10px] font-mono border border-indigo-500/25 shrink-0 inline-flex items-center gap-1"
+                      title={`${typeof ev.spansAttached === 'number' ? ev.spansAttached : 1} attached transmission${(typeof ev.spansAttached === 'number' ? ev.spansAttached : 1) === 1 ? '' : 's'}`}
+                    >
+                      <span>📎</span>
+                      <span>
+                        {typeof ev.spansAttached === 'number' ? ev.spansAttached : 1}{' '}
+                        {(typeof ev.spansAttached === 'number' ? ev.spansAttached : 1) === 1
+                          ? 'span'
+                          : 'spans'}
+                      </span>
+                    </span>
                   </div>
 
-                  <span className="text-[11px] text-gray-400 font-mono">
+                  <span className="text-[11px] text-gray-400 font-mono shrink-0">
                     {formatRelativeTime(ev.incidentAt ?? ev.createdAt)}
                   </span>
                 </div>
@@ -395,9 +381,7 @@ export function CommandCenterFeed({
                     {typeDisplayFor(ev)}
                   </h4>
                   {ev.statusDetail && (
-                    <p className="text-xs text-indigo-300 font-medium mt-0.5">
-                      {ev.statusDetail}
-                    </p>
+                    <p className="text-xs text-indigo-300 font-medium mt-0.5">{ev.statusDetail}</p>
                   )}
                 </div>
 
@@ -412,7 +396,10 @@ export function CommandCenterFeed({
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       <span>{isMapped ? '📍' : '⚠️'}</span>
-                      <span className="truncate font-medium text-gray-200" title={ev.resolvedAddress || ev.location || ''}>
+                      <span
+                        className="truncate font-medium text-gray-200"
+                        title={ev.resolvedAddress || ev.location || ''}
+                      >
                         {ev.resolvedAddress || ev.location || 'No location given'}
                       </span>
                     </div>
@@ -522,7 +509,9 @@ export function CommandCenterFeed({
                               className="text-left px-2.5 py-1.5 hover:bg-indigo-600/30 transition border-b border-white/5 last:border-0 flex flex-col"
                             >
                               <span className="font-bold text-white text-xs">{cand.label}</span>
-                              <span className="text-[10px] text-gray-400 truncate">{cand.display_name}</span>
+                              <span className="text-[10px] text-gray-400 truncate">
+                                {cand.display_name}
+                              </span>
                             </button>
                           ))}
                         </div>
@@ -553,7 +542,7 @@ export function CommandCenterFeed({
 
                 {/* Transcript snippet / summary preview */}
                 {(ev.summary || ev.originalTranscription) && (
-                  <p className="text-xs text-gray-400 line-clamp-2 italic bg-black/20 p-1.5 rounded border border-white/5">
+                  <p className="text-xs text-gray-300 italic bg-black/20 p-2 rounded border border-white/5 leading-relaxed break-words">
                     &ldquo;{ev.summary || ev.originalTranscription}&rdquo;
                   </p>
                 )}
@@ -561,14 +550,23 @@ export function CommandCenterFeed({
                 {/* Compact Inline Audio Player */}
                 {ev.audioPath && ev.audioPath !== 'file not saved' && (
                   <div
-                    className="ss-cc-audio-row flex items-center gap-2 bg-black/40 px-2 py-1.5 rounded-lg border border-white/10"
+                    className="ss-cc-audio-row flex items-center gap-2.5 bg-black/40 px-2.5 py-2 rounded-lg border border-white/10 min-h-[44px]"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
                       type="button"
-                      className="w-6 h-6 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-[11px] shrink-0 transition shadow-sm"
+                      className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center text-xs shrink-0 transition shadow-md cursor-pointer"
                       onClick={() => toggleAudio(ev.eventId, ev.audioPath!)}
-                      title={playingAudioId === ev.eventId ? 'Pause dispatch audio' : 'Play dispatch audio'}
+                      title={
+                        playingAudioId === ev.eventId
+                          ? 'Pause dispatch audio'
+                          : 'Play dispatch audio'
+                      }
+                      aria-label={
+                        playingAudioId === ev.eventId
+                          ? 'Pause dispatch audio'
+                          : 'Play dispatch audio'
+                      }
                     >
                       {playingAudioId === ev.eventId ? '❚❚' : '▶'}
                     </button>
@@ -580,9 +578,9 @@ export function CommandCenterFeed({
                         step={0.1}
                         value={audioProgress[ev.eventId]?.current || 0}
                         onChange={(e) => handleAudioSeek(ev.eventId, Number(e.target.value))}
-                        className="w-full h-1 bg-white/20 rounded appearance-none cursor-pointer accent-indigo-400"
+                        className="w-full h-1.5 bg-white/20 rounded appearance-none cursor-pointer accent-indigo-400"
                       />
-                      <div className="flex justify-between text-[9px] font-mono text-gray-400 mt-0.5">
+                      <div className="flex justify-between text-[10px] font-mono text-gray-400 mt-0.5">
                         <span>{formatAudioTime(audioProgress[ev.eventId]?.current || 0)}</span>
                         <span>{formatAudioTime(audioProgress[ev.eventId]?.duration || 0)}</span>
                       </div>

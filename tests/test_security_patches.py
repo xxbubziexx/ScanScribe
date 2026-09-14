@@ -127,7 +127,7 @@ def test_openapi_docs_disabled(client):
     assert r_openapi.status_code == 404
 
 
-def test_registration_does_not_grant_admin(client):
+def test_registration_does_not_grant_admin(client, test_users):
     """Ensure /api/auth/register creates normal non-admin users."""
     import uuid
     random_name = f"newuser_{uuid.uuid4().hex[:8]}"
@@ -303,3 +303,193 @@ def test_react_spa_routes_intact(client):
 
     r_app_slash = client.get("/app/", follow_redirects=False)
     assert r_app_slash.status_code in (200, 503)
+
+
+def test_users_list_and_last_seen_tracking(client, test_users):
+    """Verify GET /api/users/list returns user records with last_seen_at tracked."""
+    # Unauthenticated -> 401
+    assert client.get("/api/users/list").status_code == 401
+
+    # Regular user -> 403
+    r_user = client.get(
+        "/api/users/list",
+        headers={"Authorization": f"Bearer {test_users['user_token']}"}
+    )
+    assert r_user.status_code == 403
+
+    # Admin user -> 200
+    r_admin = client.get(
+        "/api/users/list",
+        headers={"Authorization": f"Bearer {test_users['admin_token']}"}
+    )
+    assert r_admin.status_code == 200
+    users = r_admin.json()
+    assert isinstance(users, list)
+    assert len(users) >= 2
+
+    for u in users:
+        assert "username" in u
+        assert "email" in u
+        assert "is_admin" in u
+        assert "created_at" in u
+        assert "last_seen_at" in u
+
+    # The admin user making the request was just active, so last_seen_at should be populated
+    admin_entry = [u for u in users if u["username"] == "test_admin_user"][0]
+    assert admin_entry["last_seen_at"] is not None
+
+
+def test_insights_stats_activity_events_count(client, test_users):
+    """Verify GET /api/insights/stats returns events_count in activity points."""
+    # Unauthenticated -> 401
+    assert client.get("/api/insights/stats").status_code == 401
+
+    headers = {"Authorization": f"Bearer {test_users['user_token']}"}
+
+    # 1. Hourly view
+    r_hourly = client.get("/api/insights/stats?view=hourly", headers=headers)
+    assert r_hourly.status_code == 200
+    data_hourly = r_hourly.json()
+    assert "activity" in data_hourly
+    assert len(data_hourly["activity"]) == 24
+    for pt in data_hourly["activity"]:
+        assert "label" in pt
+        assert "count" in pt
+        assert "events_count" in pt
+        assert isinstance(pt["events_count"], int)
+
+    # 2. Daily view
+    r_daily = client.get("/api/insights/stats?view=daily", headers=headers)
+    assert r_daily.status_code == 200
+    data_daily = r_daily.json()
+    assert len(data_daily["activity"]) == 7
+    for pt in data_daily["activity"]:
+        assert "events_count" in pt
+        assert isinstance(pt["events_count"], int)
+
+    # 3. Weekly view
+    r_weekly = client.get("/api/insights/stats?view=weekly", headers=headers)
+    assert r_weekly.status_code == 200
+    data_weekly = r_weekly.json()
+    assert len(data_weekly["activity"]) == 8
+    for pt in data_weekly["activity"]:
+        assert "events_count" in pt
+        assert isinstance(pt["events_count"], int)
+
+
+def test_insights_search_attached_events(client, test_users):
+    """Verify GET /api/insights/search returns attached_events for open and closed events."""
+    from datetime import datetime
+    from app.database import LogsSessionLocal, EventsSessionLocal, init_db
+    from app.models.log_entry import LogEntry
+    from app.models.event import Monitor, Event, EventTranscriptLink
+
+    init_db()
+
+    # Unauthenticated -> 401
+    assert client.get("/api/insights/search").status_code == 401
+
+    headers = {"Authorization": f"Bearer {test_users['user_token']}"}
+
+    logs_db = LogsSessionLocal()
+    events_db = EventsSessionLocal()
+    try:
+        now = datetime.now()
+        log1 = LogEntry(
+            filename="test1.mp3",
+            timestamp=now,
+            talkgroup="Dispatch 1",
+            transcript="Structure fire on Main St",
+            duration=5.0,
+            file_size=1024,
+            audio_path="test1.mp3",
+        )
+        log2 = LogEntry(
+            filename="test2.mp3",
+            timestamp=now,
+            talkgroup="Dispatch 2",
+            transcript="Accident scene cleared",
+            duration=4.0,
+            file_size=2048,
+            audio_path="test2.mp3",
+        )
+        log3 = LogEntry(
+            filename="test3.mp3",
+            timestamp=now,
+            talkgroup="Dispatch 3",
+            transcript="Routine radio check",
+            duration=3.0,
+            file_size=512,
+            audio_path="test3.mp3",
+        )
+        logs_db.add_all([log1, log2, log3])
+        logs_db.commit()
+        logs_db.refresh(log1)
+        logs_db.refresh(log2)
+        logs_db.refresh(log3)
+
+        mon = Monitor(name="Test Monitor", talkgroup_ids='["Dispatch 1", "Dispatch 2"]')
+        events_db.add(mon)
+        events_db.commit()
+        events_db.refresh(mon)
+
+        ev_open = Event(
+            event_id="EVT-TEST-OPEN",
+            monitor_id=mon.id,
+            status="open",
+            event_type="Structure Fire",
+        )
+        ev_closed = Event(
+            event_id="EVT-TEST-CLOSED",
+            monitor_id=mon.id,
+            status="closed",
+            event_type="Traffic Accident",
+        )
+        events_db.add_all([ev_open, ev_closed])
+        events_db.commit()
+        events_db.refresh(ev_open)
+        events_db.refresh(ev_closed)
+
+        link1 = EventTranscriptLink(
+            event_id=ev_open.id,
+            log_entry_id=log1.id,
+        )
+        link2 = EventTranscriptLink(
+            event_id=ev_closed.id,
+            log_entry_id=log2.id,
+        )
+        events_db.add_all([link1, link2])
+        events_db.commit()
+
+        date_str = now.strftime("%Y-%m-%d")
+        r = client.get(f"/api/insights/search?date={date_str}", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert "results" in data
+        results_by_id = {item["id"]: item for item in data["results"]}
+
+        # log1 -> attached to open event
+        assert log1.id in results_by_id
+        evs1 = results_by_id[log1.id].get("attached_events", [])
+        assert len(evs1) == 1
+        assert evs1[0]["event_id"] == "EVT-TEST-OPEN"
+        assert evs1[0]["status"] == "open"
+        assert evs1[0]["event_type"] == "Structure Fire"
+
+        # log2 -> attached to closed event
+        assert log2.id in results_by_id
+        evs2 = results_by_id[log2.id].get("attached_events", [])
+        assert len(evs2) == 1
+        assert evs2[0]["event_id"] == "EVT-TEST-CLOSED"
+        assert evs2[0]["status"] == "closed"
+        assert evs2[0]["event_type"] == "Traffic Accident"
+
+        # log3 -> unattached
+        assert log3.id in results_by_id
+        assert results_by_id[log3.id].get("attached_events") == []
+    finally:
+        logs_db.close()
+        events_db.close()
+
+
+

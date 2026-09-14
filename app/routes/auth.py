@@ -42,6 +42,7 @@ class UserResponse(BaseModel):
     is_active: bool
     is_admin: bool
     created_at: datetime
+    last_seen_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -111,6 +112,17 @@ async def get_current_user(
     user = get_user_by_username(db, username=token_data.username)
     if user is None:
         raise credentials_exception
+
+    # Update last_seen_at (throttled to at most once per 60 seconds)
+    now = datetime.now(timezone.utc)
+    last = user.last_seen_at
+    if last is None or (now - (last if last.tzinfo else last.replace(tzinfo=timezone.utc))).total_seconds() > 60:
+        user.last_seen_at = now
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
     return user
 
 
@@ -163,6 +175,7 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hashed_password,
         is_active=True,
         is_admin=is_first_user,
+        last_seen_at=datetime.now(timezone.utc),
     )
     db.add(db_user)
     db.commit()
@@ -193,6 +206,12 @@ def login(
             detail="Inactive user"
         )
     
+    user.last_seen_at = datetime.now(timezone.utc)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires

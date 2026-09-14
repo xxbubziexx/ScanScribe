@@ -16,6 +16,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow)
     updated_at = Column(DateTime(timezone=True), onupdate=utcnow)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
     
     def __repr__(self):
         return f"<User(username='{self.username}', email='{self.email}')>"

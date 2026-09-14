@@ -18,18 +18,18 @@ function formatTime(iso: string | null | undefined) {
 function getLabelBadgeClass(label: string) {
   switch (label.toUpperCase()) {
     case 'EVT_TYPE':
-      return 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+      return 'text-amber-300'
     case 'UNIT':
-      return 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+      return 'text-emerald-300'
     case 'LOC':
     case 'ADDRESS':
-      return 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+      return 'text-sky-300'
     case 'STATUS':
-      return 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+      return 'text-purple-300'
     case 'TIME':
-      return 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30'
+      return 'text-indigo-300'
     default:
-      return 'bg-gray-500/15 text-gray-300 border-gray-500/30'
+      return 'text-gray-300'
   }
 }
 
@@ -221,7 +221,7 @@ export function EntitiesTable() {
             id="entity-search"
             type="search"
             className="ss-input h-8 min-w-[11rem] flex-1 text-xs"
-            placeholder="Canonical or raw text…"
+            placeholder="Search entity text…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -284,11 +284,8 @@ export function EntitiesTable() {
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('label')}>
                   Label {renderSortIndicator('label')}
                 </th>
-                <th className="cursor-pointer select-none" onClick={() => toggleSort('canonical')}>
-                  Canonical Normalized {renderSortIndicator('canonical')}
-                </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('raw')}>
-                  Raw Span {renderSortIndicator('raw')}
+                  Entity Span {renderSortIndicator('raw')}
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('talkgroup')}>
                   Talkgroup {renderSortIndicator('talkgroup')}
@@ -320,17 +317,14 @@ export function EntitiesTable() {
                       </td>
                       <td>
                         <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase border ${getLabelBadgeClass(
+                          className={`font-semibold uppercase text-[11px] tracking-wide ${getLabelBadgeClass(
                             row.label,
                           )}`}
                         >
                           {row.label}
                         </span>
                       </td>
-                      <td className="max-w-[14rem] truncate font-medium text-emerald-300/90" title={row.canonical}>
-                        {row.canonical}
-                      </td>
-                      <td className="max-w-[14rem] truncate text-gray-300" title={row.raw}>
+                      <td className="max-w-[16rem] truncate font-medium text-gray-200" title={row.raw}>
                         {row.raw}
                       </td>
                       <td className="max-w-[8rem] truncate text-gray-400" title={row.talkgroup ?? ''}>
@@ -372,7 +366,7 @@ export function EntitiesTable() {
                                 <span className="font-mono text-xs text-emerald-300">Observation #{row.id}</span>
                                 <span className="text-gray-500">·</span>
                                 <span
-                                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold border ${getLabelBadgeClass(
+                                  className={`font-semibold uppercase text-[11px] tracking-wide ${getLabelBadgeClass(
                                     row.label,
                                   )}`}
                                 >
@@ -406,30 +400,16 @@ export function EntitiesTable() {
                               </div>
                             </div>
 
-                            <div className="grid gap-3 md:grid-cols-2">
-                              <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 p-3">
-                                <span className="block text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-                                  Canonical / Normalized Entity
-                                </span>
-                                <p className="mt-1 font-mono text-sm font-medium text-emerald-200 break-words">
-                                  {row.canonical}
-                                </p>
-                                <span className="mt-2 block text-[11px] text-gray-400">
-                                  Canonical representation produced by normalize_entity() for analytics & indexing.
-                                </span>
-                              </div>
-
-                              <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
-                                <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                                  Raw Model Span
-                                </span>
-                                <p className="mt-1 font-mono text-sm text-gray-200 break-words">
-                                  {row.raw}
-                                </p>
-                                <span className="mt-2 block text-[11px] text-gray-500">
-                                  Original text span identified directly by the GLiNER NER model.
-                                </span>
-                              </div>
+                            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3.5">
+                              <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                                Entity Span
+                              </span>
+                              <p className="mt-1 font-mono text-sm font-medium text-gray-100 break-words">
+                                {row.raw}
+                              </p>
+                              <span className="mt-2 block text-[11px] text-gray-500">
+                                Text span extracted directly from the transcript.
+                              </span>
                             </div>
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">

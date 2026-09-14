@@ -216,6 +216,22 @@ def hourly_summaries_base_url(cfg: HourlySummariesApiConfig) -> str:
     return "https://openrouter.ai/api"
 
 
+def rate_limiter_config(cfg: Any = None) -> Any:
+    """Return effective RateLimiterConfig from app settings or passed config."""
+    if cfg is not None:
+        rl = getattr(cfg, "rate_limiter", None) or getattr(cfg, "ratelimiter", None)
+        if rl is not None:
+            return rl
+    try:
+        settings = get_settings()
+        rl = getattr(settings.config, "rate_limiter", None) or getattr(settings.config, "ratelimiter", None)
+        if rl is not None:
+            return rl
+    except Exception:
+        pass
+    return RateLimiterConfig()
+
+
 class EventsPipelineConfig(BaseModel):
     """Events pipeline: NER entity extraction + Single-pass OpenRouter LLM router."""
     enabled: bool = False
@@ -232,6 +248,10 @@ class EventsPipelineConfig(BaseModel):
     log_naive_timezone: str = ""
     # How often (seconds) the background cleanup sweep runs. 0 = disable.
     cleanup_interval_seconds: int = 0
+    # Number of recent channel transmissions within the monitor to provide to the LLM router (default 6)
+    recent_spans_limit: int = 6
+    # Global system prompt rules, 10-codes, and regional context injected into all routing & summarization prompts
+    global_prompt_rules: Optional[str] = ""
     # Legacy / optional fields kept for backwards compatibility
     llm_routing_max_tool_rounds: Optional[int] = 12
     llm_routing_log_raw: Optional[bool] = False
@@ -241,6 +261,19 @@ class EventsPipelineConfig(BaseModel):
     master_llm_stale_seconds: Optional[int] = 3600
     normalize_every_n_spans: Optional[int] = 5
     master_header_normalize: Optional[bool] = True
+
+
+class RateLimiterConfig(BaseModel):
+    """OpenRouter rate limiter settings."""
+    enabled: bool = True
+    auto_start_events_after_timeout: bool = True
+
+
+class RedactionConfig(BaseModel):
+    """PII redaction settings (e.g. SSN)."""
+    enabled: bool = True
+    redact_ssn: bool = True
+    replacement: str = "[REDACTED SSN]"
 
 
 class AdvancedConfig(BaseModel):
@@ -260,12 +293,15 @@ class Config(BaseModel):
     watchdog_client: WatchdogClientConfig = WatchdogClientConfig()
     storage: StorageConfig = StorageConfig()
     transcription: TranscriptionConfig = TranscriptionConfig()
+    redaction: RedactionConfig = RedactionConfig()
     queue: QueueConfig = QueueConfig()
     hourly_summaries: HourlySummariesApiConfig = HourlySummariesApiConfig()
     summaries: SummariesConfig = SummariesConfig()
     events_pipeline: EventsPipelineConfig = EventsPipelineConfig()
     openrouter: OpenRouterConfig = OpenRouterConfig()
     incidents_ollama: Optional[OpenRouterConfig] = None
+    rate_limiter: RateLimiterConfig = RateLimiterConfig()
+    ratelimiter: Optional[RateLimiterConfig] = None
     logging: LoggingConfig = LoggingConfig()
     advanced: AdvancedConfig = AdvancedConfig()
     timestamp: TimestampConfig = TimestampConfig()
@@ -293,6 +329,8 @@ class Settings:
                     and self.config.incidents_ollama.base_url != "http://localhost:11434"
                 ):
                     self.config.openrouter.base_url = self.config.incidents_ollama.base_url
+            if self.config.ratelimiter is not None:
+                self.config.rate_limiter = self.config.ratelimiter
         except FileNotFoundError:
             logger.warning(f"Config file not found at {config_path}, using defaults")
             self.config = Config()

@@ -64,13 +64,13 @@
   }
 
   .ss-nav-menu-btn {
-    @apply flex h-9 w-9 items-center justify-center rounded-md border border-white/10 text-gray-300 md:hidden;
+    @apply flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 text-gray-300 md:hidden cursor-pointer;
     @apply hover:border-white/20 hover:bg-white/5 hover:text-white;
   }
 
   .ss-nav-menu-icon {
-    @apply relative block h-0.5 w-4 bg-current;
-    box-shadow: 0 -5px 0 currentColor, 0 5px 0 currentColor;
+    @apply relative block h-0.5 w-5 bg-current;
+    box-shadow: 0 -6px 0 currentColor, 0 6px 0 currentColor;
   }
 
   .ss-nav-menu-icon--open {
@@ -80,7 +80,7 @@
   .ss-nav-menu-icon--open::before,
   .ss-nav-menu-icon--open::after {
     content: '';
-    @apply absolute left-0 top-0 block h-0.5 w-4 bg-current;
+    @apply absolute left-0 top-0 block h-0.5 w-5 bg-current;
   }
 
   .ss-nav-menu-icon--open::before {
@@ -89,6 +89,19 @@
 
   .ss-nav-menu-icon--open::after {
     transform: rotate(-45deg);
+  }
+
+  .animate-slide-in {
+    animation: ss-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes ss-slide-in {
+    from {
+      transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
   }
 
   .ss-app {

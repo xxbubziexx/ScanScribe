@@ -13,6 +13,58 @@ function formatCreated(iso: string) {
   return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
 }
 
+function formatLastSeen(iso?: string | null) {
+  if (!iso) {
+    return <span className="text-gray-500">Never</span>
+  }
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) {
+    return <span className="text-gray-500">{iso}</span>
+  }
+
+  const now = Date.now()
+  const diffSec = Math.floor((now - d.getTime()) / 1000)
+  const fullTimestamp = d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+
+  // Active within the last 2 minutes
+  if (diffSec >= 0 && diffSec < 120) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400"
+        title={fullTimestamp}
+      >
+        <span className="relative flex h-2 w-2">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+        </span>
+        Online now
+      </span>
+    )
+  }
+
+  let text = ''
+  if (diffSec < 0) {
+    text = 'Just now'
+  } else if (diffSec < 3600) {
+    const mins = Math.max(1, Math.floor(diffSec / 60))
+    text = `${mins}m ago`
+  } else if (diffSec < 86400) {
+    const hrs = Math.floor(diffSec / 3600)
+    text = `${hrs}h ago`
+  } else if (diffSec < 7 * 86400) {
+    const days = Math.floor(diffSec / 86400)
+    text = `${days}d ago`
+  } else {
+    text = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+
+  return (
+    <span className="tabular-nums text-xs text-gray-400" title={fullTimestamp}>
+      {text}
+    </span>
+  )
+}
+
 export function UsersPage() {
   const { user } = useAuth()
   const { addToast } = useToast()
@@ -132,13 +184,14 @@ export function UsersPage() {
 
       {!listQuery.isLoading && !listQuery.isError && rows.length > 0 && (
         <div className="ss-db-table-wrap">
-          <table className="ss-db-table min-w-[720px]">
+          <table className="ss-db-table min-w-[800px]">
             <thead>
               <tr>
                 <th className="ss-db-th">User</th>
                 <th className="ss-db-th">Email</th>
                 <th className="ss-db-th">Status</th>
                 <th className="ss-db-th">Role</th>
+                <th className="ss-db-th">Last Seen</th>
                 <th className="ss-db-th">Created</th>
                 <th className="ss-db-th text-right">Actions</th>
               </tr>
@@ -219,6 +272,7 @@ function UserRow({
           <span className="text-xs text-gray-500">user</span>
         )}
       </td>
+      <td className="ss-db-td whitespace-nowrap">{formatLastSeen(row.last_seen_at)}</td>
       <td className="ss-db-td tabular-nums text-gray-500">{formatCreated(row.created_at)}</td>
       <td className="ss-db-td">
         <div className="ss-db-actions">

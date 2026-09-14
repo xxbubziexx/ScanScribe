@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useAuth } from '@/context/AuthContext'
+import { useAdminCapability } from '@/hooks/useAdminCapability'
 import { insights } from '@/lib/insights'
 import type { InsightsTab, InsightsView, SearchFilters, TalkgroupEntry } from '@/types/insights'
 import { StatsPanel } from './components/StatsPanel'
@@ -21,6 +21,7 @@ const DEFAULT_FILTERS: SearchFilters = {
   talkgroups: [],
   hour: '',
   sort: 'newest',
+  limit: 50,
 }
 
 function todayIso() {
@@ -28,8 +29,8 @@ function todayIso() {
 }
 
 export function InsightsPage() {
-  const { user } = useAuth()
-  const viewOnly = user?.is_admin !== true
+  const { canAdmin } = useAdminCapability()
+  const viewOnly = !canAdmin
 
   const [date, setDate] = useState(todayIso())
   const [view, setView] = useState<InsightsView>('hourly')

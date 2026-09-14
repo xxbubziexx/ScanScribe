@@ -22,12 +22,20 @@ export interface InsightsSummary {
 export interface ActivityPoint {
   label: string
   count: number
+  events_count?: number
   hour?: number
 }
 
 export interface TalkgroupEntry {
   talkgroup: string
   count: number
+}
+
+export interface AttachedEventInfo {
+  id: number
+  event_id: string
+  status: 'open' | 'closed' | string
+  event_type?: string | null
 }
 
 export interface LogEntry {
@@ -38,6 +46,8 @@ export interface LogEntry {
   duration: number
   file_size: number
   audio_path: string
+  confidence?: number
+  attached_events?: AttachedEventInfo[]
 }
 
 export interface InsightsStats {
@@ -70,6 +80,7 @@ export interface SearchFilters {
   talkgroups: string[]
   hour: string
   sort: string
+  limit?: number
 }
 
 export type InsightsView = 'hourly' | 'daily' | 'weekly'

@@ -9,6 +9,7 @@ import type {
   MonitorUpdate,
   NerLabelsResponse,
   PipelineDebugEntry,
+  RateLimitStatus,
   SpanStoreListResponse,
 } from '../types/events'
 
@@ -23,6 +24,15 @@ function getToken(): string | null {
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
 export const eventsApi = {
+  getGlobalRules: () => request<{ global_rules: string }>(`${EVENTS_API}/global-rules`),
+
+  saveGlobalRules: (rules: string) =>
+    request<{ ok: boolean; global_rules: string }>(`${EVENTS_API}/global-rules`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ global_rules: rules }),
+    }),
+
   todayUnits: () => request<{units: string[]}>(`${EVENTS_API}/units/today`),
   monitors: () => request<MonitorResponse[]>(`${EVENTS_API}/monitors`),
 
@@ -75,6 +85,14 @@ export const eventsApi = {
     return request<EventsListResponse>(`${EVENTS_API}/events?${sp.toString()}`)
   },
 
+  rateLimitStatus: () =>
+    request<RateLimitStatus>(`${EVENTS_API}/rate-limit-status`),
+
+  resetRateLimit: () =>
+    request<{ ok: boolean; message: string }>(`${EVENTS_API}/rate-limit-status/reset`, {
+      method: 'POST',
+    }),
+
   detail: (eventId: string) =>
     request<EventDetailResponse>(`${EVENTS_API}/events/${encodeURIComponent(eventId)}`),
 
@@ -96,6 +114,12 @@ export const eventsApi = {
   geocode: (eventId: string) =>
     request<{ ok: boolean; latitude?: number; longitude?: number; resolved_address?: string; message?: string }>(
       `${EVENTS_API}/events/${encodeURIComponent(eventId)}/geocode`,
+      { method: 'POST' },
+    ),
+
+  summarize: (eventId: string) =>
+    request<{ ok: boolean; event_id: string; summary: string | null }>(
+      `${EVENTS_API}/events/${encodeURIComponent(eventId)}/summarize`,
       { method: 'POST' },
     ),
 

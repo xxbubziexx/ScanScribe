@@ -63,33 +63,57 @@ def has_state_context(text: str) -> bool:
     """Check if the text contains a recognized US state name or 2-letter abbreviation."""
     if not text:
         return False
-    lower_text = text.lower()
+    # Strip '<Name> County' or '<Name> Co' so 'Washington County' or 'Oregon County' alone is not mistaken for state context
+    cleaned = re.sub(r'\b[A-Za-z.\s\-]+\s+(?:County|Co\.?)\b', '', text, flags=re.IGNORECASE).strip()
+    if not cleaned:
+        # The entire text was just a county name (e.g. 'Washington County')
+        return False
+    lower_text = cleaned.lower()
     for st in US_STATES:
         if re.search(r'\b' + re.escape(st) + r'\b', lower_text):
             return True
     for code in US_STATE_CODES:
-        if re.search(r',\s*' + code + r'(?:\b|\s*\d{5}|$)', text, flags=re.IGNORECASE):
+        if re.search(r',\s*' + code + r'(?:\b|\s*\d{5}|$)', cleaned, flags=re.IGNORECASE):
             return True
-        if re.search(r'\s+' + code + r'(?:\s+\d{5})?$', text, flags=re.IGNORECASE):
+        if re.search(r'\s+' + code + r'(?:\s+\d{5})?$', cleaned, flags=re.IGNORECASE):
             return True
-        if re.match(r'^' + code + r'$', text, flags=re.IGNORECASE):
+        if re.match(r'^' + code + r'$', cleaned, flags=re.IGNORECASE):
             return True
     return False
 
 
 def get_state_from_region(geo_region: Optional[str]) -> str:
     """Extract full state name from region, defaulting to DEFAULT_STATE."""
-    if not geo_region:
+    if not geo_region or not geo_region.strip():
         return DEFAULT_STATE
-    lower = geo_region.lower()
-    for st in US_STATES:
+
+    # 1. Prioritize segment after last comma (e.g. 'Washington County, Missouri' -> 'Missouri', 'Cook County, IL' -> 'Illinois')
+    if ',' in geo_region:
+        last_segment = geo_region.split(',')[-1].strip()
+        last_lower = last_segment.lower()
+        if last_lower in STATE_TO_CODE:
+            return last_lower.title()
+        last_upper = last_segment.upper()
+        if last_upper in US_STATE_CODES:
+            for sname, scode in STATE_TO_CODE.items():
+                if scode == last_upper:
+                    return sname.title()
+            return last_upper
+
+    # 2. Strip '<Name> County' or '<Name> Co' so 'Washington County' or 'Oregon County' alone does not match state
+    text_to_search = re.sub(r'\b[A-Za-z.\s\-]+\s+(?:County|Co\.?)\b', '', geo_region, flags=re.IGNORECASE).strip()
+    if not text_to_search:
+        # Only county was provided without state -> default to DEFAULT_STATE
+        return DEFAULT_STATE
+
+    lower = text_to_search.lower()
+    for st in sorted(US_STATES, key=len, reverse=True):
         if re.search(r'\b' + re.escape(st) + r'\b', lower):
             return st.title()
     for code in US_STATE_CODES:
-        if re.search(r'(?:,\s*|\b)' + code + r'(?:\b|$)', geo_region, flags=re.IGNORECASE):
-            # Map code back to full state name if possible
+        if re.search(r'(?:,\s*|\b)' + code + r'(?:\b|$)', text_to_search, flags=re.IGNORECASE):
             for sname, scode in STATE_TO_CODE.items():
-                if scode.lower() == code.lower():
+                if scode == code.upper():
                     return sname.title()
             return code.upper()
     return DEFAULT_STATE
@@ -294,8 +318,8 @@ def strip_directional_indicators(text: str) -> str:
 def generate_highway_variants(location_text: str, state_code: str = 'MO') -> list[str]:
     """
     Generate naming variants for rural lettered routes, state highways, and county roads.
-    In Missouri, lettered highways like 'State Highway U' are indexed in OSM as 'MO-U', 'MO U',
-    'Highway U', or 'Route U'.
+    In Missouri, lettered highways like 'State Highway U' are indexed in OSM as 'MO U', 'MO-U',
+    'Highway U', or 'Route U'. State highways (e.g. 'Highway 8') are indexed as 'MO 8' or 'MO-8'.
     """
     variants: list[str] = []
 
@@ -318,17 +342,21 @@ def generate_highway_variants(location_text: str, state_code: str = 'MO') -> lis
                 variants.append(var)
         return variants
 
-    # Match: State Highway U, Highway U, Route U, State Route U, MO-U, MO 32, etc.
-    pattern = r'\b(?:(?:State|US|U\.S\.|I|MO|[A-Z]{2})\s+)?(?:Highway|Hwy|Route|State\s+Route|State\s+Road|MO)\s+([A-Za-z]{1,2}|\d{1,3})\b'
+    # Match: State Highway U, Highway U, Route U, State Route U, MO-U, MO 32, Highway 8, MO 8, US-67, etc.
+    pattern = (
+        r'\b(?:(?:State|US|U\.S\.|I|[A-Z]{2})[-\s]+)?(?:Highway|Hwy|Route|State\s+Route|State\s+Road|MO)[-\s]+([A-Za-z]{1,2}|\d{1,3})\b'
+        r'|\b(?:US|U\.S\.|I)[-\s]+(\d{1,3})\b'
+    )
     m = re.search(pattern, location_text, flags=re.IGNORECASE)
     if m:
-        route_id = m.group(1).upper()
+        route_id = (m.group(1) or m.group(2)).upper()
         prefix = location_text[:m.start()].strip()
         suffix = location_text[m.end():].strip()
 
+        # Prioritize state designations ('MO 8', 'MO-8') first
         route_forms = [
-            f"{state_code}-{route_id}",
             f"{state_code} {route_id}",
+            f"{state_code}-{route_id}",
             f"Highway {route_id}",
             f"State Highway {route_id}",
             f"Route {route_id}",
@@ -336,6 +364,7 @@ def generate_highway_variants(location_text: str, state_code: str = 'MO') -> lis
         ]
         if route_id.isdigit():
             route_forms.append(f"US-{route_id}")
+            route_forms.append(f"US {route_id}")
             route_forms.append(f"US Highway {route_id}")
             route_forms.append(f"I-{route_id}")
 
@@ -379,12 +408,13 @@ def build_geocoding_query(raw_location: str, geo_region: Optional[str] = None) -
 def build_fallback_queries(raw_location: str, geo_region: Optional[str] = None) -> list[str]:
     """
     Generate progressively simpler queries with rural address fallbacks.
-    1. Full cleaned primary query with full geo_region
-    2. Lettered / numbered highway variants (e.g. '14588 MO-U, Missouri')
-    3. Primary query and variants with state-only context (if county was in region)
-    4. House number stripped -> road-only queries (e.g. 'Springtown Road, Missouri')
-    5. Cross street fallbacks (intersections and cross road queries)
-    6. Comma-separated parts & mid-sentence descriptors stripped
+    1. Preferred state route variants with full geo_region (e.g. '12834 MO 8, Washington County, Missouri')
+    2. Full cleaned primary query with full geo_region (e.g. '12834 Highway 8, Washington County, Missouri')
+    3. Other highway variants (e.g. '12834 State Highway 8', '12834 Route 8')
+    4. House number stripped -> road-only queries with full geo_region (state route variants first)
+    5. Primary query and variants with state-only context (if county was in region)
+    6. Cross street fallbacks (intersections and cross road queries)
+    7. Comma-separated parts & mid-sentence descriptors stripped
     """
     queries: list[str] = []
 
@@ -405,42 +435,81 @@ def build_fallback_queries(raw_location: str, geo_region: Optional[str] = None) 
     if not cleaned_primary:
         return queries
 
-    # 1. Full cleaned primary query with full geo_region
-    add_query(cleaned_primary, geo_region)
+    # Extract highway variants for primary location
+    hwy_variants = generate_highway_variants(cleaned_primary, state_code)
+    state_route_variants = [
+        v for v in hwy_variants
+        if re.search(r'\b' + re.escape(state_code) + r'[-\s]', v, flags=re.IGNORECASE)
+    ]
+    other_hwy_variants = [v for v in hwy_variants if v not in state_route_variants]
+
+    # 1. Preferred state route variants first (e.g. '12834 MO 8, Missouri', '12834 MO-8, Missouri')
+    for v in state_route_variants:
+        add_query(v, geo_region)
 
     # 1b. Directional stripped queries (e.g. 'Southbound US Highway 67' -> 'US Highway 67')
     dir_stripped = strip_directional_indicators(cleaned_primary)
     if dir_stripped and dir_stripped.lower() != cleaned_primary.lower():
-        add_query(dir_stripped, geo_region)
-        for hwy_var in generate_highway_variants(dir_stripped, state_code):
-            add_query(hwy_var, geo_region)
-        if has_county_in_region:
-            add_query(dir_stripped, state_name)
-            for hwy_var in generate_highway_variants(dir_stripped, state_code):
-                add_query(hwy_var, state_name)
+        dir_hwy_vars = generate_highway_variants(dir_stripped, state_code)
+        dir_state_vars = [
+            v for v in dir_hwy_vars
+            if re.search(r'\b' + re.escape(state_code) + r'[-\s]', v, flags=re.IGNORECASE)
+        ]
+        dir_other_vars = [v for v in dir_hwy_vars if v not in dir_state_vars]
 
-    # 2. Highway variants with house number
-    for hwy_var in generate_highway_variants(cleaned_primary, state_code):
-        add_query(hwy_var, geo_region)
+        for v in dir_state_vars:
+            add_query(v, geo_region)
+        add_query(dir_stripped, geo_region)
+        for v in dir_other_vars:
+            add_query(v, geo_region)
+        if has_county_in_region:
+            for v in dir_state_vars:
+                add_query(v, state_name)
+            add_query(dir_stripped, state_name)
+            for v in dir_other_vars:
+                add_query(v, state_name)
+
+    # 2. Raw cleaned primary query
+    add_query(cleaned_primary, geo_region)
+
+    # 2b. Other highway variants (e.g. '12834 State Highway 8', '12834 Route 8')
+    for v in other_hwy_variants:
+        add_query(v, geo_region)
 
     # 3. Strip house number -> road-only queries WITH full geo_region
     road_only = strip_house_number(cleaned_primary)
+    road_state_route_variants: list[str] = []
+    road_other_hwy_variants: list[str] = []
     if road_only:
+        road_hwy_vars = generate_highway_variants(road_only, state_code)
+        road_state_route_variants = [
+            v for v in road_hwy_vars
+            if re.search(r'\b' + re.escape(state_code) + r'[-\s]', v, flags=re.IGNORECASE)
+        ]
+        road_other_hwy_variants = [v for v in road_hwy_vars if v not in road_state_route_variants]
+
+        # Prioritize 'MO 8' / 'MO-8' over generic 'Highway 8' for road-only lookup too
+        for v in road_state_route_variants:
+            add_query(v, geo_region)
         add_query(road_only, geo_region)
-        for hwy_var in generate_highway_variants(road_only, state_code):
-            add_query(hwy_var, geo_region)
+        for v in road_other_hwy_variants:
+            add_query(v, geo_region)
 
     # 4. State-only context fallbacks (DANGEROUS for generic streets, so we do it last)
     # This happens if Nominatim fails to map the county name properly.
     if has_county_in_region:
+        for v in state_route_variants:
+            add_query(v, state_name)
         add_query(cleaned_primary, state_name)
-        for hwy_var in generate_highway_variants(cleaned_primary, state_code):
-            add_query(hwy_var, state_name)
-        
+        for v in other_hwy_variants:
+            add_query(v, state_name)
+
         if road_only:
+            for v in road_state_route_variants:
+                add_query(v, state_name)
             add_query(road_only, state_name)
-            for hwy_var in generate_highway_variants(road_only, state_code):
-                add_query(hwy_var, state_name)
+            for v in road_other_hwy_variants:
+                add_query(v, state_name)
 
     # 5. Cross street fallbacks (if cross street was extracted from raw input)
     if cross_street:
