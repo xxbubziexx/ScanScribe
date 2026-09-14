@@ -84,7 +84,7 @@ export function formatRelativeTime(iso: string | null | undefined): string {
     }
   }
 
-  return `${datePart} • ${rel}`
+  return `${datePart} • last updated: ${rel}`
 }
 
 export function getEventActivityTime(ev: PipelineEvent): number {
