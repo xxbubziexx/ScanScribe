@@ -62,7 +62,9 @@ export interface EventListItem {
   original_transcription: string | null
   summary: string | null
   created_at: string | null
+  updated_at?: string | null
   incident_at: string | null
+  last_span_at?: string | null
   closed_at: string | null
   spans_attached: number
   talkgroup: string
@@ -104,7 +106,9 @@ export interface EventDetailHeader {
   original_transcription: string | null
   summary: string | null
   created_at: string | null
+  updated_at?: string | null
   incident_at: string | null
+  last_span_at?: string | null
   closed_at: string | null
 }
 

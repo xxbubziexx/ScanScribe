@@ -166,3 +166,78 @@ def test_monitor_geo_region_and_event_coordinates():
         db.commit()
     finally:
         db.close()
+
+
+def test_event_updated_at_and_feed_ordering():
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import func
+
+    os.makedirs("./data", exist_ok=True)
+    os.makedirs("./logs", exist_ok=True)
+    init_db()
+
+    db = EventsSessionLocal()
+    try:
+        mon = Monitor(
+            name="Feed Order Test Dispatch",
+            talkgroup_ids='["ORDER_TEST"]',
+            keyword_config='["EVT_TYPE"]',
+        )
+        db.add(mon)
+        db.commit()
+        db.refresh(mon)
+
+        now = datetime.now(timezone.utc)
+        # Event A: created 2 hours ago
+        ev_a = Event(
+            event_id="order_test_ev_a",
+            monitor_id=mon.id,
+            status="open",
+            event_type="Structure Fire",
+            created_at=now - timedelta(hours=2),
+            updated_at=now - timedelta(hours=2),
+        )
+        # Event B: created 1 hour ago
+        ev_b = Event(
+            event_id="order_test_ev_b",
+            monitor_id=mon.id,
+            status="open",
+            event_type="Medical Emergency",
+            created_at=now - timedelta(hours=1),
+            updated_at=now - timedelta(hours=1),
+        )
+        db.add_all([ev_a, ev_b])
+        db.commit()
+        db.refresh(ev_a)
+        db.refresh(ev_b)
+
+        # Initial query sorted by updated_at descending: ev_b (1h ago) before ev_a (2h ago)
+        res = (
+            db.query(Event)
+            .filter(Event.monitor_id == mon.id)
+            .order_by(func.coalesce(Event.updated_at, Event.created_at).desc(), Event.id.desc())
+            .all()
+        )
+        assert [e.event_id for e in res] == ["order_test_ev_b", "order_test_ev_a"]
+
+        # Now simulate a new span being attached to Event A
+        ev_a.updated_at = datetime.now(timezone.utc)
+        db.commit()
+
+        # Query again: ev_a has a new span and must now be at the very top!
+        res_after = (
+            db.query(Event)
+            .filter(Event.monitor_id == mon.id)
+            .order_by(func.coalesce(Event.updated_at, Event.created_at).desc(), Event.id.desc())
+            .all()
+        )
+        assert [e.event_id for e in res_after] == ["order_test_ev_a", "order_test_ev_b"]
+
+        # Cleanup
+        db.delete(ev_a)
+        db.delete(ev_b)
+        db.delete(mon)
+        db.commit()
+    finally:
+        db.close()
+

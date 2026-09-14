@@ -54,10 +54,16 @@ def _batch_event_link_aggregates(
     events_db: Session,
     logs_db: Session,
     event_ids: List[int],
-) -> Tuple[Dict[int, int], Dict[int, str], Dict[int, Optional[dt]], Dict[int, Optional[str]]]:
-    """Spans per event, aggregated talkgroups, earliest linked log timestamp, primary audio_path."""
+) -> Tuple[
+    Dict[int, int],
+    Dict[int, str],
+    Dict[int, Optional[dt]],
+    Dict[int, Optional[dt]],
+    Dict[int, Optional[str]],
+]:
+    """Spans per event, aggregated talkgroups, earliest linked log timestamp, latest linked log timestamp, primary audio_path."""
     if not event_ids:
-        return {}, {}, {}, {}
+        return {}, {}, {}, {}, {}
     count_rows = (
         events_db.query(EventTranscriptLink.event_id, func.count(EventTranscriptLink.id))
         .filter(EventTranscriptLink.event_id.in_(event_ids))
@@ -66,11 +72,15 @@ def _batch_event_link_aggregates(
     )
     link_counts = {eid: int(cnt or 0) for eid, cnt in count_rows}
     link_rows = (
-        events_db.query(EventTranscriptLink.event_id, EventTranscriptLink.log_entry_id)
+        events_db.query(
+            EventTranscriptLink.event_id,
+            EventTranscriptLink.log_entry_id,
+            EventTranscriptLink.linked_at,
+        )
         .filter(EventTranscriptLink.event_id.in_(event_ids))
         .all()
     )
-    log_ids = sorted({lid for _, lid in link_rows if lid is not None})
+    log_ids = sorted({lid for _, lid, _ in link_rows if lid is not None})
     talkgroup_by_log_id: Dict[int, str] = {}
     ts_by_log_id: Dict[int, dt] = {}
     audio_path_by_log_id: Dict[int, str] = {}
@@ -85,21 +95,30 @@ def _batch_event_link_aggregates(
             if apath and apath != "file not saved":
                 audio_path_by_log_id[lid] = apath
     links_by_event: Dict[int, List[int]] = defaultdict(list)
-    for ev_id, log_id in link_rows:
+    max_linked_at_by_event: Dict[int, dt] = {}
+    for ev_id, log_id, linked_at in link_rows:
         if log_id is not None:
             links_by_event[ev_id].append(log_id)
-    first_span_at_by_event: Dict[int, dt] = {}
+        if linked_at is not None:
+            if ev_id not in max_linked_at_by_event or linked_at > max_linked_at_by_event[ev_id]:
+                max_linked_at_by_event[ev_id] = linked_at
+    first_span_at_by_event: Dict[int, Optional[dt]] = {}
+    last_span_at_by_event: Dict[int, Optional[dt]] = {}
     audio_path_by_event: Dict[int, Optional[str]] = {}
     for ev_id, lids in links_by_event.items():
         tss = [ts_by_log_id[lid] for lid in lids if lid in ts_by_log_id]
         if tss:
             first_span_at_by_event[ev_id] = min(tss)
+            last_span_at_by_event[ev_id] = max(tss)
+        elif ev_id in max_linked_at_by_event:
+            first_span_at_by_event[ev_id] = max_linked_at_by_event[ev_id]
+            last_span_at_by_event[ev_id] = max_linked_at_by_event[ev_id]
         for lid in lids:
             if lid in audio_path_by_log_id:
                 audio_path_by_event[ev_id] = audio_path_by_log_id[lid]
                 break
     talkgroups_by_event: Dict[int, set] = defaultdict(set)
-    for ev_id, log_id in link_rows:
+    for ev_id, log_id, _ in link_rows:
         tg = talkgroup_by_log_id.get(log_id)
         if tg:
             talkgroups_by_event[ev_id].add(tg)
@@ -107,7 +126,7 @@ def _batch_event_link_aggregates(
         eid: ", ".join(sorted(talkgroups_by_event[eid])) if talkgroups_by_event.get(eid) else ""
         for eid in event_ids
     }
-    return link_counts, talkgroup_str, first_span_at_by_event, audio_path_by_event
+    return link_counts, talkgroup_str, first_span_at_by_event, last_span_at_by_event, audio_path_by_event
 
 
 def _event_type_csv_display(event: Event) -> str:
@@ -206,8 +225,12 @@ class EventResponse(BaseModel):
     summary: Optional[str]
     # System: when the event row was created (processing time).
     created_at: Optional[str]
+    # System: when the event row was last updated (new span, deduplication merge, etc.).
+    updated_at: Optional[str] = None
     # Earliest linked span LogEntry.timestamp (from audio-derived time stored in logs DB).
     incident_at: Optional[str] = None
+    # Latest linked span LogEntry.timestamp (from audio-derived time stored in logs DB).
+    last_span_at: Optional[str] = None
     closed_at: Optional[str]
     spans_attached: int = 0
     talkgroup: str = ""
@@ -472,7 +495,7 @@ async def list_events(
     monitor_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     q: Optional[str] = Query(None, max_length=500, description="Search in summary, location, units, transcript"),
-    sort_by: Optional[str] = Query("created_at", pattern="^(id|event_id|created_at|closed_at|status|event_type|location)$"),
+    sort_by: Optional[str] = Query("updated_at", pattern="^(id|event_id|created_at|updated_at|closed_at|status|event_type|location)$"),
     sort_order: Optional[str] = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
@@ -500,15 +523,22 @@ async def list_events(
         )
     total: int = query.count()
 
-    col = getattr(Event, sort_by or "created_at", Event.created_at)
-    if (sort_order or "desc").lower() == "asc":
-        query = query.order_by(col.asc())
+    if sort_by == "updated_at":
+        sort_col = func.coalesce(Event.updated_at, Event.created_at)
+        if (sort_order or "desc").lower() == "asc":
+            query = query.order_by(sort_col.asc(), Event.id.asc())
+        else:
+            query = query.order_by(sort_col.desc(), Event.id.desc())
     else:
-        query = query.order_by(col.desc())
+        col = getattr(Event, sort_by or "updated_at", Event.updated_at)
+        if (sort_order or "desc").lower() == "asc":
+            query = query.order_by(col.asc(), Event.id.asc())
+        else:
+            query = query.order_by(col.desc(), Event.id.desc())
 
     events = query.offset(offset).limit(limit).all()
     event_ids = [e.id for e in events]
-    link_counts, talkgroup_str_map, first_span_at_by_event, audio_path_by_event = _batch_event_link_aggregates(
+    link_counts, talkgroup_str_map, first_span_at_by_event, last_span_at_by_event, audio_path_by_event = _batch_event_link_aggregates(
         events_db, logs_db, event_ids
     )
     out = []
@@ -516,6 +546,7 @@ async def list_events(
         spans_attached = link_counts.get(e.id, 0)
         talkgroup_str = talkgroup_str_map.get(e.id, "")
         incident_at = first_span_at_by_event.get(e.id)
+        last_span_at = last_span_at_by_event.get(e.id)
         out.append(EventResponse(
             id=e.id,
             event_id=e.event_id,
@@ -532,7 +563,9 @@ async def list_events(
             original_transcription=e.original_transcription,
             summary=e.summary,
             created_at=_iso_utc(e.created_at, assume_utc=True),
+            updated_at=_iso_utc(e.updated_at, assume_utc=True),
             incident_at=_iso_utc(incident_at) if incident_at else None,
+            last_span_at=_iso_utc(last_span_at) if last_span_at else None,
             closed_at=_iso_utc(e.closed_at, assume_utc=True),
             spans_attached=spans_attached,
             talkgroup=talkgroup_str,
@@ -560,7 +593,7 @@ async def export_events_normalized_headers(
     rows = q.limit(limit).all()
     event_ids = [e.id for e in rows]
     monitors = {m.id: m.name for m in events_db.query(Monitor).all()}
-    link_counts, talkgroup_str_map, first_span_at_by_event, _ = _batch_event_link_aggregates(
+    link_counts, talkgroup_str_map, first_span_at_by_event, _, _ = _batch_event_link_aggregates(
         events_db, logs_db, event_ids
     )
 
@@ -673,6 +706,7 @@ async def get_event_detail(
             })
     span_times = [le.timestamp for le in log_entries.values() if le and le.timestamp]
     incident_at = min(span_times) if span_times else None
+    last_span_at = max(span_times) if span_times else None
     return {
         "event": {
             "event_id": event.event_id,
@@ -690,7 +724,9 @@ async def get_event_detail(
             "original_transcription": event.original_transcription,
             "summary": event.summary,
             "created_at": _iso_utc(event.created_at, assume_utc=True),
+            "updated_at": _iso_utc(event.updated_at, assume_utc=True),
             "incident_at": _iso_utc(incident_at) if incident_at else None,
+            "last_span_at": _iso_utc(last_span_at) if last_span_at else None,
             "closed_at": _iso_utc(event.closed_at, assume_utc=True),
         },
         "transcripts": transcripts,

@@ -9,7 +9,7 @@ import { errorMessage } from '@/types/api'
 import type { WsMessage } from '@/types/watcher'
 import type { EventListItem } from '@/types/events'
 import type { PipelineEvent } from '@/pages/Events/IncidentsPage'
-import { toPipelineEvent } from '@/pages/Events/IncidentsPage'
+import { toPipelineEvent, getEventActivityTime } from '@/pages/Events/IncidentsPage'
 import { CommandCenterMap } from './CommandCenterMap'
 import { CommandCenterFeed, type FilterMode, type Timeframe } from './CommandCenterFeed'
 import { CommandCenterTelemetry } from './CommandCenterTelemetry'
@@ -65,10 +65,10 @@ export function CommandCenterPage() {
     return map
   }, [monitors])
 
-  // Fetch Events (Incidents)
+  // Fetch Events (Incidents) sorted by latest activity
   const eventsQuery = useQuery({
     queryKey: ['events-list', 'command-center'],
-    queryFn: () => eventsApi.list({ limit: 200 }),
+    queryFn: () => eventsApi.list({ limit: 200, sortBy: 'updated_at', sortOrder: 'desc' }),
     staleTime: 10_000,
     refetchInterval: 15_000,
   })
@@ -213,11 +213,8 @@ export function CommandCenterPage() {
   // Real-time WebSocket event handling
   const handleWsMessage = useCallback(
     (msg: WsMessage) => {
-      if (msg.type === 'event_update') {
+      if (msg.type === 'event_update' || msg.type === 'event_geocoded') {
         // Optimistic / fast query invalidation for new/updated incidents
-        void queryClient.invalidateQueries({ queryKey: ['events-list'] })
-      } else if (msg.type === 'event_geocoded') {
-        // When an event gets geocoded in background, refresh the list immediately
         void queryClient.invalidateQueries({ queryKey: ['events-list'] })
       }
     },
@@ -251,43 +248,45 @@ export function CommandCenterPage() {
 
   const filteredEvents = useMemo(() => {
     const now = Date.now()
-    return pipelineEvents.filter((ev) => {
-      // Monitor filter
-      if (selectedMonitor !== 'all' && ev.monitorId !== selectedMonitor) return false
-      // Filter mode
-      if (filterMode === 'open' && ev.status !== 'open') return false
-      if (filterMode === 'closed' && ev.status !== 'closed') return false
-      if (filterMode === 'mapped' && (ev.latitude == null || ev.longitude == null)) return false
+    return pipelineEvents
+      .filter((ev) => {
+        // Monitor filter
+        if (selectedMonitor !== 'all' && ev.monitorId !== selectedMonitor) return false
+        // Filter mode
+        if (filterMode === 'open' && ev.status !== 'open') return false
+        if (filterMode === 'closed' && ev.status !== 'closed') return false
+        if (filterMode === 'mapped' && (ev.latitude == null || ev.longitude == null)) return false
 
-      // Timeframe filter
-      const evTime = new Date(ev.incidentAt ?? ev.createdAt).getTime()
-      if (timeframe === '24h' && now - evTime > 24 * 60 * 60 * 1000) return false
-      if (timeframe === '3day' && now - evTime > 3 * 24 * 60 * 60 * 1000) return false
-      if (timeframe === '7day' && now - evTime > 7 * 24 * 60 * 60 * 1000) return false
+        // Timeframe filter (based on most recent activity)
+        const evTime = getEventActivityTime(ev)
+        if (timeframe === '24h' && now - evTime > 24 * 60 * 60 * 1000) return false
+        if (timeframe === '3day' && now - evTime > 3 * 24 * 60 * 60 * 1000) return false
+        if (timeframe === '7day' && now - evTime > 7 * 24 * 60 * 60 * 1000) return false
 
-      // Text search
-      if (search.trim()) {
-        const q = search.toLowerCase()
-        const textToSearch = [
-          ev.eventId,
-          ev.eventType,
-          ev.broadcastType,
-          ev.status,
-          ev.location,
-          ev.resolvedAddress,
-          ev.units,
-          ev.talkgroup,
-          ev.summary,
-          ev.originalTranscription,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-        if (!textToSearch.includes(q)) return false
-      }
+        // Text search
+        if (search.trim()) {
+          const q = search.toLowerCase()
+          const textToSearch = [
+            ev.eventId,
+            ev.eventType,
+            ev.broadcastType,
+            ev.status,
+            ev.location,
+            ev.resolvedAddress,
+            ev.units,
+            ev.talkgroup,
+            ev.summary,
+            ev.originalTranscription,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+          if (!textToSearch.includes(q)) return false
+        }
 
-      return true
-    })
+        return true
+      })
+      .sort((a, b) => getEventActivityTime(b) - getEventActivityTime(a))
   }, [pipelineEvents, selectedMonitor, filterMode, timeframe, search])
 
   return (

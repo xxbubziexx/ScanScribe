@@ -31,7 +31,9 @@ export type PipelineEvent = {
   originalTranscription: string | null
   summary: string | null
   createdAt: string
+  updatedAt?: string | null
   incidentAt: string | null
+  lastSpanAt?: string | null
   closedAt: string | null
   spansAttached: number
   audioPath?: string | null
@@ -43,20 +45,19 @@ export type DetailTab = 'event-thread' | 'transcription' | 'raw'
 export function typeDisplayFor(event: Pick<PipelineEvent, 'eventType' | 'broadcastType'>): string {
   const bt = (event.broadcastType || '').trim()
   if (bt) return `BROADCAST:${bt}`
-  const t = (event.eventType || '').trim()
-  if (t.toUpperCase() === 'BROADCAST' && !bt) return 'BROADCAST'
-  return t || '—'
+  return (event.eventType || '').trim() || 'Incident'
 }
 
-export function formatRelativeTime(dateStr: string | null | undefined): string {
-  if (!dateStr) return '—'
-  const date = new Date(dateStr)
-  if (Number.isNaN(date.getTime())) return dateStr
-  const now = new Date()
-  const diffMs = now.getTime() - date.getTime()
+export function formatRelativeTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
 
-  const datePart = date.toLocaleString('en-US', {
-    month: 'numeric',
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+
+  const datePart = d.toLocaleDateString(undefined, {
+    month: 'short',
     day: 'numeric',
     year: '2-digit',
     hour: 'numeric',
@@ -84,6 +85,16 @@ export function formatRelativeTime(dateStr: string | null | undefined): string {
   }
 
   return `${datePart} • ${rel}`
+}
+
+export function getEventActivityTime(ev: PipelineEvent): number {
+  const t = Math.max(
+    ev.lastSpanAt ? new Date(ev.lastSpanAt).getTime() : 0,
+    ev.updatedAt ? new Date(ev.updatedAt).getTime() : 0,
+    ev.incidentAt ? new Date(ev.incidentAt).getTime() : 0,
+    ev.createdAt ? new Date(ev.createdAt).getTime() : 0,
+  )
+  return isNaN(t) || t <= 0 ? (ev.createdAt ? new Date(ev.createdAt).getTime() : 0) : t
 }
 
 export function formatTime(iso: string | null | undefined) {
@@ -140,7 +151,16 @@ export function EventListCard({
         <span className="ss-events-eyebrow">
           {event.monitorName} · {event.spansAttached} span{event.spansAttached === 1 ? '' : 's'}
         </span>
-        <span className="ss-events-time">{formatTime(event.incidentAt ?? event.createdAt)}</span>
+        <span
+          className="ss-events-time"
+          title={
+            event.incidentAt || event.createdAt
+              ? `Initial: ${formatTimeLong(event.incidentAt ?? event.createdAt)}`
+              : undefined
+          }
+        >
+          {formatTime(event.lastSpanAt ?? event.updatedAt ?? event.incidentAt ?? event.createdAt)}
+        </span>
       </div>
       <p className="ss-events-row-title">{typeDisplayFor(event)}</p>
       <p className="ss-events-row-meta">
@@ -193,7 +213,9 @@ export function toPipelineEvent(item: EventListItem): PipelineEvent {
     originalTranscription: item.original_transcription,
     summary: item.summary,
     createdAt: item.created_at || '',
+    updatedAt: item.updated_at,
     incidentAt: item.incident_at,
+    lastSpanAt: item.last_span_at,
     closedAt: item.closed_at,
     spansAttached: item.spans_attached ?? 0,
     audioPath: item.audio_path,
@@ -223,7 +245,9 @@ export function toDetailEvent(
     originalTranscription: e.original_transcription,
     summary: e.summary,
     createdAt: e.created_at || '',
+    updatedAt: e.updated_at,
     incidentAt: e.incident_at,
+    lastSpanAt: e.last_span_at,
     closedAt: e.closed_at,
     spansAttached: detail.transcripts.length || listEvent?.spansAttached || 0,
   }

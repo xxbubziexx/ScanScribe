@@ -662,6 +662,7 @@ def _create_event_full(
                 if header["status_detail"] and (not existing_dup.status_detail or existing_dup.status_detail == "Active"):
                     existing_dup.status_detail = header["status_detail"]
 
+                existing_dup.updated_at = datetime.now(timezone.utc)
                 existing_dup.master_last_run_at = datetime.now(timezone.utc)
                 events_db.commit()
 
@@ -692,6 +693,7 @@ def _create_event_full(
                         "status_detail": existing_dup.status_detail,
                         "summary": existing_dup.summary,
                         "spans_attached": span_count,
+                        "updated_at": existing_dup.updated_at.isoformat() if existing_dup.updated_at else datetime.now(timezone.utc).isoformat(),
                     }
                 })
                 return existing_dup.event_id
@@ -709,6 +711,7 @@ def _create_event_full(
         original_transcription=header["original_transcription"],
         summary=header["summary"],
         master_last_run_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
         closed_at=closed_at,
     )
     events_db.add(event)
@@ -753,6 +756,7 @@ def _create_event_full(
             "original_transcription": header["original_transcription"],
             "summary": event.summary,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": event.updated_at.isoformat() if event.updated_at else datetime.now(timezone.utc).isoformat(),
             "closed_at": closed_at.isoformat() if closed_at else None,
             "spans_attached": 1,
             "talkgroup": talkgroup,
@@ -1076,6 +1080,7 @@ def process_transcript_for_monitor(
                     if dec_etype and (not target_ev.event_type or target_ev.event_type == "N/A"):
                         target_ev.event_type = dec_etype
 
+                    target_ev.updated_at = datetime.now(timezone.utc)
                     target_ev.master_last_run_at = datetime.now(timezone.utc)
                     events_db.commit()
 
@@ -1109,6 +1114,7 @@ def process_transcript_for_monitor(
                             "summary": target_ev.summary,
                             "talkgroup": talkgroup,
                             "spans_attached": span_count,
+                            "updated_at": target_ev.updated_at.isoformat() if target_ev.updated_at else datetime.now(timezone.utc).isoformat(),
                         }
                     })
 
@@ -1177,6 +1183,7 @@ def process_transcript_for_monitor(
                     target_ev.status_detail = dec_status
                     target_ev.status = "closed"
                     target_ev.closed_at = datetime.now(timezone.utc)
+                    target_ev.updated_at = datetime.now(timezone.utc)
                     target_ev.master_last_run_at = datetime.now(timezone.utc)
                     events_db.commit()
 
@@ -1195,6 +1202,7 @@ def process_transcript_for_monitor(
                             "monitor_id": target_ev.monitor_id,
                             "status": "closed",
                             "closed_at": target_ev.closed_at.isoformat() if target_ev.closed_at else None,
+                            "updated_at": target_ev.updated_at.isoformat() if target_ev.updated_at else datetime.now(timezone.utc).isoformat(),
                             "summary": target_ev.summary,
                         }
                     })

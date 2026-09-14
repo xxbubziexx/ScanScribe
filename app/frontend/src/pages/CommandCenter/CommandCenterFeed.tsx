@@ -3,7 +3,12 @@ import { Link } from 'react-router-dom'
 import { eventsApi } from '@/lib/events'
 import type { MonitorResponse } from '@/types/events'
 import type { PipelineEvent } from '@/pages/Events/IncidentsPage'
-import { splitBadgeEntries, typeDisplayFor, formatRelativeTime } from '@/pages/Events/IncidentsPage'
+import {
+  splitBadgeEntries,
+  typeDisplayFor,
+  formatRelativeTime,
+  getEventActivityTime,
+} from '@/pages/Events/IncidentsPage'
 
 export type FilterMode = 'open' | 'closed' | 'mapped' | 'all'
 export type Timeframe = '24h' | '3day' | '7day' | 'all'
@@ -186,7 +191,7 @@ export function CommandCenterFeed({
     const base = rawEvents.filter((ev) => {
       if (selectedMonitor !== 'all' && ev.monitorId !== selectedMonitor) return false
 
-      const evTime = new Date(ev.incidentAt ?? ev.createdAt).getTime()
+      const evTime = getEventActivityTime(ev)
       if (timeframe === '24h' && now - evTime > 24 * 60 * 60 * 1000) return false
       if (timeframe === '3day' && now - evTime > 3 * 24 * 60 * 60 * 1000) return false
       if (timeframe === '7day' && now - evTime > 7 * 24 * 60 * 60 * 1000) return false
@@ -370,8 +375,15 @@ export function CommandCenterFeed({
                     </span>
                   </div>
 
-                  <span className="text-[11px] text-gray-400 font-mono shrink-0">
-                    {formatRelativeTime(ev.incidentAt ?? ev.createdAt)}
+                  <span
+                    className="text-[11px] text-gray-400 font-mono shrink-0"
+                    title={
+                      ev.incidentAt || ev.createdAt
+                        ? `Initial incident: ${ev.incidentAt ?? ev.createdAt}`
+                        : undefined
+                    }
+                  >
+                    {formatRelativeTime(ev.lastSpanAt ?? ev.updatedAt ?? ev.incidentAt ?? ev.createdAt)}
                   </span>
                 </div>
 

@@ -145,6 +145,25 @@ def init_db():
         if "resolved_address" not in cols:
             conn.execute(text("ALTER TABLE events ADD COLUMN resolved_address VARCHAR(500)"))
             conn.commit()
+        if "updated_at" not in cols:
+            conn.execute(text("ALTER TABLE events ADD COLUMN updated_at DATETIME"))
+            conn.execute(text("UPDATE events SET updated_at = created_at WHERE updated_at IS NULL"))
+            conn.commit()
+            try:
+                conn.execute(text("""
+                    UPDATE events 
+                    SET updated_at = (
+                        SELECT MAX(linked_at) 
+                        FROM event_transcript_links 
+                        WHERE event_transcript_links.event_id = events.id
+                    )
+                    WHERE id IN (
+                        SELECT DISTINCT event_id FROM event_transcript_links
+                    )
+                """))
+                conn.commit()
+            except Exception:
+                pass
 
         r = conn.execute(text("PRAGMA table_info(event_transcript_links)"))
         link_cols = [row[1] for row in r.fetchall()]

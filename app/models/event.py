@@ -44,6 +44,7 @@ class Event(EventsBase):
     summary = Column(Text, nullable=True)
     close_recommendation = Column(Boolean, nullable=True)  # legacy; no longer set by pipeline
     created_at = Column(DateTime(timezone=True), default=utcnow)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, index=True)
     closed_at = Column(DateTime(timezone=True), nullable=True)
     # Master run: last time Master updated this event (for min_transcripts trigger)
     master_last_run_at = Column(DateTime(timezone=True), nullable=True)
