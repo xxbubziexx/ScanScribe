@@ -7,6 +7,14 @@
 # Keep `TORCH_VERSION` in sync with that file (or compose build args).
 ARG PYTHON_VERSION=3.11
 
+# --- frontend build stage ---
+FROM node:20-slim AS frontend-builder
+WORKDIR /build/frontend
+COPY app/frontend/package*.json ./
+RUN npm ci
+COPY app/frontend/ ./
+RUN npm run build
+
 FROM python:${PYTHON_VERSION}-slim AS builder
 ARG PYTORCH_WHL_SUBDIR=cu124
 ARG TORCH_VERSION=2.5.1
@@ -42,6 +50,7 @@ RUN apt-get update \
     && useradd --create-home --uid 1000 --shell /usr/sbin/nologin appuser
 
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=frontend-builder /build/frontend/dist /opt/frontend_dist
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     CONFIG_PATH=/app/config.yml \
@@ -54,6 +63,7 @@ RUN mkdir -p /app/ingest /app/audio_storage /app/logs /app/models \
     && chown -R appuser:appuser /app
 
 COPY --chown=appuser:appuser app/ /app/app/
+COPY --from=frontend-builder --chown=appuser:appuser /build/frontend/dist /app/app/frontend/dist
 COPY --chown=appuser:appuser config.yml.example /app/config.yml
 
 USER appuser

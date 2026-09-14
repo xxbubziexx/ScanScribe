@@ -124,23 +124,56 @@ app.mount("/audio_storage", StaticFiles(directory=str(settings.output_dir)), nam
 # React SPA (Vite `base: '/app/'`, see app/frontend/vite.config.ts). Without these routes,
 # a refresh on e.g. /app/login hits FastAPI and returns 404 — only client-side routing worked.
 _FRONTEND_DIST = (BASE_DIR / "frontend" / "dist").resolve()
+_FALLBACK_FRONTEND_DIST = Path("/opt/frontend_dist").resolve()
+
+
+def get_frontend_dist() -> Path:
+    """Resolve the frontend dist directory, falling back to container-baked /opt/frontend_dist if needed."""
+    if (_FRONTEND_DIST / "index.html").is_file():
+        return _FRONTEND_DIST
+    if (_FALLBACK_FRONTEND_DIST / "index.html").is_file():
+        # If running in Docker with a host volume mounted at /app/app that lacks dist,
+        # copy the container-baked assets over to /app/app/frontend/dist so host is populated.
+        try:
+            import shutil
+            _FRONTEND_DIST.mkdir(parents=True, exist_ok=True)
+            for item in _FALLBACK_FRONTEND_DIST.iterdir():
+                dest = _FRONTEND_DIST / item.name
+                if not dest.exists():
+                    if item.is_dir():
+                        shutil.copytree(item, dest)
+                    else:
+                        shutil.copy2(item, dest)
+            logger.info("Restored frontend dist assets from /opt/frontend_dist to %s", _FRONTEND_DIST)
+        except Exception as exc:
+            logger.debug("Failed copying fallback frontend dist: %s", exc)
+        return _FALLBACK_FRONTEND_DIST
+    return _FRONTEND_DIST
 
 
 def _spa_index() -> FileResponse:
-    index = _FRONTEND_DIST / "index.html"
+    dist_dir = get_frontend_dist()
+    index = dist_dir / "index.html"
     if not index.is_file():
         raise HTTPException(
             status_code=503,
             detail="React UI not built. From repo root: cd app/frontend && npm ci && npm run build",
         )
-    return FileResponse(index)
+    return FileResponse(
+        index,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0",
+        },
+    )
 
 
 def _spa_file_or_shell(full_path: str) -> FileResponse:
     """Serve real files under dist (assets/*.js, etc.) or index.html for client routes."""
     if ".." in full_path.split("/"):
         raise HTTPException(status_code=404, detail="Not found")
-    base = _FRONTEND_DIST
+    base = get_frontend_dist()
     try:
         candidate = (base / full_path).resolve()
     except OSError:

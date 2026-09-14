@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node / Frontend
+node_modules/
+**/node_modules/
+app/frontend/node_modules/
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Logs (will be mounted as volume)
+logs/*.json
+logs/*.db
+
+# Runtime data (never bake or send to build context)
+audio_storage/
+ingest/
+logs/
+*.db
+*.sqlite
+*.sqlite3
+config.yml
+models/
+client/
+# Test files
+tests/
+*.test.py
+
+# Environment files
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak

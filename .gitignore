@@ -5,8 +5,8 @@ __pycache__/
 *.so
 .Python
 *.egg-info/
-dist/
-build/
+/dist/
+/build/
 pip-log.txt
 pip-delete-this-directory.txt
 
@@ -74,13 +74,11 @@ Thumbs.db
 # Local-only compose (templates are docker-compose.*.example)
 docker-compose.yml
 client/*
-.dockerignore
 docs/*
 # Local name for pip; start from requirements.cpu.example
 requirements.txt
 
 # React frontend (app/frontend/)
 app/frontend/node_modules/
-app/frontend/dist/
 app/frontend/.env.local
 app/frontend/coverage/
