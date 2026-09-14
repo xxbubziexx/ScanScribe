@@ -489,14 +489,6 @@ def summarize_event_attachments(
 ) -> Optional[str]:
     """Fetch all chronological attachments for an event and generate an updated summary using the router's model."""
     try:
-        # Debounce summary updates for active incidents: at most once every 90s unless forced or closing
-        if not force and event.status == "open" and event.summary and event.master_last_run_at:
-            last_run = _utc_from_event_created(event.master_last_run_at)
-            elapsed = (datetime.now(timezone.utc) - last_run).total_seconds()
-            if elapsed < 90.0:
-                logger.debug("Debouncing summary update for event_id=%s (last ran %ds ago)", event.event_id, int(elapsed))
-                return event.summary
-
         links = (
             events_db.query(EventTranscriptLink)
             .filter(EventTranscriptLink.event_id == event.id)
@@ -663,12 +655,11 @@ def _create_event_full(
                     existing_dup.status_detail = header["status_detail"]
 
                 existing_dup.updated_at = datetime.now(timezone.utc)
-                existing_dup.master_last_run_at = datetime.now(timezone.utc)
                 events_db.commit()
 
                 logs_db = LogsSessionLocal()
                 try:
-                    summarize_event_attachments(existing_dup, events_db, logs_db)
+                    summarize_event_attachments(existing_dup, events_db, logs_db, force=True)
                 except Exception as e:
                     logger.warning("Failed updating event summary on deduplication merge: %s", e)
                 finally:
@@ -710,7 +701,7 @@ def _create_event_full(
         status_detail=header["status_detail"] or None,
         original_transcription=header["original_transcription"],
         summary=header["summary"],
-        master_last_run_at=datetime.now(timezone.utc),
+        master_last_run_at=None,
         updated_at=datetime.now(timezone.utc),
         closed_at=closed_at,
     )
@@ -729,7 +720,7 @@ def _create_event_full(
     # Generate initial summary based on the initial attachment
     logs_db = LogsSessionLocal()
     try:
-        summarize_event_attachments(event, events_db, logs_db)
+        summarize_event_attachments(event, events_db, logs_db, force=True)
     except Exception as e:
         logger.warning("Failed initial event summary generation: %s", e)
     finally:
@@ -1081,12 +1072,11 @@ def process_transcript_for_monitor(
                         target_ev.event_type = dec_etype
 
                     target_ev.updated_at = datetime.now(timezone.utc)
-                    target_ev.master_last_run_at = datetime.now(timezone.utc)
                     events_db.commit()
 
                     # Generate updated cumulative summary based on all attachments so far
                     try:
-                        summarize_event_attachments(target_ev, events_db, logs_db)
+                        summarize_event_attachments(target_ev, events_db, logs_db, force=True)
                     except Exception as e:
                         logger.warning("Failed updating event summary on attach: %s", e)
 
@@ -1184,7 +1174,6 @@ def process_transcript_for_monitor(
                     target_ev.status = "closed"
                     target_ev.closed_at = datetime.now(timezone.utc)
                     target_ev.updated_at = datetime.now(timezone.utc)
-                    target_ev.master_last_run_at = datetime.now(timezone.utc)
                     events_db.commit()
 
                     # Generate final closing summary based on all attachments including resolution

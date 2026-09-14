@@ -190,7 +190,7 @@ def cmd_summarize_events(args: argparse.Namespace) -> int:
                 print(f"[{idx}/{len(events)}] Dry run: would summarize event {ev.event_id} ({ev.event_type})")
                 continue
 
-            summary = summarize_event_attachments(ev, events_db, logs_db)
+            summary = summarize_event_attachments(ev, events_db, logs_db, force=True)
             if summary:
                 updated += 1
                 print(f"[{idx}/{len(events)}] Event {ev.event_id}: {summary[:80]}...")

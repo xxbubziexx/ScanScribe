@@ -650,8 +650,8 @@ def test_generate_event_summary_short_circuits_during_rate_limit():
     OpenRouterRateLimitManager.reset()
 
 
-def test_summarize_event_attachments_debouncing(monkeypatch):
-    """Verify summarize_event_attachments debounces open incidents within 90s."""
+def test_summarize_event_attachments_dynamic_update(monkeypatch):
+    """Verify summarize_event_attachments updates summary dynamically without debouncing."""
     from datetime import datetime, timezone, timedelta
     from app.services.events_worker import summarize_event_attachments
     from app.models.event import Event, EventTranscriptLink, EventsBase
@@ -689,23 +689,25 @@ def test_summarize_event_attachments_debouncing(monkeypatch):
     mock_logs_db = MagicMock()
     mock_logs_db.query.return_value.filter.return_value.all.return_value = [mock_log]
 
-    called = False
+    call_count = 0
     def mock_generate(*args, **kwargs):
-        nonlocal called
-        called = True
-        return "New summary"
+        nonlocal call_count
+        call_count += 1
+        return f"Updated summary #{call_count}"
 
     monkeypatch.setattr("app.services.events_router_engine.EventsRouter.generate_event_summary", mock_generate)
 
-    # Within 90s, should debounce and NOT call LLM
+    # Calling summarize_event_attachments immediately updates summary without dropping updates
     res = summarize_event_attachments(ev, db, mock_logs_db, force=False)
-    assert res == "Initial summary"
-    assert called is False
+    assert res == "Updated summary #1"
+    assert ev.summary == "Updated summary #1"
+    assert call_count == 1
 
-    # When force=True, should bypass debounce
+    # Calling again on another attachment also runs and updates without being blocked by debounce
     res_forced = summarize_event_attachments(ev, db, mock_logs_db, force=True)
-    assert called is True
-    assert res_forced == "New summary"
+    assert res_forced == "Updated summary #2"
+    assert ev.summary == "Updated summary #2"
+    assert call_count == 2
 
 
 def test_openrouter_rate_limit_manager_regex_fallback():

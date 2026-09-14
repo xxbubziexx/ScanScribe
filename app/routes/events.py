@@ -1041,7 +1041,7 @@ async def summarize_event_endpoint(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    summary = summarize_event_attachments(event, events_db, logs_db)
+    summary = summarize_event_attachments(event, events_db, logs_db, force=True)
 
     websocket_manager.broadcast_sync({
         "type": "event_update",
