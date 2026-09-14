@@ -48,21 +48,28 @@ export function typeDisplayFor(event: Pick<PipelineEvent, 'eventType' | 'broadca
   return (event.eventType || '').trim() || 'Incident'
 }
 
-export function formatRelativeTime(iso: string | null | undefined): string {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
+export function formatRelativeTime(
+  updatedIso: string | null | undefined,
+  createdIso?: string | null | undefined,
+): string {
+  const targetUpdated = updatedIso || createdIso
+  if (!targetUpdated) return '—'
+
+  const dCreated = new Date(createdIso || targetUpdated)
+  const dUpdated = new Date(targetUpdated)
+
+  const datePart = !Number.isNaN(dCreated.getTime())
+    ? dCreated.toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: '2-digit',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : (createdIso || targetUpdated)
 
   const now = new Date()
-  const diffMs = now.getTime() - d.getTime()
-
-  const datePart = d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: '2-digit',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  const diffMs = !Number.isNaN(dUpdated.getTime()) ? now.getTime() - dUpdated.getTime() : 0
 
   let rel = 'just now'
   if (diffMs > 0) {
@@ -84,7 +91,7 @@ export function formatRelativeTime(iso: string | null | undefined): string {
     }
   }
 
-  return `${datePart} • last updated: ${rel}`
+  return `created: ${datePart} • last updated: ${rel}`
 }
 
 export function getEventActivityTime(ev: PipelineEvent): number {
@@ -97,8 +104,11 @@ export function getEventActivityTime(ev: PipelineEvent): number {
   return isNaN(t) || t <= 0 ? (ev.createdAt ? new Date(ev.createdAt).getTime() : 0) : t
 }
 
-export function formatTime(iso: string | null | undefined) {
-  return formatRelativeTime(iso)
+export function formatTime(
+  updatedIso: string | null | undefined,
+  createdIso?: string | null | undefined,
+) {
+  return formatRelativeTime(updatedIso, createdIso)
 }
 
 export function formatTimeLong(iso: string | null | undefined) {
@@ -155,11 +165,14 @@ export function EventListCard({
           className="ss-events-time"
           title={
             event.incidentAt || event.createdAt
-              ? `Initial: ${formatTimeLong(event.incidentAt ?? event.createdAt)}`
+              ? `Initial: ${formatTimeLong(event.incidentAt ?? event.createdAt)}${event.lastSpanAt || event.updatedAt ? `\nLast updated: ${formatTimeLong(event.lastSpanAt ?? event.updatedAt)}` : ''}`
               : undefined
           }
         >
-          {formatTime(event.lastSpanAt ?? event.updatedAt ?? event.incidentAt ?? event.createdAt)}
+          {formatTime(
+            event.lastSpanAt ?? event.updatedAt ?? event.incidentAt ?? event.createdAt,
+            event.incidentAt || event.createdAt,
+          )}
         </span>
       </div>
       <p className="ss-events-row-title">{typeDisplayFor(event)}</p>

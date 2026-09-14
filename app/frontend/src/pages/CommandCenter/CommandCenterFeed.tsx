@@ -7,6 +7,7 @@ import {
   splitBadgeEntries,
   typeDisplayFor,
   formatRelativeTime,
+  formatTimeLong,
   getEventActivityTime,
 } from '@/pages/Events/IncidentsPage'
 
@@ -379,11 +380,14 @@ export function CommandCenterFeed({
                     className="text-[11px] text-gray-400 font-mono shrink-0"
                     title={
                       ev.incidentAt || ev.createdAt
-                        ? `Initial incident: ${ev.incidentAt ?? ev.createdAt}`
+                        ? `Initial: ${formatTimeLong(ev.incidentAt ?? ev.createdAt)}${ev.lastSpanAt || ev.updatedAt ? `\nLast updated: ${formatTimeLong(ev.lastSpanAt ?? ev.updatedAt)}` : ''}`
                         : undefined
                     }
                   >
-                    {formatRelativeTime(ev.lastSpanAt ?? ev.updatedAt ?? ev.incidentAt ?? ev.createdAt)}
+                    {formatRelativeTime(
+                      ev.lastSpanAt ?? ev.updatedAt ?? ev.incidentAt ?? ev.createdAt,
+                      ev.incidentAt || ev.createdAt,
+                    )}
                   </span>
                 </div>
 
