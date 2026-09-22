@@ -220,31 +220,29 @@ export function EventsMonitorsPage() {
                   autoComplete="off"
                 />
               </div>
-              <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
-                <div className="grid gap-2">
-                  <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-tg">
-                    Talkgroup IDs (comma or newline)
-                  </label>
-                  <textarea
-                    id="new-monitor-tg"
-                    className="ss-input min-h-[5rem] resize-y font-mono text-xs"
-                    value={createTg}
-                    onChange={(e) => setCreateTg(e.target.value)}
-                    placeholder="TG1&#10;TG2"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-units">
-                    Known Units & Prefix Rules (Optional)
-                  </label>
-                  <textarea
-                    id="new-monitor-units"
-                    className="ss-input min-h-[5rem] resize-y font-mono text-xs"
-                    value={createKnownUnits}
-                    onChange={(e) => setCreateKnownUnits(e.target.value)}
-                    placeholder="e.g. 38xx = Park Hills&#10;100s = Farmington PD"
-                  />
-                </div>
+              <div className="grid gap-2 md:col-span-2">
+                <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-tg">
+                  Talkgroup IDs (comma or newline)
+                </label>
+                <textarea
+                  id="new-monitor-tg"
+                  className="ss-input min-h-[5rem] resize-y font-mono text-xs"
+                  value={createTg}
+                  onChange={(e) => setCreateTg(e.target.value)}
+                  placeholder="TG1&#10;TG2"
+                />
+              </div>
+              <div className="grid gap-2 md:col-span-2">
+                <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-units">
+                  Known Units & Prefix Rules (Optional)
+                </label>
+                <textarea
+                  id="new-monitor-units"
+                  className="ss-input min-h-[5rem] resize-y font-mono text-xs"
+                  value={createKnownUnits}
+                  onChange={(e) => setCreateKnownUnits(e.target.value)}
+                  placeholder="e.g. 38xx = Park Hills&#10;100s = Farmington PD"
+                />
               </div>
               <div className="grid gap-2 md:col-span-2">
                 <label className="block text-[11px] uppercase tracking-wide text-gray-500" htmlFor="new-monitor-labels">
@@ -430,28 +428,26 @@ export function EventsMonitorsPage() {
                         placeholder="e.g. Cook County, IL"
                       />
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="grid gap-2">
-                        <label className="text-[11px] uppercase tracking-wide text-gray-500">
-                          Talkgroup IDs (comma or newline)
-                        </label>
-                        <textarea
-                          className="ss-input min-h-[5rem] resize-y font-mono text-xs"
-                          value={editTg}
-                          onChange={(e) => setEditTg(e.target.value)}
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <label className="text-[11px] uppercase tracking-wide text-gray-500">
-                          Known Units & Prefix Rules
-                        </label>
-                        <textarea
-                          className="ss-input min-h-[5rem] resize-y font-mono text-xs"
-                          value={editKnownUnits}
-                          onChange={(e) => setEditKnownUnits(e.target.value)}
-                          placeholder="e.g. 38xx = Park Hills&#10;100s = Farmington PD"
-                        />
-                      </div>
+                    <div className="grid gap-2">
+                      <label className="text-[11px] uppercase tracking-wide text-gray-500">
+                        Talkgroup IDs (comma or newline)
+                      </label>
+                      <textarea
+                        className="ss-input min-h-[5rem] resize-y font-mono text-xs"
+                        value={editTg}
+                        onChange={(e) => setEditTg(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <label className="text-[11px] uppercase tracking-wide text-gray-500">
+                        Known Units & Prefix Rules
+                      </label>
+                      <textarea
+                        className="ss-input min-h-[5rem] resize-y font-mono text-xs"
+                        value={editKnownUnits}
+                        onChange={(e) => setEditKnownUnits(e.target.value)}
+                        placeholder="e.g. 38xx = Park Hills&#10;100s = Farmington PD"
+                      />
                     </div>
                     <div className="grid gap-2">
                       <label className="text-[11px] uppercase tracking-wide text-gray-500">Start event labels</label>
