@@ -70,7 +70,8 @@ async def save_config_file(
                 await asyncio.sleep(0.5)
                 os.kill(os.getpid(), signal.SIGTERM)
 
-            asyncio.create_task(_deferred_restart())
+            from ..services.task_manager import task_manager
+            task_manager.spawn(_deferred_restart(), name="deferred-restart")
             return {
                 "message": "Configuration saved successfully. ScanScribe is auto-restarting to apply settings...",
                 "restarting": True,

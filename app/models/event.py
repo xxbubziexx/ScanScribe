@@ -1,10 +1,16 @@
-"""Events pipeline models (Worker/Master LLM per monitor)."""
+"""Events pipeline models (Worker/Master LLM per monitor) bound to unified Base."""
+import json
+from typing import List
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Boolean, Float, Index
+from sqlalchemy.orm import relationship
 
-from ..database import EventsBase, utcnow
+from ..database import Base, utcnow
+
+# Backward compatibility alias
+EventsBase = Base
 
 
-class Monitor(EventsBase):
+class Monitor(Base):
     """One department/monitor: talkgroups for NER events pipeline."""
     __tablename__ = "monitors"
 
@@ -22,13 +28,13 @@ class Monitor(EventsBase):
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
-class Event(EventsBase):
+class Event(Base):
     """One event: draft header from Worker, enriched by Master. Closed when Master decides."""
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(String(64), nullable=False, unique=True, index=True)  # Unique ID for Worker/Master
-    monitor_id = Column(Integer, ForeignKey("monitors.id"), nullable=False, index=True)
+    monitor_id = Column(Integer, ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(20), default="open", index=True)  # open, closed
     # EVENT HEADER (Worker draft, Master updates)
     event_type = Column(String(255), nullable=True)
@@ -38,7 +44,7 @@ class Event(EventsBase):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     resolved_address = Column(String(500), nullable=True)
-    units = Column(Text, nullable=True)  # JSON array or comma-separated
+    units = Column(Text, nullable=True, default="[]")  # Stored strictly as JSON string representing List[str]
     status_detail = Column(String(255), nullable=True)  # e.g. "en route", "on scene"
     original_transcription = Column(Text, nullable=True)  # Trigger transcript (always set by Worker)
     summary = Column(Text, nullable=True)
@@ -49,21 +55,40 @@ class Event(EventsBase):
     # Master run: last time Master updated this event (for min_transcripts trigger)
     master_last_run_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Relationships
+    monitor = relationship("Monitor")
+    transcript_links = relationship("EventTranscriptLink", back_populates="event", cascade="all, delete-orphan")
 
-class EventTranscriptLink(EventsBase):
+    @property
+    def units_list(self) -> List[str]:
+        """Guaranteed List[str] accessor."""
+        if not self.units:
+            return []
+        try:
+            val = json.loads(self.units)
+            return val if isinstance(val, list) else [str(val)]
+        except Exception:
+            return [u.strip() for u in self.units.split(",") if u.strip()]
+
+
+class EventTranscriptLink(Base):
     """Link a log_entry (transcript) to an event. Worker attaches on trigger/dedupe."""
     __tablename__ = "event_transcript_links"
 
     id = Column(Integer, primary_key=True, index=True)
-    event_id = Column(Integer, ForeignKey("events.id"), nullable=False, index=True)
-    log_entry_id = Column(Integer, nullable=False, index=True)  # ID in logs DB log_entries
+    event_id = Column(Integer, ForeignKey("events.id", ondelete="CASCADE"), nullable=False, index=True)
+    log_entry_id = Column(Integer, ForeignKey("log_entries.id", ondelete="CASCADE"), nullable=False, index=True)
     entities_json = Column(Text, nullable=True)  # NER output: {"EVT_TYPE": [...], "UNIT": [...], ...}
     # Routing / pipeline note: LLM reason, auto_attach, etc. (optional)
     llm_reason = Column(Text, nullable=True)
     linked_at = Column(DateTime(timezone=True), default=utcnow)
 
+    # Relationships
+    event = relationship("Event", back_populates="transcript_links")
+    log_entry = relationship("LogEntry")
 
-class PipelineDebugLog(EventsBase):
+
+class PipelineDebugLog(Base):
     """Append-only debug rows for Events UI (NER / LLM routing). Shared across API workers via SQLite."""
 
     __tablename__ = "pipeline_debug_log"
@@ -73,7 +98,7 @@ class PipelineDebugLog(EventsBase):
     payload_json = Column(Text, nullable=False)
 
 
-class SpanStore(EventsBase):
+class SpanStore(Base):
     """Per-span NER extract + transcript. Worker reads rows with evt_type for triage; Master uses recent rows for context.
 
     Labels mirror the NER model set: UNIT, LOC, EVT_TYPE, ADDRESS, STATUS, TIME.
@@ -83,7 +108,7 @@ class SpanStore(EventsBase):
     __tablename__ = "span_store"
 
     id = Column(Integer, primary_key=True, index=True)
-    monitor_id = Column(Integer, ForeignKey("monitors.id"), nullable=False, index=True)
+    monitor_id = Column(Integer, ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True)
     talkgroup = Column(String(255), nullable=True, index=True)
     transcript = Column(Text, nullable=True)
     evt_type = Column(Text, nullable=True)
@@ -93,10 +118,13 @@ class SpanStore(EventsBase):
     status = Column(Text, nullable=True)
     time_mentions = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
-    log_entry_id = Column(Integer, nullable=True, index=True)
+    log_entry_id = Column(Integer, ForeignKey("log_entries.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    monitor = relationship("Monitor")
+    log_entry = relationship("LogEntry")
 
 
-class EntityObservation(EventsBase):
+class EntityObservation(Base):
     """One canonicalized NER entity occurrence. Written synchronously with SpanStore.
 
     Source of truth for entity-level analytics (top-N by label, time series, by talkgroup).
@@ -106,14 +134,18 @@ class EntityObservation(EventsBase):
     __tablename__ = "entity_observations"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    span_store_id = Column(Integer, ForeignKey("span_store.id"), nullable=False, index=True)
-    monitor_id = Column(Integer, ForeignKey("monitors.id"), nullable=False, index=True)
+    span_store_id = Column(Integer, ForeignKey("span_store.id", ondelete="CASCADE"), nullable=False, index=True)
+    monitor_id = Column(Integer, ForeignKey("monitors.id", ondelete="CASCADE"), nullable=False, index=True)
     talkgroup = Column(String(255), nullable=True, index=True)
-    log_entry_id = Column(Integer, nullable=True, index=True)
+    log_entry_id = Column(Integer, ForeignKey("log_entries.id", ondelete="SET NULL"), nullable=True, index=True)
     ts = Column(DateTime(timezone=True), default=utcnow, index=True)
     label = Column(String(32), nullable=False, index=True)
     canonical = Column(String(500), nullable=False, index=True)
     raw = Column(String(500), nullable=False)
+
+    span_store = relationship("SpanStore")
+    monitor = relationship("Monitor")
+    log_entry = relationship("LogEntry")
 
     __table_args__ = (
         Index("idx_entobs_label_ts", "label", "ts"),
@@ -122,11 +154,10 @@ class EntityObservation(EventsBase):
     )
 
 
-class SystemSetting(EventsBase):
+class SystemSetting(Base):
     """Global key-value system settings for the Events pipeline (e.g. global prompt rules, 10-codes)."""
     __tablename__ = "system_settings"
 
     key = Column(String(128), primary_key=True, index=True)
     value = Column(Text, nullable=True)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-

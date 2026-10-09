@@ -19,6 +19,7 @@ from ..models.log_entry import LogEntry
 from ..models.user import User
 from ..services.events_common import parse_json_list
 from ..services.events_debug import clear_all as clear_debug_all, get_recent as get_debug_recent
+from ..services.events_worker import invalidate_monitor_index_cache
 from ..services.ner_service import ENTITY_LABELS
 from .auth import get_current_active_user, get_current_admin_user
 
@@ -143,98 +144,14 @@ def _event_type_csv_display(event: Event) -> str:
 router = APIRouter(prefix="/api/events", tags=["events"])
 
 
-class MonitorCreate(BaseModel):
-    name: str = Field(..., min_length=1)
-    talkgroup_ids: List[str] = Field(default_factory=list)
-    start_event_labels: List[str] = Field(default_factory=lambda: ["EVT_TYPE"])
-    geo_region: Optional[str] = None
-    known_units: Optional[str] = None
-
-
-class MonitorUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=1)
-    enabled: Optional[bool] = None
-    talkgroup_ids: Optional[List[str]] = None
-    start_event_labels: Optional[List[str]] = None
-    geo_region: Optional[str] = None
-    known_units: Optional[str] = None
-
-
-class MonitorResponse(BaseModel):
-    id: int
-    name: str
-    enabled: bool
-    talkgroup_ids: List[str]
-    start_event_labels: List[str]
-    geo_region: Optional[str] = None
-    known_units: Optional[str] = None
-
-
-class SpanStoreItem(BaseModel):
-    id: int
-    monitor_id: int
-    talkgroup: Optional[str] = None
-    log_entry_id: Optional[int] = None
-    transcript: Optional[str] = None
-    evt_type: Optional[str] = None
-    units: Optional[str] = None
-    locations: Optional[str] = None
-    addresses: Optional[str] = None
-    status: Optional[str] = None
-    time_mentions: Optional[str] = None
-    created_at: Optional[str] = None
-    attached_event_ids: List[str] = Field(default_factory=list)
-
-
-class SpanStoreListResponse(BaseModel):
-    items: List[SpanStoreItem]
-    total: int
-
-
-class EntityObservationItem(BaseModel):
-    id: int
-    span_store_id: int
-    monitor_id: int
-    talkgroup: Optional[str] = None
-    log_entry_id: Optional[int] = None
-    ts: Optional[str] = None
-    label: str
-    canonical: str
-    raw: str
-
-
-class EntityObservationListResponse(BaseModel):
-    items: List[EntityObservationItem]
-    total: int
-
-
-class EventResponse(BaseModel):
-    id: int
-    event_id: str
-    monitor_id: int
-    status: str
-    event_type: Optional[str]
-    broadcast_type: Optional[str] = None
-    location: Optional[str]
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    resolved_address: Optional[str] = None
-    units: Optional[str]
-    status_detail: Optional[str]
-    original_transcription: Optional[str]
-    summary: Optional[str]
-    # System: when the event row was created (processing time).
-    created_at: Optional[str]
-    # System: when the event row was last updated (new span, deduplication merge, etc.).
-    updated_at: Optional[str] = None
-    # Earliest linked span LogEntry.timestamp (from audio-derived time stored in logs DB).
-    incident_at: Optional[str] = None
-    # Latest linked span LogEntry.timestamp (from audio-derived time stored in logs DB).
-    last_span_at: Optional[str] = None
-    closed_at: Optional[str]
-    spans_attached: int = 0
-    talkgroup: str = ""
-    audio_path: Optional[str] = None
+from ..schemas.monitor import MonitorCreate, MonitorUpdate, MonitorResponse
+from ..schemas.event import (
+    SpanStoreItem,
+    SpanStoreListResponse,
+    EntityObservationItem,
+    EntityObservationListResponse,
+    EventResponse,
+)
 
 
 
@@ -295,6 +212,7 @@ async def create_monitor(
     db.add(m)
     db.commit()
     db.refresh(m)
+    invalidate_monitor_index_cache()
     return MonitorResponse(
         id=m.id,
         name=m.name,
@@ -332,6 +250,7 @@ async def update_monitor(
     db.add(m)
     db.commit()
     db.refresh(m)
+    invalidate_monitor_index_cache()
     return MonitorResponse(
         id=m.id,
         name=m.name,
@@ -358,6 +277,7 @@ async def delete_monitor(
     db.query(Event).filter(Event.monitor_id == monitor_id).delete()
     db.delete(m)
     db.commit()
+    invalidate_monitor_index_cache()
     return {"ok": True}
 
 

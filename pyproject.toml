@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scanscribe"
+version = "2.1.0"
+description = "AI-Powered Public Safety Radio Transcription & Incident Pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "ScanScribe Contributors" }]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "sqlalchemy>=2.0.35",
+    "alembic>=1.13.3",
+    "pydantic>=2.9.2",
+    "pyyaml>=6.0.2",
+    "httpx>=0.27.2",
+    "faster-whisper>=1.0.3",
+    "torch>=2.2.0",
+    "torchaudio>=2.2.0",
+    "soundfile>=0.12.1",
+    "transformers>=4.45.0",
+    "slowapi>=0.1.9",
+    "python-multipart>=0.0.12",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.7.0",
+    "mypy>=1.12.0",
+]
+
+[project.scripts]
+scanscribe = "app.cli:main"

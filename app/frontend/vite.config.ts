@@ -31,10 +31,18 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'leaflet-vendor': ['leaflet', 'react-leaflet'],
+          'charts-vendor': ['recharts'],
+          'monaco-vendor': ['@monaco-editor/react'],
+        },
+      },
+    },
   },
 
   optimizeDeps: {
     include: ['monaco-editor'],
   },
-
 })

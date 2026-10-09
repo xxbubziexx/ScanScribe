@@ -154,10 +154,9 @@ class QueueProcessor:
                 self.running = False
                 return
         
-        logger.info("✅ Queue processor started")
-        
         # Start processing loop
-        asyncio.create_task(self._process_loop())
+        from .task_manager import task_manager
+        self._process_task = task_manager.spawn(self._process_loop(), name="queue-processor-loop")
     
     async def stop(self):
         """Stop the queue processor."""
@@ -367,13 +366,15 @@ class QueueProcessor:
             settings = get_settings()
             if getattr(settings.config, "events_pipeline", None) and settings.config.events_pipeline.enabled:
                 transcript_text = result.get("transcript") or ""
-                asyncio.create_task(
+                from .task_manager import task_manager
+                task_manager.spawn(
                     _dispatch_events_pipeline(
                         talkgroup=talkgroup,
                         transcript_text=transcript_text,
                         log_entry_id=log_entry.id,
                         timestamp=timestamp,
-                    )
+                    ),
+                    name=f"events-pipeline-{log_entry.id}",
                 )
 
             # Increment processed counter

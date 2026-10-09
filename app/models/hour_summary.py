@@ -2,7 +2,7 @@
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, Index, UniqueConstraint
 
-from ..database import LogsBase as Base, utcnow
+from ..database import Base, utcnow
 
 
 class HourSummary(Base):

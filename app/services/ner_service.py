@@ -51,13 +51,23 @@ def load_ner_model(model_path: str) -> bool:
         return False
     try:
         from transformers import pipeline
+        device = -1
+        try:
+            import torch
+            if torch.cuda.is_available():
+                device = 0
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = "mps"
+        except Exception:
+            pass
+
         _pipeline = pipeline(
             "ner",
             model=str(path),
             aggregation_strategy="simple",
-            device=-1,  # CPU
+            device=device,
         )
-        logger.info("NER model loaded from %s", path)
+        logger.info("NER model loaded from %s (device=%s)", path, device)
         return True
     except Exception as e:
         logger.exception("Failed to load NER model from %s: %s", path, e)

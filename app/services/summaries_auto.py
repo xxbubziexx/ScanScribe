@@ -158,8 +158,8 @@ async def start_auto_summary_worker() -> None:
     if _auto_task and not _auto_task.done():
         return
 
-    loop = asyncio.get_running_loop()
-    _auto_task = loop.create_task(_auto_summary_loop())
+    from .task_manager import task_manager
+    _auto_task = task_manager.spawn(_auto_summary_loop(), name="auto-summaries-loop")
 
 
 async def stop_auto_summary_worker() -> None:

@@ -247,6 +247,32 @@ def resolve_landmark_alias(raw_location: str) -> str:
 
     return raw_location
 
+_RE_QUOTES = re.compile(r'["\'`\[\]]')
+_RE_WHITESPACE = re.compile(r'\s+')
+_RE_PREAMBLES = [
+    re.compile(r'^(?:at\s+)?(?:the\s+)?cross(?:roads?)?\s+of\s+', re.IGNORECASE),
+    re.compile(r'^(?:at\s+)?(?:the\s+)?corner\s+of\s+', re.IGNORECASE),
+    re.compile(r'^(?:at\s+)?(?:the\s+)?intersection\s+of\s+', re.IGNORECASE),
+    re.compile(r'^(?:in\s+)?(?:the\s+)?(?:area|vicinity)\s+of\s+', re.IGNORECASE),
+    re.compile(r'^(?:in\s+front\s+of|behind|across\s+from|near|at|by|off\s+of|off)\s+', re.IGNORECASE),
+    re.compile(r'^(?:the\s+)?\d+\s+hundred\s+block\s+of\s+', re.IGNORECASE),
+    re.compile(r'^(?:the\s+)?\d+\s+block\s+of\s+', re.IGNORECASE),
+    re.compile(r'^(?:approx(?:imately)?\s+)?', re.IGNORECASE),
+]
+_RE_INTERSECT_SLASH = re.compile(r'\s+[@/]\s+')
+_RE_INTERSECT_AMP = re.compile(r'\s*&\s*')
+_RE_INTERSECT_AND = re.compile(r'\s+(?:at|and)\s+', re.IGNORECASE)
+_RE_HOUSE_NUM = re.compile(r'^\d+[-\w]*\s+(.+)$')
+_RE_DIR_PREFIX = re.compile(r'^(?:southbound|northbound|eastbound|westbound|sb|nb|eb|wb)\s+', re.IGNORECASE)
+_RE_DIR_SUFFIX = re.compile(r'\s+(?:southbound|northbound|eastbound|westbound|sb|nb|eb|wb)$', re.IGNORECASE)
+_RE_CR = re.compile(r'\b(?:County\s+Road|Co\s+Rd|CR)\s+(\d+|[A-Za-z]{1,2})\b', re.IGNORECASE)
+_RE_HWY = re.compile(
+    r'\b(?:(?:State|US|U\.S\.|I|[A-Z]{2})[-\s]+)?(?:Highway|Hwy|Route|State\s+Route|State\s+Road|MO)[-\s]+([A-Za-z]{1,2}|\d{1,3})\b'
+    r'|\b(?:US|U\.S\.|I)[-\s]+(\d{1,3})\b',
+    re.IGNORECASE,
+)
+
+
 def clean_location_string(raw: str) -> str:
     """
     Clean raw location text extracted from NER or LLM triage.
@@ -261,29 +287,19 @@ def clean_location_string(raw: str) -> str:
     text = primary.strip()
 
     # Remove quotes, brackets, and extra punctuation
-    text = re.sub(r'["\'`\[\]]', '', text)
+    text = _RE_QUOTES.sub('', text)
 
     # Normalize whitespace
-    text = re.sub(r'\s+', ' ', text)
+    text = _RE_WHITESPACE.sub(' ', text)
 
     # Common speech preamble prefixes to strip
-    preambles = [
-        r'^(?:at\s+)?(?:the\s+)?cross(?:roads?)?\s+of\s+',
-        r'^(?:at\s+)?(?:the\s+)?corner\s+of\s+',
-        r'^(?:at\s+)?(?:the\s+)?intersection\s+of\s+',
-        r'^(?:in\s+)?(?:the\s+)?(?:area|vicinity)\s+of\s+',
-        r'^(?:in\s+front\s+of|behind|across\s+from|near|at|by|off\s+of|off)\s+',
-        r'^(?:the\s+)?\d+\s+hundred\s+block\s+of\s+',
-        r'^(?:the\s+)?\d+\s+block\s+of\s+',
-        r'^(?:approx(?:imately)?\s+)?',
-    ]
-    for pattern in preambles:
-        text = re.sub(pattern, '', text, flags=re.IGNORECASE).strip()
+    for pattern in _RE_PREAMBLES:
+        text = pattern.sub('', text).strip()
 
     # Standardize intersection delimiters (&, /, @, at -> and)
-    text = re.sub(r'\s+[@/]\s+', ' and ', text)
-    text = re.sub(r'\s*&\s*', ' and ', text)
-    text = re.sub(r'\s+(?:at|and)\s+', ' and ', text, flags=re.IGNORECASE)
+    text = _RE_INTERSECT_SLASH.sub(' and ', text)
+    text = _RE_INTERSECT_AMP.sub(' and ', text)
+    text = _RE_INTERSECT_AND.sub(' and ', text)
 
     # Remove trailing/leading punctuation
     text = text.strip(' ,.-;/')
@@ -292,7 +308,7 @@ def clean_location_string(raw: str) -> str:
 
 def strip_house_number(location_text: str) -> Optional[str]:
     """Strip leading house number or range (e.g. '12834 Springtown Road' -> 'Springtown Road')."""
-    match = re.match(r'^\d+[-\w]*\s+(.+)$', location_text.strip())
+    match = _RE_HOUSE_NUM.match(location_text.strip())
     if match:
         return match.group(1).strip()
     return None
@@ -310,8 +326,8 @@ def strip_directional_indicators(text: str) -> str:
     if not text:
         return ""
     t = text.strip()
-    t = re.sub(r'^(?:southbound|northbound|eastbound|westbound|sb|nb|eb|wb)\s+', '', t, flags=re.IGNORECASE)
-    t = re.sub(r'\s+(?:southbound|northbound|eastbound|westbound|sb|nb|eb|wb)$', '', t, flags=re.IGNORECASE)
+    t = _RE_DIR_PREFIX.sub('', t)
+    t = _RE_DIR_SUFFIX.sub('', t)
     return t.strip()
 
 
@@ -324,8 +340,7 @@ def generate_highway_variants(location_text: str, state_code: str = 'MO') -> lis
     variants: list[str] = []
 
     # County Road variants: CR 202, County Road 202, Co Rd 202
-    cr_pattern = r'\b(?:County\s+Road|Co\s+Rd|CR)\s+(\d+|[A-Za-z]{1,2})\b'
-    m_cr = re.search(cr_pattern, location_text, flags=re.IGNORECASE)
+    m_cr = _RE_CR.search(location_text)
     if m_cr:
         cr_id = m_cr.group(1).upper()
         prefix = location_text[:m_cr.start()].strip()
@@ -343,11 +358,7 @@ def generate_highway_variants(location_text: str, state_code: str = 'MO') -> lis
         return variants
 
     # Match: State Highway U, Highway U, Route U, State Route U, MO-U, MO 32, Highway 8, MO 8, US-67, etc.
-    pattern = (
-        r'\b(?:(?:State|US|U\.S\.|I|[A-Z]{2})[-\s]+)?(?:Highway|Hwy|Route|State\s+Route|State\s+Road|MO)[-\s]+([A-Za-z]{1,2}|\d{1,3})\b'
-        r'|\b(?:US|U\.S\.|I)[-\s]+(\d{1,3})\b'
-    )
-    m = re.search(pattern, location_text, flags=re.IGNORECASE)
+    m = _RE_HWY.search(location_text)
     if m:
         route_id = (m.group(1) or m.group(2)).upper()
         prefix = location_text[:m.start()].strip()

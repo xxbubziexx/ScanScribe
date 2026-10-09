@@ -1,9 +1,12 @@
-"""ScanScribe maintenance CLI.
+"""ScanScribe CLI: server control + maintenance.
 
 Usage:
+    python -m app.cli start|stop|restart|status|logs|open
     python -m app.cli rebuild_entity_observations [--since YYYY-MM-DD] [--monitor MID] [--dry-run]
 
 Subcommands:
+    start / stop / restart / status / logs / open
+        Background server lifecycle (see app/server_control.py).
     rebuild_entity_observations
         Recompute and re-insert EntityObservation rows for existing SpanStore rows.
         Use after changing rules in app/services/entity_normalize.py. Idempotent:
@@ -207,11 +210,42 @@ def cmd_summarize_events(args: argparse.Namespace) -> int:
         logs_db.close()
 
 
+def _add_lifecycle_commands(sub: argparse._SubParsersAction) -> None:
+    """Register start/stop/restart/status/logs/open (implemented in app.server_control)."""
+    from . import server_control as sc
+
+    p_start = sub.add_parser("start", help="Start ScanScribe in the background")
+    p_start.add_argument("--port", type=int, default=sc.DEFAULT_PORT, help="Port to listen on (default: 8000)")
+    p_start.add_argument("--host", type=str, default=sc.DEFAULT_HOST, help="Host to bind to (default: 0.0.0.0)")
+    p_start.add_argument("--silent", action="store_true", help="No banner or browser launch")
+    p_start.add_argument("--foreground", action="store_true", help="Run in foreground instead of detached")
+    p_start.set_defaults(func=sc.cmd_start)
+
+    sub.add_parser("stop", help="Stop the running ScanScribe instance").set_defaults(func=sc.cmd_stop)
+
+    p_restart = sub.add_parser("restart", help="Restart ScanScribe")
+    p_restart.add_argument("--port", type=int, default=sc.DEFAULT_PORT, help="Port to listen on")
+    p_restart.add_argument("--host", type=str, default=sc.DEFAULT_HOST, help="Host to bind to")
+    p_restart.add_argument("--silent", action="store_true", help="Restart silently")
+    p_restart.set_defaults(func=sc.cmd_restart)
+
+    sub.add_parser("status", help="Show PID, port and health").set_defaults(func=sc.cmd_status)
+
+    p_logs = sub.add_parser("logs", help="View or stream live logs")
+    p_logs.add_argument("-n", "--lines", type=int, default=50, help="Previous lines to show (default: 50)")
+    p_logs.add_argument("--no-follow", action="store_true", help="Print and exit instead of streaming")
+    p_logs.set_defaults(func=sc.cmd_logs)
+
+    sub.add_parser("open", help="Open the dashboard in your browser").set_defaults(func=sc.cmd_open)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="app.cli", description="ScanScribe maintenance CLI"
+        prog="scanscribe", description="ScanScribe server control and maintenance CLI"
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
+
+    _add_lifecycle_commands(sub)
 
     p_rebuild = sub.add_parser(
         "rebuild_entity_observations",
@@ -239,10 +273,45 @@ def build_parser() -> argparse.ArgumentParser:
     p_summarize.add_argument("--dry-run", action="store_true", help="Do not write changes to database")
     p_summarize.set_defaults(func=cmd_summarize_events)
 
+    p_migrate = sub.add_parser(
+        "migrate",
+        help="Run Alembic database schema migrations and legacy data consolidation",
+    )
+    p_migrate.add_argument(
+        "--consolidate-legacy",
+        action="store_true",
+        help="Consolidate legacy SQLite databases into unified scanscribe.db",
+    )
+    p_migrate.set_defaults(func=cmd_migrate)
+
     return parser
 
 
+def cmd_migrate(args: argparse.Namespace) -> int:
+    """Run database migrations and legacy consolidation."""
+    from alembic import command
+    from alembic.config import Config
+    from pathlib import Path
+    from .config import get_settings
+
+    cfg = Config("alembic.ini")
+    command.upgrade(cfg, "head")
+    logger.info("Database schema upgraded to head via Alembic.")
+
+    if getattr(args, "consolidate_legacy", False):
+        from scripts.migrate_databases import migrate_to_unified
+        s = get_settings()
+        migrate_to_unified(s.db_path.parent, Path(s.log_dir))
+    return 0
+
+
 def main(argv: Optional[list[str]] = None) -> int:
+    # Legacy Windows consoles (cp1252) can't encode some status glyphs; don't crash on them.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     args = build_parser().parse_args(argv)
     return int(args.func(args))

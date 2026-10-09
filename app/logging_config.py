@@ -39,20 +39,15 @@ class WebSocketHandler(logging.Handler):
             }
             level = level_map.get(record.levelno, "info")
             
-            # Try to get the running loop
+            coro = websocket_manager.send_log(msg, level=level, timestamp=log_ts)
             try:
-                loop = asyncio.get_running_loop()
-                # If we're in the event loop, schedule the task
-                asyncio.create_task(
-                    websocket_manager.send_log(msg, level=level, timestamp=log_ts)
-                )
+                from .services.task_manager import task_manager
+                task_manager.spawn(coro, name="ws-send-log")
             except RuntimeError:
-                # No running loop (called from thread), use main loop with threadsafe call
-                if self._main_loop and not self._main_loop.is_closed():
-                    asyncio.run_coroutine_threadsafe(
-                        websocket_manager.send_log(msg, level=level, timestamp=log_ts),
-                        self._main_loop
-                    )
+                if self._main_loop and not self._main_loop.is_closed() and self._main_loop.is_running():
+                    asyncio.run_coroutine_threadsafe(coro, self._main_loop)
+                else:
+                    coro.close()
             
         except Exception:
             self.handleError(record)

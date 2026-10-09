@@ -142,10 +142,10 @@ def main():
 
     print(f"Selected mode: {Colors.BOLD}{mode.upper()}{Colors.RESET}")
 
-    # Copy docker-compose and requirements files based on mode
-    docker_src = root_dir / f"docker-compose.{mode}.example"
+    # Copy docker-compose and requirements files based on mode (templates live in docker/)
+    docker_src = root_dir / "docker" / f"docker-compose.{mode}.example"
     docker_dst = root_dir / "docker-compose.yml"
-    req_src = root_dir / f"requirements.{mode}.example"
+    req_src = root_dir / "docker" / f"requirements.{mode}.example"
     req_dst = root_dir / "requirements.txt"
 
     if docker_src.exists():

@@ -421,9 +421,16 @@ def _clean_and_parse_json(text: str) -> Optional[Dict[str, Any]]:
         except Exception:
             pass
 
-    # 4. Heuristic repair if token limit cut off the closing braces
-    idx = cleaned.find("{")
-    while idx != -1:
+    # 4. Heuristic repair if token limit cut off the closing braces (bounded candidate check)
+    candidate_indices = []
+    first_b = cleaned.find("{")
+    last_b = cleaned.rfind("{")
+    if first_b != -1:
+        candidate_indices.append(first_b)
+    if last_b != -1 and last_b != first_b:
+        candidate_indices.append(last_b)
+
+    for idx in candidate_indices:
         snippet = cleaned[idx:]
         for suffix in ["}", "\n}", "\"\n}", "\"}\n}", "\"}}", "\"}]\n}"]:
             try:
@@ -432,7 +439,6 @@ def _clean_and_parse_json(text: str) -> Optional[Dict[str, Any]]:
                     return data
             except Exception:
                 pass
-        idx = cleaned.find("{", idx + 1)
 
     # 5. Text fallback parser for verbose reasoning models
     t_lower = cleaned.lower()

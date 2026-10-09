@@ -34,51 +34,64 @@ from .websocket import websocket_manager
 logger = logging.getLogger(__name__)
 
 
+from concurrent.futures import ThreadPoolExecutor
+
+_bounded_executor = ThreadPoolExecutor(max_workers=5, thread_name_prefix="scanscribe-worker")
+
+
+async def _async_geocode_worker(event_id: str, location: str, monitor_id: int) -> None:
+    try:
+        geo_region = None
+        ev_db = EventsSessionLocal()
+        try:
+            mon = ev_db.query(Monitor).filter(Monitor.id == monitor_id).first()
+            if mon:
+                geo_region = mon.geo_region
+        finally:
+            ev_db.close()
+
+        from .geocoder_service import resolve_address
+        res = await resolve_address(location, geo_region)
+        if res:
+            ev_db = EventsSessionLocal()
+            try:
+                ev = ev_db.query(Event).filter(Event.event_id == event_id).first()
+                if ev:
+                    ev.latitude = res.latitude
+                    ev.longitude = res.longitude
+                    ev.resolved_address = res.resolved_address
+                    ev_db.commit()
+                    logger.info("Geocoded event_id=%s -> (%f, %f) %s", event_id, res.latitude, res.longitude, res.resolved_address)
+                    await websocket_manager.broadcast({
+                        "type": "event_geocoded",
+                        "data": {
+                            "event_id": event_id,
+                            "monitor_id": monitor_id,
+                            "location": location,
+                            "latitude": res.latitude,
+                            "longitude": res.longitude,
+                            "resolved_address": res.resolved_address,
+                        }
+                    })
+            finally:
+                ev_db.close()
+    except Exception as exc:
+        logger.warning("Background geocoding failed for event_id=%s: %s", event_id, exc)
+
+
 def _dispatch_geocoding_for_event(event_id: str, location: Optional[str], monitor_id: int) -> None:
     """Asynchronously geocode location for an event and broadcast coordinate update."""
     if not location or not location.strip() or location.strip().upper() == "N/A":
         return
 
-    def _worker():
-        try:
-            geo_region = None
-            ev_db = EventsSessionLocal()
-            try:
-                mon = ev_db.query(Monitor).filter(Monitor.id == monitor_id).first()
-                if mon:
-                    geo_region = mon.geo_region
-            finally:
-                ev_db.close()
-
-            from .geocoder_service import resolve_address_sync
-            res = resolve_address_sync(location, geo_region)
-            if res:
-                ev_db = EventsSessionLocal()
-                try:
-                    ev = ev_db.query(Event).filter(Event.event_id == event_id).first()
-                    if ev:
-                        ev.latitude = res.latitude
-                        ev.longitude = res.longitude
-                        ev.resolved_address = res.resolved_address
-                        ev_db.commit()
-                        logger.info("Geocoded event_id=%s -> (%f, %f) %s", event_id, res.latitude, res.longitude, res.resolved_address)
-                        websocket_manager.broadcast_sync({
-                            "type": "event_geocoded",
-                            "data": {
-                                "event_id": event_id,
-                                "monitor_id": monitor_id,
-                                "location": location,
-                                "latitude": res.latitude,
-                                "longitude": res.longitude,
-                                "resolved_address": res.resolved_address,
-                            }
-                        })
-                finally:
-                    ev_db.close()
-        except Exception as exc:
-            logger.warning("Background geocoding failed for event_id=%s: %s", event_id, exc)
-
-    threading.Thread(target=_worker, daemon=True, name=f"geocode-{event_id}").start()
+    try:
+        asyncio.get_running_loop()
+        from .task_manager import task_manager
+        task_manager.spawn(_async_geocode_worker(event_id, location, monitor_id), name=f"geocode-{event_id}")
+    except RuntimeError:
+        def _sync_wrapper():
+            asyncio.run(_async_geocode_worker(event_id, location, monitor_id))
+        _bounded_executor.submit(_sync_wrapper)
 
 
 def _utc_from_log_timestamp(dt: datetime, iana_tz: str) -> datetime:
@@ -222,20 +235,35 @@ def _build_monitor_talkgroup_index(events_db) -> Tuple[Any, Dict[str, List[int]]
     return fingerprint, index
 
 
+_last_fp_check: float = 0.0
+_MONITOR_FP_CHECK_INTERVAL: float = 5.0  # Check DB fingerprint at most once every 5s on ingest
+
+
+def invalidate_monitor_index_cache() -> None:
+    """Explicitly invalidate monitor index cache when monitors are added/modified."""
+    global _last_fp_check, _monitor_index_cache
+    with _monitor_index_lock:
+        _last_fp_check = 0.0
+        _monitor_index_cache = None
+
+
 def get_matching_monitor_ids(events_db, talkgroup: str) -> List[int]:
     """Return enabled monitor IDs matching talkgroup. Uses a fingerprint-cached index."""
-    global _monitor_index_cache
+    global _monitor_index_cache, _last_fp_check
     if not talkgroup:
         return []
     key = _normalize_talkgroup_key(talkgroup)
     if not key:
         return []
-    from sqlalchemy import func as sa_func
 
-    current_fp = events_db.query(sa_func.max(Monitor.updated_at)).scalar()
+    now = time.time()
     with _monitor_index_lock:
-        if _monitor_index_cache is None or _monitor_index_cache[0] != current_fp:
-            _monitor_index_cache = _build_monitor_talkgroup_index(events_db)
+        if _monitor_index_cache is None or (now - _last_fp_check) > _MONITOR_FP_CHECK_INTERVAL:
+            from sqlalchemy import func as sa_func
+            current_fp = events_db.query(sa_func.max(Monitor.updated_at)).scalar()
+            _last_fp_check = now
+            if _monitor_index_cache is None or _monitor_index_cache[0] != current_fp:
+                _monitor_index_cache = _build_monitor_talkgroup_index(events_db)
         index = _monitor_index_cache[1]
     return list(index.get(key, []))
 
@@ -444,26 +472,31 @@ def _auto_close_stale_events(events_db, stale_seconds: int) -> None:
         events_db.commit()
 
 
-def start_event_cleanup_worker() -> None:
-    """Daemon thread: periodically auto-closes stale events using incident time."""
-    def _loop() -> None:
-        while True:
-            cfg = get_settings().config.events_pipeline
-            interval = int(getattr(cfg, "cleanup_interval_seconds", 0) or 0)
-            stale = int(getattr(cfg, "auto_close_stale_seconds", 0) or 0)
-            sleep_for = interval if interval > 0 else 60
-            if cfg.enabled and interval > 0 and stale > 0:
+async def _async_cleanup_loop() -> None:
+    while True:
+        cfg = get_settings().config.events_pipeline
+        interval = int(getattr(cfg, "cleanup_interval_seconds", 0) or 0)
+        stale = int(getattr(cfg, "auto_close_stale_seconds", 0) or 0)
+        sleep_for = interval if interval > 0 else 60
+        if cfg.enabled and interval > 0 and stale > 0:
+            try:
+                db = EventsSessionLocal()
                 try:
-                    db = EventsSessionLocal()
-                    try:
-                        _auto_close_stale_events(db, stale)
-                    finally:
-                        db.close()
-                except Exception as exc:
-                    logger.warning("Events cleanup sweep failed: %s", exc)
-            time.sleep(sleep_for)
+                    _auto_close_stale_events(db, stale)
+                finally:
+                    db.close()
+            except Exception as exc:
+                logger.warning("Events cleanup sweep failed: %s", exc)
+        await asyncio.sleep(sleep_for)
 
-    threading.Thread(target=_loop, daemon=True, name="events-cleanup").start()
+
+def start_event_cleanup_worker() -> None:
+    """Periodically auto-closes stale events using incident time."""
+    try:
+        from .task_manager import task_manager
+        task_manager.spawn(_async_cleanup_loop(), name="events-cleanup")
+    except RuntimeError:
+        pass
 
 
 def get_global_prompt_rules(events_db=None) -> str:
@@ -715,16 +748,14 @@ def _create_event_full(
             llm_reason=(debug_reason or "").strip()[:2000] or None,
         )
     )
-    events_db.commit()
 
-    # Generate initial summary based on the initial attachment
-    logs_db = LogsSessionLocal()
+    # Generate initial summary based on the initial attachment using unified session
     try:
-        summarize_event_attachments(event, events_db, logs_db, force=True)
+        summarize_event_attachments(event, events_db, events_db, force=True)
     except Exception as e:
         logger.warning("Failed initial event summary generation: %s", e)
-    finally:
-        logs_db.close()
+
+    events_db.commit()
 
     _dispatch_geocoding_for_event(event_id, header.get("location"), monitor_id)
 

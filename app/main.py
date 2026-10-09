@@ -80,6 +80,10 @@ async def lifespan(app: FastAPI):
     await queue_processor.stop()
     await watcher_service.stop()
     await stop_auto_summary_worker()
+    from .services.task_manager import task_manager
+    from .services.http_client import close_async_client
+    await task_manager.drain(timeout_seconds=10.0)
+    await close_async_client()
     logger.info("🛑 ScanScribe shutdown complete")
 
 

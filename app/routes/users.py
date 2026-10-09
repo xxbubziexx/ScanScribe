@@ -22,8 +22,13 @@ def _format_iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat()
 
 
+from pydantic import ConfigDict
+
+
 class UserResponse(BaseModel):
     """User response model."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     email: str
@@ -31,9 +36,6 @@ class UserResponse(BaseModel):
     is_admin: bool
     created_at: str
     last_seen_at: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
 
 
 @router.get("/list", response_model=List[UserResponse])

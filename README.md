@@ -152,15 +152,15 @@ Copy the appropriate configuration files:
 
 **For CPU:**
 ```bash
-cp docker-compose.cpu.example docker-compose.yml
-cp requirements.cpu.example requirements.txt
+cp docker/docker-compose.cpu.example docker-compose.yml
+cp docker/requirements.cpu.example requirements.txt
 ```
 In `config.yml`, ensure `model.device: cpu`.
 
 **For NVIDIA GPU (CUDA):**
 ```bash
-cp docker-compose.gpu.example docker-compose.yml
-cp requirements.gpu.example requirements.txt
+cp docker/docker-compose.gpu.example docker-compose.yml
+cp docker/requirements.gpu.example requirements.txt
 ```
 In `config.yml`, set `model.device: cuda`.
 

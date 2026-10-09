@@ -1,6 +1,6 @@
 """Log entry model for transcription logs."""
 from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Index, Boolean
-from ..database import LogsBase as Base, utcnow
+from ..database import Base, utcnow
 
 
 class LogEntry(Base):

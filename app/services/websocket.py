@@ -103,8 +103,8 @@ class WebSocketManager:
         """Thread-safe synchronous broadcast dispatch."""
         try:
             import asyncio
-            loop = asyncio.get_running_loop()
-            asyncio.create_task(self.broadcast(message))
+            from .task_manager import task_manager
+            task_manager.spawn(self.broadcast(message), name="ws-broadcast")
         except RuntimeError:
             try:
                 import asyncio
