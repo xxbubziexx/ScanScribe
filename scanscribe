@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# ScanScribe Service & Maintenance CLI
+# ==============================================================================
+set -e
+
+# Resolve script directory (follows symlinks)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+PROJECT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+
+# Fallback to standard project location if invoked standalone
+if [ ! -f "$PROJECT_DIR/docker-compose.yml" ]; then
+    PROJECT_DIR="/home/scanscribe/Desktop/projects/scanscribe"
+fi
+
+cd "$PROJECT_DIR"
+
+COMMAND="${1:-status}"
+[ $# -gt 0 ] && shift
+
+case "$COMMAND" in
+    start)
+        echo "Starting ScanScribe..."
+        docker compose up -d "$@"
+        echo "ScanScribe started! Web UI available at http://localhost:8000"
+        ;;
+    stop)
+        echo "Stopping ScanScribe..."
+        docker compose down "$@"
+        ;;
+    restart)
+        echo "Restarting ScanScribe container..."
+        docker compose restart scanscribe "$@"
+        ;;
+    status)
+        docker compose ps "$@"
+        ;;
+    logs)
+        docker compose logs -f scanscribe "$@"
+        ;;
+    build)
+        echo "Rebuilding ScanScribe container..."
+        docker compose up -d --build "$@"
+        ;;
+    ui-build)
+        echo "Building React UI bundle..."
+        (cd app/frontend && npm run build)
+        ;;
+    maintenance)
+        echo "Running ScanScribe maintenance CLI..."
+        if [ -f "venv/bin/python3" ]; then
+            venv/bin/python3 -m app.cli "$@"
+        else
+            python3 -m app.cli "$@"
+        fi
+        ;;
+    help|--help|-h)
+        echo "ScanScribe CLI"
+        echo ""
+        echo "Usage: scanscribe <command> [options]"
+        echo ""
+        echo "Commands:"
+        echo "  start        Start the ScanScribe service in background (docker compose up -d)"
+        echo "  stop         Stop the ScanScribe service (docker compose down)"
+        echo "  restart      Restart the ScanScribe container (docker compose restart scanscribe)"
+        echo "  status       Show container status and port bindings"
+        echo "  logs         Follow live service and Whisper logs in real-time"
+        echo "  build        Rebuild container image and start (docker compose up -d --build)"
+        echo "  ui-build     Rebuild frontend React distribution in app/frontend/dist"
+        echo "  maintenance  Run internal maintenance tasks (python -m app.cli ...)"
+        echo "  help         Show this help message"
+        ;;
+    *)
+        echo "Unknown command: $COMMAND"
+        echo "Run 'scanscribe help' for available commands."
+        exit 1
+        ;;
+esac
