@@ -54,7 +54,7 @@ if (-not $IngestDir) {
 Write-Host "[-] Installation Profile:" -ForegroundColor Yellow
 Write-Host "    Install Directory : $InstallDir"
 Write-Host "    Ingest Directory  : $IngestDir"
-Write-Host "    Compute Mode      : $Mode.ToUpper()"
+Write-Host "    Compute Mode      : $($Mode.ToUpper())"
 Write-Host "    System RAM Profile: ${Ram}GB"
 Write-Host "    Whisper Model     : $Model"
 Write-Host "    Worker Threads    : $Workers"
@@ -81,7 +81,13 @@ foreach ($dir in $directories) {
 
 # 3. Source Code Setup
 Write-Host "[2/7] Preparing application code..." -ForegroundColor Green
-$currentScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+$currentScriptDir = if ($PSScriptRoot) { 
+    $PSScriptRoot 
+} elseif ($MyInvocation -and $MyInvocation.MyCommand -and $MyInvocation.MyCommand.Path) { 
+    Split-Path -Parent $MyInvocation.MyCommand.Path 
+} else { 
+    $null 
+}
 
 if ($currentScriptDir -and (Test-Path (Join-Path $currentScriptDir "app\main.py"))) {
     # Installing from local repository
