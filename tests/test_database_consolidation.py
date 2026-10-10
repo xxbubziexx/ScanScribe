@@ -87,3 +87,61 @@ def test_cascade_delete_and_foreign_keys():
         assert db.query(LogEntry).filter_by(id=log_entry.id).count() == 1
     finally:
         db.close()
+
+
+def test_legacy_database_migration(tmp_path):
+    """Verify that legacy multi-database setups migrate non-destructively."""
+    import sqlite3
+    from scripts.migrate_databases import migrate_to_unified
+
+    data_dir = tmp_path / "data"
+    log_dir = tmp_path / "logs"
+    data_dir.mkdir()
+    log_dir.mkdir()
+
+    # Create target unified db with empty tables
+    target_db = data_dir / "scanscribe.db"
+    conn_target = sqlite3.connect(target_db)
+    conn_target.execute(
+        "CREATE TABLE log_entries (id INTEGER PRIMARY KEY, filename TEXT, transcript TEXT, timestamp DATETIME);"
+    )
+    conn_target.execute(
+        "CREATE TABLE monitors (id INTEGER PRIMARY KEY, name TEXT, talkgroup_ids TEXT, known_units TEXT);"
+    )
+    conn_target.close()
+
+    # Create legacy logs db
+    legacy_logs = log_dir / "scanscribe_logs.db"
+    conn_logs = sqlite3.connect(legacy_logs)
+    conn_logs.execute("CREATE TABLE log_entries (id INTEGER PRIMARY KEY, filename TEXT, transcript TEXT);")
+    conn_logs.execute("INSERT INTO log_entries VALUES (101, 'legacy_call.wav', 'Officer en route');")
+    conn_logs.commit()
+    conn_logs.close()
+
+    # Create legacy events db (monitors without known_units column)
+    legacy_events = data_dir / "scanscribe_events.db"
+    conn_events = sqlite3.connect(legacy_events)
+    conn_events.execute("CREATE TABLE monitors (id INTEGER PRIMARY KEY, name TEXT, talkgroup_ids TEXT);")
+    conn_events.execute("INSERT INTO monitors VALUES (1, 'Legacy Fire', '[\"FIRE-1\"]');")
+    conn_events.commit()
+    conn_events.close()
+
+    # Run migration
+    migrate_to_unified(data_dir, log_dir)
+
+    # Verify backups exist
+    assert (legacy_logs.with_suffix(".db.bak")).is_file()
+    assert (legacy_events.with_suffix(".db.bak")).is_file()
+
+    # Verify rows in target db
+    conn = sqlite3.connect(target_db)
+    cur = conn.cursor()
+    cur.execute("SELECT id, filename, transcript FROM log_entries WHERE id = 101;")
+    row_log = cur.fetchone()
+    assert row_log == (101, "legacy_call.wav", "Officer en route")
+
+    cur.execute("SELECT id, name, talkgroup_ids, known_units FROM monitors WHERE id = 1;")
+    row_mon = cur.fetchone()
+    assert row_mon == (1, "Legacy Fire", '["FIRE-1"]', None)
+    conn.close()
+

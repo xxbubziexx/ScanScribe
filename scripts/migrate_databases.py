@@ -1,13 +1,38 @@
 """Migrate legacy three-database setup into unified scanscribe.db."""
-import sqlite3
-import shutil
 import logging
 from pathlib import Path
+import shutil
+import sqlite3
 
 logger = logging.getLogger(__name__)
 
 
-def migrate_to_unified(data_dir: Path, log_dir: Path = None):
+def _copy_matching_columns(cur: sqlite3.Cursor, target_table: str, source_schema: str, source_table: str) -> None:
+    """Copy rows using only matching column names between legacy and target tables."""
+    try:
+        cur.execute(f"PRAGMA {source_schema}.table_info('{source_table}');")
+        source_cols = {row[1] for row in cur.fetchall()}
+        if not source_cols:
+            return
+
+        cur.execute(f"PRAGMA table_info('{target_table}');")
+        target_cols = {row[1] for row in cur.fetchall()}
+        if not target_cols:
+            return
+
+        common = [c for c in source_cols if c in target_cols]
+        if not common:
+            return
+
+        col_list = ", ".join(f'"{c}"' for c in common)
+        cur.execute(
+            f'INSERT OR IGNORE INTO "{target_table}" ({col_list}) SELECT {col_list} FROM {source_schema}."{source_table}";'
+        )
+    except sqlite3.OperationalError as e:
+        logger.warning(f"Note during copying {source_table} -> {target_table}: {e}")
+
+
+def migrate_to_unified(data_dir: Path, log_dir: Path = None) -> None:
     """Migrate scanscribe.db, scanscribe_logs.db, and scanscribe_events.db into unified database."""
     target_db = data_dir / "scanscribe.db"
     if log_dir is None:
@@ -29,12 +54,10 @@ def migrate_to_unified(data_dir: Path, log_dir: Path = None):
         logger.info(f"Attaching legacy logs database: {logs_db}")
         cur.execute(f"ATTACH DATABASE '{logs_db}' AS legacy_logs;")
         try:
-            cur.execute("INSERT OR IGNORE INTO log_entries SELECT * FROM legacy_logs.log_entries;")
-            cur.execute("INSERT OR IGNORE INTO hour_summaries SELECT * FROM legacy_logs.hour_summaries;")
+            _copy_matching_columns(cur, "log_entries", "legacy_logs", "log_entries")
+            _copy_matching_columns(cur, "hour_summaries", "legacy_logs", "hour_summaries")
             conn.commit()
             logger.info("Migrated logs data successfully.")
-        except sqlite3.OperationalError as e:
-            logger.warning(f"Note during logs migration: {e}")
         finally:
             cur.execute("DETACH DATABASE legacy_logs;")
 
@@ -42,17 +65,15 @@ def migrate_to_unified(data_dir: Path, log_dir: Path = None):
         logger.info(f"Attaching legacy events database: {events_db}")
         cur.execute(f"ATTACH DATABASE '{events_db}' AS legacy_events;")
         try:
-            cur.execute("INSERT OR IGNORE INTO monitors SELECT * FROM legacy_events.monitors;")
-            cur.execute("INSERT OR IGNORE INTO events SELECT * FROM legacy_events.events;")
-            cur.execute("INSERT OR IGNORE INTO event_transcript_links SELECT * FROM legacy_events.event_transcript_links;")
-            cur.execute("INSERT OR IGNORE INTO span_store SELECT * FROM legacy_events.span_store;")
-            cur.execute("INSERT OR IGNORE INTO entity_observations SELECT * FROM legacy_events.entity_observations;")
-            cur.execute("INSERT OR IGNORE INTO pipeline_debug_log SELECT * FROM legacy_events.pipeline_debug_log;")
-            cur.execute("INSERT OR IGNORE INTO system_settings SELECT * FROM legacy_events.system_settings;")
+            _copy_matching_columns(cur, "monitors", "legacy_events", "monitors")
+            _copy_matching_columns(cur, "events", "legacy_events", "events")
+            _copy_matching_columns(cur, "event_transcript_links", "legacy_events", "event_transcript_links")
+            _copy_matching_columns(cur, "span_store", "legacy_events", "span_store")
+            _copy_matching_columns(cur, "entity_observations", "legacy_events", "entity_observations")
+            _copy_matching_columns(cur, "pipeline_debug_log", "legacy_events", "pipeline_debug_log")
+            _copy_matching_columns(cur, "system_settings", "legacy_events", "system_settings")
             conn.commit()
             logger.info("Migrated events data successfully.")
-        except sqlite3.OperationalError as e:
-            logger.warning(f"Note during events migration: {e}")
         finally:
             cur.execute("DETACH DATABASE legacy_events;")
 

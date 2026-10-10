@@ -85,8 +85,37 @@ def get_events_db() -> Generator[Session, None, None]:
     yield from get_db()
 
 
+def auto_migrate_legacy_databases() -> None:
+    """Auto-detect legacy multi-database setup and migrate into unified database."""
+    try:
+        data_dir = Path(settings.db_path).parent
+        log_dir = Path(settings.log_dir) if getattr(settings, "log_dir", None) else data_dir.parent / "logs"
+        marker = data_dir / ".migrated_unified"
+        if marker.is_file():
+            return
+
+        legacy_logs = log_dir / "scanscribe_logs.db"
+        legacy_events = data_dir / "scanscribe_events.db"
+        if legacy_logs.is_file() or legacy_events.is_file():
+            import logging
+            from scripts.migrate_databases import migrate_to_unified
+
+            logging.getLogger(__name__).info("Legacy databases detected; consolidating into unified database...")
+            migrate_to_unified(data_dir, log_dir)
+            try:
+                marker.write_text("migrated\n", encoding="utf-8")
+            except Exception:
+                pass
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning("Legacy database auto-migration check note: %s", exc)
+
+
 def init_db():
     """Initialize database tables with complete model metadata."""
     from . import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    auto_migrate_legacy_databases()
+
