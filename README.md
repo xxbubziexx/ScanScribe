@@ -62,13 +62,13 @@ An open-source, AI-powered transcription and incident intelligence system purpos
 
 ## Fast Interactive Setup (Recommended)
 
-ScanScribe provides an automated setup wizard (`setup.sh` / `setup.ps1` / `setup.py`) that checks your system, generates security keys, configures CPU or GPU hardware acceleration, and initializes your environment in under a minute.
+ScanScribe provides an automated setup wizard (`install.sh` / `install.ps1` or the unified `scanscribe` CLI) that checks your system, generates security keys, configures CPU or GPU hardware acceleration, and initializes your environment in under a minute.
 
 ### Step 1: Install Prerequisites
 1. **Docker Desktop / Docker Engine:**
    - **Windows & macOS:** Download and start [Docker Desktop](https://www.docker.com/products/docker-desktop/).
    - **Linux:** Install [Docker Engine & Compose Plugin](https://docs.docker.com/engine/install/).
-2. **Python 3.8+:**
+2. **Python 3.10+:**
    - Ensure Python is installed on your host system (`python3 --version` or `python --version`).
 
 ### Step 2: Clone the Repository
@@ -82,16 +82,18 @@ Launch the setup script for your operating system:
 
 - **Linux / macOS / Git Bash:**
   ```bash
-  ./setup.sh
+  ./install.sh
   ```
 - **Windows (PowerShell):**
   ```powershell
-  .\setup.ps1
+  .\install.ps1
   ```
-  *(If blocked by Windows execution policy, run: `powershell -ExecutionPolicy Bypass -File .\setup.ps1`)*
-- **Universal (Any OS with Python):**
+  *(If blocked by Windows execution policy, run: `powershell -ExecutionPolicy Bypass -File .\install.ps1`)*
+- **Universal CLI:**
   ```bash
-  python setup.py
+  python -m app.cli setup
+  # Or with package installed:
+  scanscribe setup
   ```
 
 ### Step 4: Interactive Prompts
@@ -122,15 +124,19 @@ Log in using your administrator credentials:
 ---
 
 ### Non-Interactive & Automated Deployments (CLI Flags)
-For automated scripting, server provisioning, or CI/CD pipelines, pass flags to bypass prompts:
+For automated scripting, server provisioning, or CI/CD pipelines, use the `scanscribe` CLI commands:
 
 ```bash
 # Automated CPU setup and immediate launch
-python setup.py --cpu --yes --start
+python -m app.cli setup --cpu --yes --start
 
 # Automated GPU setup and immediate launch
-python setup.py --gpu --yes --start
+python -m app.cli setup --gpu --yes --start
+
+# Database migration
+python -m app.cli migrate
 ```
+
 
 ---
 

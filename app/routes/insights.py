@@ -1,17 +1,40 @@
 import logging
-from fastapi import APIRouter, Depends, Query, HTTPException
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-from sqlalchemy import func, extract, or_
-from typing import Optional, List, Dict, Any
-from datetime import date, datetime, timedelta, time, timezone
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 
-from ..database import get_logs_db, get_events_db
-from ..models.user import User
-from ..models.log_entry import LogEntry
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import extract, func, or_
+from sqlalchemy.orm import Session
+
+from ..database import get_events_db, get_logs_db
 from ..models.hour_summary import HourSummary
-from .auth import get_current_active_user
+from ..models.log_entry import LogEntry
+from ..models.user import User
+from ..services.insights_engine import (
+    build_trend,
+    compute_insights_stats,
+    get_all_talkgroups,
+    get_attached_events_for_logs,
+    get_daily_activity,
+    get_daily_summary,
+    get_hourly_activity,
+    get_last_full_minute_transcription_count,
+    get_last_full_minute_window,
+    get_monthly_summary,
+    get_recent_activity,
+    get_summary_trends,
+    get_talkgroup_breakdown,
+    get_transcription_count_by_created_window,
+    get_weekly_activity,
+    get_weekly_summary,
+)
 from ..services.summarization import generate_hour_summary
+from .auth import get_current_active_user
+
+# Aliases for backward compatibility
+_build_trend = build_trend
+_get_attached_events_for_logs = get_attached_events_for_logs
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 logger = logging.getLogger(__name__)
@@ -27,7 +50,7 @@ class HourSummaryRequest(BaseModel):
 async def get_live_cpm(
     window: int = Query(1, ge=1, le=60, description="Deprecated. Metric is fixed to previous full minute."),
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_logs_db)
+    db: Session = Depends(get_logs_db),
 ):
     """Calls/min card value: count of transcriptions in the previous full minute."""
     minute_start, minute_end = get_last_full_minute_window()
@@ -40,7 +63,7 @@ async def get_live_cpm(
         "window_minutes": 1,
         "minute_start": minute_start.isoformat(),
         "minute_end": minute_end.isoformat(),
-        "trend": _build_trend(curr_count, prev_count, "vs previous minute"),
+        "trend": build_trend(curr_count, prev_count, "vs previous minute"),
     }
 
 
@@ -53,8 +76,6 @@ async def get_insights_stats(
     events_db: Session = Depends(get_events_db),
 ):
     """Get insights statistics for a given date and view type."""
-    
-    # Parse date or use today
     if date:
         try:
             target_date = datetime.strptime(date, "%Y-%m-%d").date()
@@ -62,591 +83,8 @@ async def get_insights_stats(
             target_date = datetime.now().date()
     else:
         target_date = datetime.now().date()
-    
-    # Get data based on view type
-    if view == "hourly":
-        activity = get_hourly_activity(db, target_date, events_db)
-        summary = get_daily_summary(db, target_date)
-    elif view == "daily":
-        activity = get_daily_activity(db, target_date, events_db)
-        summary = get_weekly_summary(db, target_date)
-    else:  # weekly
-        activity = get_weekly_activity(db, target_date, events_db)
-        summary = get_monthly_summary(db, target_date)
-    
-    # Calls/min card: previous full minute count (independent of selected date)
-    calls_last_minute = get_last_full_minute_transcription_count(db)
-    summary["calls_per_minute"] = calls_last_minute
-    summary["calls_per_minute_window"] = 1
-    summary["trends"] = get_summary_trends(db, calls_last_minute)
-    
-    # Get talkgroup breakdown
-    talkgroups = get_talkgroup_breakdown(db, target_date, view)
-    
-    # Get recent activity
-    recent = get_recent_activity(db, target_date, limit=50, events_db=events_db)
-    
-    # Get ALL talkgroups for filter dropdown (no limit)
-    all_talkgroups = get_all_talkgroups(db, target_date, view)
-    
-    return {
-        "summary": summary,
-        "activity": activity,
-        "talkgroups": talkgroups,
-        "talkgroups_all": all_talkgroups,
-        "recent": recent
-    }
 
-
-def _get_local_tz():
-    """Resolve local timezone for log timestamp correlation."""
-    try:
-        from ..config import get_settings
-        pipe = getattr(get_settings().config, "events_pipeline", None)
-        iana_tz = str(getattr(pipe, "log_naive_timezone", "") or "")
-        if iana_tz:
-            from zoneinfo import ZoneInfo
-            return ZoneInfo(iana_tz)
-    except Exception:
-        pass
-    return datetime.now().astimezone().tzinfo or timezone.utc
-
-
-def _get_event_hourly_counts(events_db: Optional[Session], target_date: date, tz) -> Dict[int, int]:
-    """Return count of events created per hour for target_date in local wall time."""
-    if not events_db:
-        return {}
-    try:
-        from ..models.event import Event
-        start_local = datetime.combine(target_date, datetime.min.time(), tzinfo=tz)
-        end_local = datetime.combine(target_date, datetime.max.time(), tzinfo=tz)
-        start_utc = start_local.astimezone(timezone.utc)
-        end_utc = end_local.astimezone(timezone.utc)
-        start_naive = start_utc.replace(tzinfo=None)
-        end_naive = end_utc.replace(tzinfo=None)
-
-        evs = events_db.query(Event.created_at).filter(
-            or_(
-                Event.created_at.between(start_utc, end_utc),
-                Event.created_at.between(start_naive, end_naive),
-            )
-        ).all()
-        hour_counts: Dict[int, int] = {}
-        for (cat,) in evs:
-            if cat:
-                dt = cat if cat.tzinfo else cat.replace(tzinfo=timezone.utc)
-                dt_loc = dt.astimezone(tz)
-                if dt_loc.date() == target_date:
-                    hour_counts[dt_loc.hour] = hour_counts.get(dt_loc.hour, 0) + 1
-        return hour_counts
-    except Exception as exc:
-        logger.debug("Failed to query hourly events: %s", exc)
-        return {}
-
-
-def _get_event_daily_counts(events_db: Optional[Session], start_of_week: date, tz) -> Dict[date, int]:
-    """Return count of events created per day for the week starting start_of_week."""
-    if not events_db:
-        return {}
-    try:
-        from ..models.event import Event
-        start_week_local = datetime.combine(start_of_week, datetime.min.time(), tzinfo=tz)
-        end_week_local = datetime.combine(start_of_week + timedelta(days=6), datetime.max.time(), tzinfo=tz)
-        start_utc = start_week_local.astimezone(timezone.utc)
-        end_utc = end_week_local.astimezone(timezone.utc)
-        start_naive = start_utc.replace(tzinfo=None)
-        end_naive = end_utc.replace(tzinfo=None)
-
-        evs = events_db.query(Event.created_at).filter(
-            or_(
-                Event.created_at.between(start_utc, end_utc),
-                Event.created_at.between(start_naive, end_naive),
-            )
-        ).all()
-        day_counts: Dict[date, int] = {}
-        for (cat,) in evs:
-            if cat:
-                dt = cat if cat.tzinfo else cat.replace(tzinfo=timezone.utc)
-                d = dt.astimezone(tz).date()
-                day_counts[d] = day_counts.get(d, 0) + 1
-        return day_counts
-    except Exception as exc:
-        logger.debug("Failed to query daily events: %s", exc)
-        return {}
-
-
-def _get_event_weekly_counts(events_db: Optional[Session], earliest_week_start: date, latest_week_end: date, tz) -> Dict[date, int]:
-    """Return count of events created per week for the given 8-week span."""
-    if not events_db:
-        return {}
-    try:
-        from ..models.event import Event
-        start_utc = datetime.combine(earliest_week_start, datetime.min.time(), tzinfo=tz).astimezone(timezone.utc)
-        end_utc = datetime.combine(latest_week_end, datetime.max.time(), tzinfo=tz).astimezone(timezone.utc)
-        start_naive = start_utc.replace(tzinfo=None)
-        end_naive = end_utc.replace(tzinfo=None)
-
-        evs = events_db.query(Event.created_at).filter(
-            or_(
-                Event.created_at.between(start_utc, end_utc),
-                Event.created_at.between(start_naive, end_naive),
-            )
-        ).all()
-        week_counts: Dict[date, int] = {}
-        for (cat,) in evs:
-            if cat:
-                dt = cat if cat.tzinfo else cat.replace(tzinfo=timezone.utc)
-                d = dt.astimezone(tz).date()
-                w_start = d - timedelta(days=d.weekday())
-                week_counts[w_start] = week_counts.get(w_start, 0) + 1
-        return week_counts
-    except Exception as exc:
-        logger.debug("Failed to query weekly events: %s", exc)
-        return {}
-
-
-def get_hourly_activity(db: Session, target_date: date, events_db: Optional[Session] = None):
-    """Get hourly activity for a specific day."""
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-    tz = _get_local_tz()
-    
-    # Query hourly counts
-    results = db.query(
-        extract('hour', LogEntry.timestamp).label('hour'),
-        func.count(LogEntry.id).label('count')
-    ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).group_by(
-        extract('hour', LogEntry.timestamp)
-    ).all()
-    
-    # Build 24-hour array with 12-hour labels
-    hour_counts = {int(r.hour): r.count for r in results}
-    events_hour_counts = _get_event_hourly_counts(events_db, target_date, tz)
-
-    activity = []
-    for h in range(24):
-        # Convert to 12-hour format
-        hour12 = 12 if h == 0 or h == 12 else (h % 12)
-        ampm = "AM" if h < 12 else "PM"
-        label = f"{hour12} {ampm}"
-        activity.append({
-            "label": label,
-            "count": hour_counts.get(h, 0),
-            "events_count": events_hour_counts.get(h, 0),
-            "hour": h,
-        })
-    
-    return activity
-
-
-def get_daily_activity(db: Session, target_date: date, events_db: Optional[Session] = None):
-    """Get daily activity for the week containing target_date."""
-    # Find start of week (Monday)
-    start_of_week = target_date - timedelta(days=target_date.weekday())
-    tz = _get_local_tz()
-    events_day_counts = _get_event_daily_counts(events_db, start_of_week, tz)
-    
-    activity = []
-    for i in range(7):
-        day = start_of_week + timedelta(days=i)
-        start = datetime.combine(day, datetime.min.time())
-        end = datetime.combine(day, datetime.max.time())
-        
-        count = db.query(func.count(LogEntry.id)).filter(
-            LogEntry.timestamp >= start,
-            LogEntry.timestamp <= end,
-            LogEntry.is_deleted == False
-        ).scalar() or 0
-        
-        activity.append({
-            "label": day.strftime("%a"),
-            "count": count,
-            "events_count": events_day_counts.get(day, 0),
-        })
-    
-    return activity
-
-
-def get_weekly_activity(db: Session, target_date: date, events_db: Optional[Session] = None):
-    """Get weekly activity for the last 8 weeks."""
-    tz = _get_local_tz()
-    earliest_week_start = target_date - timedelta(weeks=7, days=target_date.weekday())
-    latest_week_end = target_date - timedelta(weeks=0, days=target_date.weekday()) + timedelta(days=6)
-    events_week_counts = _get_event_weekly_counts(events_db, earliest_week_start, latest_week_end, tz)
-
-    activity = []
-    for i in range(7, -1, -1):
-        week_start = target_date - timedelta(weeks=i, days=target_date.weekday())
-        week_end = week_start + timedelta(days=6)
-        
-        start = datetime.combine(week_start, datetime.min.time())
-        end = datetime.combine(week_end, datetime.max.time())
-        
-        count = db.query(func.count(LogEntry.id)).filter(
-            LogEntry.timestamp >= start,
-            LogEntry.timestamp <= end,
-            LogEntry.is_deleted == False
-        ).scalar() or 0
-        
-        activity.append({
-            "label": week_start.strftime("%m/%d"),
-            "count": count,
-            "events_count": events_week_counts.get(week_start, 0),
-        })
-    
-    return activity
-
-
-def get_last_full_minute_window(now: Optional[datetime] = None) -> tuple[datetime, datetime]:
-    """Return [start, end) for the previous complete minute in UTC wall-clock time."""
-    # created_at is persisted in UTC (SQLite may return naive UTC), so keep this window naive UTC.
-    now_utc = now or datetime.utcnow()
-    end = now_utc.replace(second=0, microsecond=0)
-    start = end - timedelta(minutes=1)
-    return start, end
-
-
-def get_last_full_hour_window(now: Optional[datetime] = None) -> tuple[datetime, datetime]:
-    """Return [start, end) for the previous complete hour in UTC wall-clock time."""
-    now_utc = now or datetime.utcnow()
-    end = now_utc.replace(minute=0, second=0, microsecond=0)
-    start = end - timedelta(hours=1)
-    return start, end
-
-
-def get_last_full_minute_transcription_count(db: Session) -> int:
-    """Count transcriptions created in the previous full minute."""
-    start, end = get_last_full_minute_window()
-    return get_transcription_count_by_created_window(db, start, end)
-
-
-def get_transcription_count_by_created_window(db: Session, start: datetime, end: datetime) -> int:
-    """Count transcriptions by created_at for [start, end) in UTC naive datetimes."""
-    return int(
-        db.query(func.count(LogEntry.id)).filter(
-            LogEntry.created_at >= start,
-            LogEntry.created_at < end,
-            LogEntry.is_deleted == False
-        ).scalar() or 0
-    )
-
-
-def get_unique_talkgroups_by_created_window(db: Session, start: datetime, end: datetime) -> int:
-    """Count distinct talkgroups by created_at for [start, end)."""
-    return int(
-        db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
-            LogEntry.created_at >= start,
-            LogEntry.created_at < end,
-            LogEntry.is_deleted == False
-        ).scalar() or 0
-    )
-
-
-def _build_trend(current: int, previous: int, basis: str) -> Dict[str, object]:
-    delta = int(current or 0) - int(previous or 0)
-    direction = "up" if delta > 0 else ("down" if delta < 0 else "flat")
-    return {
-        "current": int(current or 0),
-        "previous": int(previous or 0),
-        "delta": delta,
-        "direction": direction,
-        "basis": basis,
-    }
-
-
-def get_summary_trends(db: Session, calls_last_minute: int) -> Dict[str, Dict[str, object]]:
-    """Trend payload for stat cards with requested comparison windows."""
-    # Total transcriptions: last full hour vs previous full hour
-    hour_start, hour_end = get_last_full_hour_window()
-    prev_hour_start = hour_start - timedelta(hours=1)
-    prev_hour_end = hour_start
-    total_hour = get_transcription_count_by_created_window(db, hour_start, hour_end)
-    total_prev_hour = get_transcription_count_by_created_window(db, prev_hour_start, prev_hour_end)
-
-    # Calls last minute: previous full minute vs minute before that
-    min_start, _ = get_last_full_minute_window()
-    prev_min_start = min_start - timedelta(minutes=1)
-    prev_min_end = min_start
-    calls_prev_minute = get_transcription_count_by_created_window(db, prev_min_start, prev_min_end)
-
-    # Unique talkgroups: last 24 hours vs previous 24 hours
-    day_end = datetime.utcnow()
-    day_start = day_end - timedelta(days=1)
-    prev_day_start = day_start - timedelta(days=1)
-    prev_day_end = day_start
-    tg_last_day = get_unique_talkgroups_by_created_window(db, day_start, day_end)
-    tg_prev_day = get_unique_talkgroups_by_created_window(db, prev_day_start, prev_day_end)
-
-    return {
-        "total_transcriptions": _build_trend(total_hour, total_prev_hour, "vs previous hour"),
-        "calls_last_minute": _build_trend(calls_last_minute, calls_prev_minute, "vs previous minute"),
-        "unique_talkgroups": _build_trend(tg_last_day, tg_prev_day, "vs previous 24h"),
-    }
-
-
-def get_daily_summary(db: Session, target_date: date):
-    """Get summary stats for a specific day."""
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-    
-    # Total count
-    total = db.query(func.count(LogEntry.id)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    # Unique talkgroups
-    unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    # Average duration
-    avg_duration = db.query(func.avg(LogEntry.duration)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    # Peak hour
-    peak_result = db.query(
-        extract('hour', LogEntry.timestamp).label('hour'),
-        func.count(LogEntry.id).label('count')
-    ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).group_by(
-        extract('hour', LogEntry.timestamp)
-    ).order_by(
-        func.count(LogEntry.id).desc()
-    ).first()
-    
-    peak_hour = f"{int(peak_result.hour):02d}:00" if peak_result else "--"
-    minutes_in_period = 24 * 60  # 1 day
-    calls_per_minute = round(total / minutes_in_period, 2) if minutes_in_period else 0
-
-    return {
-        "total": total,
-        "unique_talkgroups": unique_tg,
-        "avg_duration": float(avg_duration) if avg_duration else 0,
-        "peak_hour": peak_hour,
-        "calls_per_minute": calls_per_minute
-    }
-
-
-def get_weekly_summary(db: Session, target_date: date):
-    """Get summary stats for the week."""
-    start_of_week = target_date - timedelta(days=target_date.weekday())
-    end_of_week = start_of_week + timedelta(days=6)
-    
-    start = datetime.combine(start_of_week, datetime.min.time())
-    end = datetime.combine(end_of_week, datetime.max.time())
-    
-    total = db.query(func.count(LogEntry.id)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    avg_duration = db.query(func.avg(LogEntry.duration)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    minutes_in_period = 7 * 24 * 60  # 1 week
-    calls_per_minute = round(total / minutes_in_period, 2) if minutes_in_period else 0
-
-    return {
-        "total": total,
-        "unique_talkgroups": unique_tg,
-        "avg_duration": float(avg_duration) if avg_duration else 0,
-        "peak_hour": "Week View",
-        "calls_per_minute": calls_per_minute
-    }
-
-
-def get_monthly_summary(db: Session, target_date: date):
-    """Get summary stats for the month."""
-    start_of_month = target_date.replace(day=1)
-    if target_date.month == 12:
-        end_of_month = target_date.replace(year=target_date.year + 1, month=1, day=1) - timedelta(days=1)
-    else:
-        end_of_month = target_date.replace(month=target_date.month + 1, day=1) - timedelta(days=1)
-    
-    start = datetime.combine(start_of_month, datetime.min.time())
-    end = datetime.combine(end_of_month, datetime.max.time())
-    
-    total = db.query(func.count(LogEntry.id)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    avg_duration = db.query(func.avg(LogEntry.duration)).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).scalar() or 0
-    
-    days_in_month = (end_of_month - start_of_month).days + 1
-    minutes_in_period = days_in_month * 24 * 60
-    calls_per_minute = round(total / minutes_in_period, 2) if minutes_in_period else 0
-
-    return {
-        "total": total,
-        "unique_talkgroups": unique_tg,
-        "avg_duration": float(avg_duration) if avg_duration else 0,
-        "peak_hour": "Month View",
-        "calls_per_minute": calls_per_minute
-    }
-
-
-def get_talkgroup_breakdown(db: Session, target_date: date, view: str):
-    """Get talkgroup activity breakdown."""
-    if view == "hourly":
-        start = datetime.combine(target_date, datetime.min.time())
-        end = datetime.combine(target_date, datetime.max.time())
-    elif view == "daily":
-        start_of_week = target_date - timedelta(days=target_date.weekday())
-        start = datetime.combine(start_of_week, datetime.min.time())
-        end = datetime.combine(start_of_week + timedelta(days=6), datetime.max.time())
-    else:
-        start = datetime.combine(target_date - timedelta(weeks=4), datetime.min.time())
-        end = datetime.combine(target_date, datetime.max.time())
-    
-    results = db.query(
-        LogEntry.talkgroup,
-        func.count(LogEntry.id).label('count')
-    ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False,
-        LogEntry.talkgroup.isnot(None),
-        LogEntry.talkgroup != 'N/A'
-    ).group_by(
-        LogEntry.talkgroup
-    ).order_by(
-        func.count(LogEntry.id).desc()
-    ).limit(10).all()
-    
-    return [{"talkgroup": r.talkgroup, "count": r.count} for r in results]
-
-
-def get_all_talkgroups(db: Session, target_date: date, view: str):
-    """Pull all distinct talkgroups from DB for the period (includes null/empty as N/A)."""
-    if view == "hourly":
-        start = datetime.combine(target_date, datetime.min.time())
-        end = datetime.combine(target_date, datetime.max.time())
-    elif view == "daily":
-        start_of_week = target_date - timedelta(days=target_date.weekday())
-        start = datetime.combine(start_of_week, datetime.min.time())
-        end = datetime.combine(start_of_week + timedelta(days=6), datetime.max.time())
-    else:
-        start = datetime.combine(target_date - timedelta(weeks=4), datetime.min.time())
-        end = datetime.combine(target_date, datetime.max.time())
-    
-    results = db.query(
-        LogEntry.talkgroup,
-        func.count(LogEntry.id).label('count')
-    ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).group_by(
-        LogEntry.talkgroup
-    ).order_by(
-        func.count(LogEntry.id).desc()
-    ).all()
-    
-    # Normalize for display: null/empty -> "N/A" so filter can target unknowns
-    out = []
-    for r in results:
-        tg = r.talkgroup if (r.talkgroup and str(r.talkgroup).strip()) else "N/A"
-        # Merge counts for rows that normalized to same label
-        existing = next((x for x in out if x["talkgroup"] == tg), None)
-        if existing:
-            existing["count"] += r.count
-        else:
-            out.append({"talkgroup": tg, "count": r.count})
-    return out
-
-
-def _get_attached_events_for_logs(events_db: Optional[Session], log_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
-    """Query attached events (open or closed) from scanscribe_events.db for a list of log entry IDs."""
-    if not events_db or not log_ids:
-        return {}
-    try:
-        from ..models.event import Event, EventTranscriptLink
-        links = (
-            events_db.query(
-                EventTranscriptLink.log_entry_id,
-                Event.id,
-                Event.event_id,
-                Event.status,
-                Event.event_type,
-            )
-            .join(Event, Event.id == EventTranscriptLink.event_id)
-            .filter(EventTranscriptLink.log_entry_id.in_(log_ids))
-            .all()
-        )
-        from collections import defaultdict
-        grouped = defaultdict(list)
-        for lid, eid, event_id_str, status, event_type in links:
-            if lid is not None:
-                grouped[int(lid)].append({
-                    "id": eid,
-                    "event_id": event_id_str,
-                    "status": status,
-                    "event_type": event_type,
-                })
-        return dict(grouped)
-    except Exception as exc:
-        logger.debug("Failed to query attached events for logs: %s", exc)
-        return {}
-
-
-def get_recent_activity(db: Session, target_date: date, limit: int = 20, events_db: Optional[Session] = None):
-    """Get recent transcriptions for the day."""
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
-    
-    results = db.query(LogEntry).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
-    ).order_by(
-        LogEntry.timestamp.desc()
-    ).limit(limit).all()
-    
-    attached = _get_attached_events_for_logs(events_db, [r.id for r in results if r.id is not None])
-    return [{
-        "id": r.id,
-        "timestamp": r.timestamp.isoformat() if r.timestamp else None,
-        "talkgroup": r.talkgroup,
-        "transcript": r.transcript,
-        "duration": r.duration,
-        "attached_events": attached.get(r.id, []),
-    } for r in results]
+    return compute_insights_stats(db, target_date, view, events_db=events_db)
 
 
 @router.get("/search")
@@ -656,14 +94,12 @@ async def search_transcriptions(
     talkgroup: Optional[List[str]] = Query(None, description="Filter by talkgroup (multiple allowed)"),
     hour: str = Query("", description="Filter by hour (0-23)"),
     sort: str = Query("newest", description="Sort: newest, oldest, largest, smallest, longest, shortest"),
-    limit: int = Query(100, ge=1, le=10000, description="Max results (use higher value when filtering by hour to get all)"),
+    limit: int = Query(100, ge=1, le=10000, description="Max results"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db),
     events_db: Session = Depends(get_events_db),
 ):
     """Search and filter transcriptions."""
-    
-    # Parse date
     if date:
         try:
             target_date = datetime.strptime(date, "%Y-%m-%d").date()
@@ -671,24 +107,20 @@ async def search_transcriptions(
             target_date = datetime.now().date()
     else:
         target_date = datetime.now().date()
-    
-    # Base query
+
     start = datetime.combine(target_date, datetime.min.time())
     end = datetime.combine(target_date, datetime.max.time())
-    
+
     query = db.query(LogEntry).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted == False,
     )
-    
-    # Apply keyword filter
+
     if keyword:
         query = query.filter(LogEntry.transcript.ilike(f"%{keyword}%"))
-    
-    # Apply talkgroup filter (multiple allowed)
+
     if talkgroup and len(talkgroup) > 0:
-        # Normalize: single "N/A" or list containing "N/A" + others
         has_na = "N/A" in talkgroup
         others = [tg for tg in talkgroup if tg and tg != "N/A"]
         if has_na and not others:
@@ -696,7 +128,7 @@ async def search_transcriptions(
                 or_(
                     LogEntry.talkgroup.is_(None),
                     LogEntry.talkgroup == "",
-                    LogEntry.talkgroup == "N/A"
+                    LogEntry.talkgroup == "N/A",
                 )
             )
         elif others:
@@ -706,22 +138,20 @@ async def search_transcriptions(
                         LogEntry.talkgroup.in_(others),
                         LogEntry.talkgroup.is_(None),
                         LogEntry.talkgroup == "",
-                        LogEntry.talkgroup == "N/A"
+                        LogEntry.talkgroup == "N/A",
                     )
                 )
             else:
                 query = query.filter(LogEntry.talkgroup.in_(others))
-    
-    # Apply hour filter
+
     if hour:
         try:
             hour_int = int(hour)
             if 0 <= hour_int <= 23:
-                query = query.filter(extract('hour', LogEntry.timestamp) == hour_int)
+                query = query.filter(extract("hour", LogEntry.timestamp) == hour_int)
         except ValueError:
             pass
-    
-    # Apply sorting
+
     if sort == "oldest":
         query = query.order_by(LogEntry.timestamp.asc())
     elif sort == "largest":
@@ -732,29 +162,29 @@ async def search_transcriptions(
         query = query.order_by(LogEntry.duration.desc().nullslast())
     elif sort == "shortest":
         query = query.order_by(LogEntry.duration.asc().nullsfirst())
-    else:  # newest (default)
+    else:
         query = query.order_by(LogEntry.timestamp.desc())
-    
-    # Get total count before limit
+
     total = query.count()
-    
-    # Apply limit
     results = query.limit(limit).all()
-    attached = _get_attached_events_for_logs(events_db, [r.id for r in results if r.id is not None])
-    
+    attached = get_attached_events_for_logs(events_db, [r.id for r in results if r.id is not None])
+
     return {
         "total": total,
-        "results": [{
-            "id": r.id,
-            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
-            "talkgroup": r.talkgroup,
-            "transcript": r.transcript,
-            "duration": r.duration,
-            "file_size": r.file_size,
-            "confidence": r.confidence,
-            "audio_path": r.audio_path,
-            "attached_events": attached.get(r.id, []),
-        } for r in results]
+        "results": [
+            {
+                "id": r.id,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "talkgroup": r.talkgroup,
+                "transcript": r.transcript,
+                "duration": r.duration,
+                "file_size": r.file_size,
+                "confidence": r.confidence,
+                "audio_path": r.audio_path,
+                "attached_events": attached.get(r.id, []),
+            }
+            for r in results
+        ],
     }
 
 
@@ -776,18 +206,20 @@ async def get_summary_hours(
     start = datetime.combine(target_date, datetime.min.time())
     end = datetime.combine(target_date, datetime.max.time())
 
-    results = db.query(
-        extract("hour", LogEntry.timestamp).label("hour"),
-        func.count(LogEntry.id).label("count"),
-    ).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False,
-    ).group_by(
-        extract("hour", LogEntry.timestamp)
-    ).order_by(
-        extract("hour", LogEntry.timestamp).asc()
-    ).all()
+    results = (
+        db.query(
+            extract("hour", LogEntry.timestamp).label("hour"),
+            func.count(LogEntry.id).label("count"),
+        )
+        .filter(
+            LogEntry.timestamp >= start,
+            LogEntry.timestamp <= end,
+            LogEntry.is_deleted == False,
+        )
+        .group_by(extract("hour", LogEntry.timestamp))
+        .order_by(extract("hour", LogEntry.timestamp).asc())
+        .all()
+    )
 
     return {
         "date": target_date.isoformat(),
@@ -807,24 +239,27 @@ async def list_hour_summaries(
     else:
         date_str = datetime.now().date().isoformat()
 
-    summaries = db.query(HourSummary).filter(
-        HourSummary.summary_date == date_str
-    ).order_by(
-        HourSummary.summary_hour.asc()
-    ).all()
+    summaries = (
+        db.query(HourSummary)
+        .filter(HourSummary.summary_date == date_str)
+        .order_by(HourSummary.summary_hour.asc())
+        .all()
+    )
 
     out_summaries = []
     for s in summaries:
-        out_summaries.append({
-            "id": s.id,
-            "date": s.summary_date,
-            "hour": s.summary_hour,
-            "text": s.summary_text,
-            "format": "markdown",
-            "created_at": s.created_at.isoformat() if s.created_at else None,
-            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
-            "created_by": s.created_by,
-        })
+        out_summaries.append(
+            {
+                "id": s.id,
+                "date": s.summary_date,
+                "hour": s.summary_hour,
+                "text": s.summary_text,
+                "format": "markdown",
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+                "created_by": s.created_by,
+            }
+        )
 
     return {
         "date": date_str,
@@ -840,7 +275,6 @@ async def generate_hour_summary_endpoint(
     db: Session = Depends(get_logs_db),
 ):
     """Generate (or return existing) hour summary for date/hour (global)."""
-    # Validate date format
     try:
         target_date = datetime.strptime(payload.date, "%Y-%m-%d").date()
     except ValueError:
@@ -848,10 +282,14 @@ async def generate_hour_summary_endpoint(
 
     date_str = target_date.isoformat()
 
-    existing = db.query(HourSummary).filter(
-        HourSummary.summary_date == date_str,
-        HourSummary.summary_hour == payload.hour,
-    ).first()
+    existing = (
+        db.query(HourSummary)
+        .filter(
+            HourSummary.summary_date == date_str,
+            HourSummary.summary_hour == payload.hour,
+        )
+        .first()
+    )
 
     if existing and not payload.force:
         return {
@@ -866,26 +304,30 @@ async def generate_hour_summary_endpoint(
             },
         }
 
-    # Fetch all entries for that hour
     start = datetime.combine(target_date, datetime.min.time())
     end = datetime.combine(target_date, datetime.max.time())
 
-    rows = db.query(LogEntry).filter(
-        LogEntry.timestamp >= start,
-        LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False,
-        extract("hour", LogEntry.timestamp) == payload.hour,
-    ).order_by(LogEntry.timestamp.asc()).all()
+    rows = (
+        db.query(LogEntry)
+        .filter(
+            LogEntry.timestamp >= start,
+            LogEntry.timestamp <= end,
+            LogEntry.is_deleted == False,
+            extract("hour", LogEntry.timestamp) == payload.hour,
+        )
+        .order_by(LogEntry.timestamp.asc())
+        .all()
+    )
 
     entries = []
     for r in rows:
         if not r.timestamp:
             continue
-            
-        transcript = r.corrected_transcript if getattr(r, 'corrected_transcript', None) else r.transcript
+
+        transcript = r.corrected_transcript if getattr(r, "corrected_transcript", None) else r.transcript
         if transcript and "[VAD_REJECTED]" in transcript:
             continue
-            
+
         entries.append(
             {
                 "filename_id": r.filename,
@@ -951,10 +393,14 @@ async def delete_hour_summary(
     db: Session = Depends(get_logs_db),
 ):
     """Delete stored hour summary for date/hour."""
-    summary = db.query(HourSummary).filter(
-        HourSummary.summary_date == date,
-        HourSummary.summary_hour == hour,
-    ).first()
+    summary = (
+        db.query(HourSummary)
+        .filter(
+            HourSummary.summary_date == date,
+            HourSummary.summary_hour == hour,
+        )
+        .first()
+    )
 
     if not summary:
         raise HTTPException(status_code=404, detail="Summary not found")
