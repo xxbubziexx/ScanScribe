@@ -75,8 +75,6 @@ Thumbs.db
 docker-compose.yml
 client/*
 docs/*
-# Local name for pip; start from requirements.cpu.example
-requirements.txt
 
 # React frontend (app/frontend/)
 app/frontend/node_modules/

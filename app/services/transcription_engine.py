@@ -67,11 +67,21 @@ class TranscriptionEngine:
             # Default to Hugging Face Hub repo ID
             return "sepiaapps/whisper-small.en-police-radio"
 
-        # 4. If model_name is an explicit Hugging Face repo ID
+        # 4. Public safety v2 Final alias -> local or HF repo
+        if self.model_name in ("whisper-small-public-safety-v2-FINAL", "whisper-small-public-safety-v2"):
+            alt_local = Path(self.config.model.path) / "whisper-small-public-safety-v2-FINAL"
+            if alt_local.exists():
+                return str(alt_local)
+            alt_rel = Path("models") / "whisper-small-public-safety-v2-FINAL"
+            if alt_rel.exists():
+                return str(alt_rel)
+            return "xxbubziexx/whisper-small-public-safety-v2-FINAL"
+
+        # 5. If model_name is an explicit Hugging Face repo ID
         if "/" in self.model_name:
             return self.model_name
 
-        # 5. Default fallback to string of model_path
+        # 6. Default fallback to string of model_path
         return str(self.model_path)
         
     def load_model(self):

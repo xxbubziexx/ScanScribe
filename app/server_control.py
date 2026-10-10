@@ -142,6 +142,9 @@ def cmd_start(args):
 
     os.chdir(str(BASE_DIR))
 
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(BASE_DIR) + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
+
     if sys.platform == "win32":
         DETACHED_PROCESS = 0x00000008
         CREATE_NEW_PROCESS_GROUP = 0x00000200
@@ -153,6 +156,7 @@ def cmd_start(args):
             stdin=subprocess.DEVNULL,
             creationflags=flags,
             cwd=str(BASE_DIR),
+            env=env,
             close_fds=True,
         )
     else:
@@ -163,6 +167,7 @@ def cmd_start(args):
             stdin=subprocess.DEVNULL,
             start_new_session=True,
             cwd=str(BASE_DIR),
+            env=env,
             close_fds=True,
         )
 

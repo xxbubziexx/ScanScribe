@@ -1,7 +1,7 @@
 @echo off
 setlocal
-set "SCRIPT_DIR=%~dp0"
-set "ROOT_DIR=%SCRIPT_DIR%.."
+for %%I in ("%~dp0..") do set "ROOT_DIR=%%~fI"
+set "PYTHONPATH=%ROOT_DIR%;%PYTHONPATH%"
 
 rem Check for .venv python
 if exist "%ROOT_DIR%\.venv\Scripts\python.exe" (

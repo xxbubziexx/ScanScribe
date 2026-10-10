@@ -13,7 +13,9 @@ PORT="${PORT:-8000}"
 MODEL="${MODEL:-}"
 AUTOSTART="${AUTOSTART:-true}"
 CUSTOM_MODEL_URL="${CUSTOM_MODEL_URL:-}"
+NER_MODEL="${NER_MODEL:-xxbubziexx/incident_ner_v1}"
 BRANCH="${BRANCH:-snapshot}"
+NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
 
 # Parse command line flags if passed
 while [[ $# -gt 0 ]]; do
@@ -25,9 +27,11 @@ while [[ $# -gt 0 ]]; do
     --workers) WORKERS="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
+    --ner-model) NER_MODEL="$2"; shift 2 ;;
     --autostart) AUTOSTART="$2"; shift 2 ;;
     --custom-model-url) CUSTOM_MODEL_URL="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
+    --non-interactive|--silent|-y) NON_INTERACTIVE="true"; shift ;;
     *) shift ;;
   esac
 done
@@ -39,28 +43,150 @@ echo "        AI-Powered Public Safety Radio Transcription        "
 echo "============================================================"
 echo ""
 
-# 1. Spec Auto-tuning
-if [ -z "$MODEL" ]; then
-  MODEL="whisper-small.en-police-radio"
+# Hardware Auto-detection for intelligent recommendations
+DETECTED_GPU="false"
+if command -v nvidia-smi &>/dev/null; then
+  DETECTED_GPU="true"
 fi
 
-if [ "$WORKERS" -le 0 ]; then
-  if [ "$RAM" -le 4 ]; then
-    WORKERS=2
+DETECTED_CORES=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
+RECOMMENDED_WORKERS=$(( DETECTED_CORES > 8 ? 8 : (DETECTED_CORES < 2 ? 2 : DETECTED_CORES) ))
+RECOMMENDED_MODE=$([ "$DETECTED_GPU" = "true" ] && echo "cuda" || echo "cpu")
+
+prompt_user() {
+  local prompt_text="$1"
+  local default_val="$2"
+  local user_val=""
+  read -r -p "$prompt_text [$default_val]: " user_val
+  if [ -z "$user_val" ]; then
+    echo "$default_val"
   else
-    WORKERS=4
+    echo "$user_val"
   fi
-fi
+}
 
-echo "[-] Installation Profile:"
-echo "    Install Directory : $INSTALL_DIR"
-echo "    Ingest Directory  : $INGEST_DIR"
-echo "    Compute Mode      : $MODE"
-echo "    System RAM Profile: ${RAM}GB"
-echo "    Whisper Model     : $MODEL"
-echo "    Worker Threads    : $WORKERS"
-echo "    Web Port          : $PORT"
-echo ""
+if [ -t 0 ] && [ "$NON_INTERACTIVE" != "true" ]; then
+  echo "[-] Interactive Installation Setup"
+  echo "    Press ENTER to accept the recommended default shown in [brackets]."
+  echo ""
+
+  # 1. Install Directory
+  INSTALL_DIR=$(prompt_user "1. Installation Directory" "$INSTALL_DIR")
+
+  # 2. Ingest Directory
+  DEFAULT_INGEST="${INGEST_DIR:-$INSTALL_DIR/ingest}"
+  INGEST_DIR=$(prompt_user "2. Scanner Audio Ingest Directory (SDRTrunk/ProScan recordings)" "$DEFAULT_INGEST")
+
+  # 3. Compute Mode
+  DEFAULT_MODE="${MODE:-$RECOMMENDED_MODE}"
+  MODE_CHOICE=$(prompt_user "3. Hardware Acceleration Mode (cpu / cuda)" "$DEFAULT_MODE")
+  MODE=$([ "$MODE_CHOICE" = "cuda" ] && echo "cuda" || echo "cpu")
+
+  # 4. Whisper Model
+  echo ""
+  echo "4. Whisper Speech-to-Text Model:"
+  echo "   [1] sepiaapps/whisper-small.en-police-radio            (CrimeRadar Police Radio - Recommended)"
+  echo "   [2] xxbubziexx/whisper-small-public-safety-v2-FINAL   (ScanScribe Public Safety v2 Final)"
+  echo "   [3] openai/whisper-base                               (Lightweight / Low-RAM)"
+  echo "   [4] openai/whisper-small                              (Standard General English)"
+  echo "   [5] openai/whisper-medium                             (High Accuracy / Requires 8GB+ VRAM)"
+  echo "   [6] Custom Hugging Face model repository"
+  MODEL_CHOICE=$(prompt_user "   Choose [1-6] or enter Model ID" "1")
+
+  case "$MODEL_CHOICE" in
+    1)
+      MODEL="whisper-small.en-police-radio"
+      CUSTOM_MODEL_URL="sepiaapps/whisper-small.en-police-radio"
+      ;;
+    2)
+      MODEL="whisper-small-public-safety-v2-FINAL"
+      CUSTOM_MODEL_URL="xxbubziexx/whisper-small-public-safety-v2-FINAL"
+      ;;
+    3)
+      MODEL="whisper-base"
+      CUSTOM_MODEL_URL="openai/whisper-base"
+      ;;
+    4)
+      MODEL="whisper-small"
+      CUSTOM_MODEL_URL="openai/whisper-small"
+      ;;
+    5)
+      MODEL="whisper-medium"
+      CUSTOM_MODEL_URL="openai/whisper-medium"
+      ;;
+    6)
+      CUSTOM_INPUT=$(prompt_user "   Enter Hugging Face Model ID" "xxbubziexx/whisper-small-public-safety-v2-FINAL")
+      CUSTOM_MODEL_URL="$CUSTOM_INPUT"
+      MODEL=$(basename "$CUSTOM_INPUT")
+      ;;
+    *)
+      if [[ "$MODEL_CHOICE" == *"/"* ]]; then
+        CUSTOM_MODEL_URL="$MODEL_CHOICE"
+        MODEL=$(basename "$MODEL_CHOICE")
+      else
+        MODEL="$MODEL_CHOICE"
+      fi
+      ;;
+  esac
+
+  # 5. Incident NER Model
+  echo ""
+  echo "5. Public Safety Incident Entity Extraction (NER):"
+  echo "   [1] xxbubziexx/incident_ner_v1  (Recommended: Unit, Address, Call Type Extraction)"
+  echo "   [2] Custom Hugging Face model ID or path"
+  echo "   [3] None (Disable NER)"
+  NER_CHOICE=$(prompt_user "   Choose [1-3]" "1")
+
+  case "$NER_CHOICE" in
+    1)
+      NER_MODEL="xxbubziexx/incident_ner_v1"
+      ;;
+    2)
+      NER_MODEL=$(prompt_user "   Enter NER model repository ID or path" "xxbubziexx/incident_ner_v1")
+      ;;
+    3)
+      NER_MODEL=""
+      ;;
+    *)
+      NER_MODEL="$NER_CHOICE"
+      ;;
+  esac
+
+  # 6. Worker Threads
+  echo ""
+  DEFAULT_WORKERS=$([ "$WORKERS" -gt 0 ] && echo "$WORKERS" || echo "$RECOMMENDED_WORKERS")
+  WORKERS=$(prompt_user "6. Parallel Worker Threads (transcription concurrency)" "$DEFAULT_WORKERS")
+
+  # 7. Web Port
+  DEFAULT_PORT=$([ "$PORT" -gt 0 ] && echo "$PORT" || echo "8000")
+  PORT=$(prompt_user "7. Web Dashboard Port" "$DEFAULT_PORT")
+
+  # Confirmation Summary
+  echo ""
+  echo "============================================================"
+  echo "              Installation Profile Confirmation            "
+  echo "============================================================"
+  echo "  Install Directory : $INSTALL_DIR"
+  echo "  Ingest Directory  : $INGEST_DIR"
+  echo "  Compute Mode      : $MODE"
+  echo "  Whisper Model     : $MODEL"
+  echo "  Incident NER      : ${NER_MODEL:-Disabled}"
+  echo "  Worker Threads    : $WORKERS"
+  echo "  Web Port          : $PORT"
+  echo "============================================================"
+  CONFIRM=$(prompt_user "Proceed with installation? (Y/N)" "Y")
+  if [[ "$CONFIRM" =~ ^[Nn] ]]; then
+    echo "[-] Installation cancelled by user."
+    exit 0
+  fi
+  echo ""
+else
+  # Non-interactive defaults
+  [ -z "$MODEL" ] && MODEL="whisper-small.en-police-radio"
+  [ -z "$CUSTOM_MODEL_URL" ] && [ "$MODEL" = "whisper-small.en-police-radio" ] && CUSTOM_MODEL_URL="sepiaapps/whisper-small.en-police-radio"
+  [ "$WORKERS" -le 0 ] && WORKERS=$RECOMMENDED_WORKERS
+  [ -z "$INGEST_DIR" ] && INGEST_DIR="$INSTALL_DIR/ingest"
+fi
 
 # 2. Directory Creation
 echo "[1/7] Creating directories..."
@@ -112,9 +238,23 @@ else
 fi
 
 if [ -f "$INSTALL_DIR/requirements.txt" ]; then
-  echo "    Installing application packages..."
+  echo "    Installing application packages from requirements.txt..."
   "$UV_CMD" pip install -r "$INSTALL_DIR/requirements.txt" --python "$VENV_PY"
 fi
+
+if [ -f "$INSTALL_DIR/pyproject.toml" ]; then
+  echo "    Registering ScanScribe package in virtual environment..."
+  if [ -f "$INSTALL_DIR/requirements.txt" ]; then
+    "$UV_CMD" pip install -e "$INSTALL_DIR" --python "$VENV_PY" --no-deps
+  else
+    "$UV_CMD" pip install -e "$INSTALL_DIR" --python "$VENV_PY"
+  fi
+fi
+
+# Explicit safety guarantee: Ensure core web runtime is present
+echo "    Verifying core runtime dependencies (uvicorn, fastapi)..."
+"$UV_CMD" pip install "uvicorn[standard]>=0.30.0" "fastapi>=0.115.0" "huggingface-hub>=0.23.0" "pyyaml>=6.0" --python "$VENV_PY" --quiet
+
 
 # 6. Check FFmpeg
 echo "[5/7] Verifying FFmpeg..."
@@ -130,6 +270,8 @@ if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A "$MODEL_DIR" 2>/dev/null)" ]; then
     HF_REPO="$CUSTOM_MODEL_URL"
   elif [ "$MODEL" = "whisper-small.en-police-radio" ]; then
     HF_REPO="sepiaapps/whisper-small.en-police-radio"
+  elif [ "$MODEL" = "whisper-small-public-safety-v2-FINAL" ]; then
+    HF_REPO="xxbubziexx/whisper-small-public-safety-v2-FINAL"
   elif [[ "$MODEL" == *"/"* ]]; then
     HF_REPO="$MODEL"
   else
@@ -147,20 +289,25 @@ except Exception as e:
 EOF
 fi
 
-# Pre-load Incident NER model (xxbubziexx/incident_ner_v1)
-echo "    Pre-loading Incident NER model (xxbubziexx/incident_ner_v1)..."
-NER_DIR="$INSTALL_DIR/models/incident_ner_v1"
-if [ ! -d "$NER_DIR" ] || [ -z "$(ls -A "$NER_DIR" 2>/dev/null)" ]; then
-  "$VENV_PY" - <<EOF
+# Pre-load Incident NER model
+if [ -n "$NER_MODEL" ]; then
+  echo "    Pre-loading Incident NER model ($NER_MODEL)..."
+  NER_DIR_NAME=$(basename "$NER_MODEL")
+  NER_DIR="$INSTALL_DIR/models/$NER_DIR_NAME"
+  if [ ! -d "$NER_DIR" ] || [ -z "$(ls -A "$NER_DIR" 2>/dev/null)" ]; then
+    "$VENV_PY" - <<EOF
 import sys
 from huggingface_hub import snapshot_download
-print("[*] Downloading xxbubziexx/incident_ner_v1...")
+print("[*] Downloading $NER_MODEL...")
 try:
-    snapshot_download(repo_id="xxbubziexx/incident_ner_v1", local_dir="$NER_DIR", ignore_patterns=['*.msgpack', '*.h5', '*.ot'], local_dir_use_symlinks=False)
+    snapshot_download(repo_id="$NER_MODEL", local_dir="$NER_DIR", ignore_patterns=['*.msgpack', '*.h5', '*.ot'], local_dir_use_symlinks=False)
     print("[+] Incident NER model download complete!")
 except Exception as e:
     print(f"[!] Incident NER model download warning: {e}", file=sys.stderr)
 EOF
+  fi
+else
+  NER_DIR_NAME=""
 fi
 
 # 8. Configuration & Secrets
@@ -196,7 +343,11 @@ data["model"]["device"] = "$MODE"
 data["model"]["workers"] = $WORKERS
 if "events_pipeline" not in data:
     data["events_pipeline"] = {}
-data["events_pipeline"]["ner_model_path"] = "$INSTALL_DIR/models/incident_ner_v1"
+if "$NER_DIR_NAME":
+    data["events_pipeline"]["ner_model_path"] = "$INSTALL_DIR/models/$NER_DIR_NAME"
+    data["events_pipeline"]["enabled"] = True
+else:
+    data["events_pipeline"]["enabled"] = False
 with open(config_file, "w") as f:
     yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
 EOF

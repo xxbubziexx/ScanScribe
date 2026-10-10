@@ -14,15 +14,16 @@
 param(
     [string]$InstallDir = "C:\ScanScribe",
     [string]$IngestDir = "",
-    [ValidateSet("cpu", "cuda")]
-    [string]$Mode = "cpu",
-    [int]$Ram = 8,
+    [string]$Mode = "",
+    [int]$Ram = 0,
     [string]$Model = "",
     [int]$Workers = 0,
-    [int]$Port = 8000,
-    [bool]$AutoStart = $true,
+    [int]$Port = 0,
+    [Nullable[bool]]$AutoStart = $null,
     [string]$CustomModelUrl = "",
-    [string]$Branch = "snapshot"
+    [string]$NerModel = "",
+    [string]$Branch = "snapshot",
+    [switch]$NonInteractive
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,33 +35,183 @@ Write-Host "       AI-Powered Public Safety Radio Transcription         " -Foreg
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 1. Spec & Configuration Auto-tuning
-if (-not $Model) {
-    $Model = "whisper-small.en-police-radio"
-}
-
-if ($Workers -le 0) {
-    if ($Ram -le 4) {
-        $Workers = 2
-    } else {
-        $Workers = 4
+# Hardware Auto-detection for intelligent recommendations
+$detectedGpu = $false
+try {
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        $detectedGpu = $true
+    } elseif (Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*NVIDIA*" }) {
+        $detectedGpu = $true
     }
+} catch {
+    $detectedGpu = $false
 }
 
-if (-not $IngestDir) {
-    $IngestDir = Join-Path $InstallDir "ingest"
+$detectedRam = 8
+try {
+    $totalMemoryBytes = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).TotalPhysicalMemory
+    if ($totalMemoryBytes) {
+        $detectedRam = [math]::Round($totalMemoryBytes / 1GB)
+    }
+} catch {
+    $detectedRam = 8
 }
 
-Write-Host "[-] Installation Profile:" -ForegroundColor Yellow
-Write-Host "    Install Directory : $InstallDir"
-Write-Host "    Ingest Directory  : $IngestDir"
-Write-Host "    Compute Mode      : $($Mode.ToUpper())"
-Write-Host "    System RAM Profile: ${Ram}GB"
-Write-Host "    Whisper Model     : $Model"
-Write-Host "    Worker Threads    : $Workers"
-Write-Host "    Web Port          : $Port"
-Write-Host "    Autostart on Boot : $AutoStart"
-Write-Host ""
+$detectedCores = $env:NUMBER_OF_PROCESSORS
+if (-not $detectedCores) { $detectedCores = 4 }
+$recommendedWorkers = [math]::Min([math]::Max(2, [int]$detectedCores), 8)
+$recommendedMode = if ($detectedGpu) { "cuda" } else { "cpu" }
+
+function Prompt-Setting {
+    param(
+        [string]$PromptText,
+        [string]$DefaultVal
+    )
+    $inputVal = Read-Host "$PromptText [$DefaultVal]"
+    if ([string]::IsNullOrWhiteSpace($inputVal)) {
+        return $DefaultVal
+    }
+    return $inputVal.Trim()
+}
+
+$isInteractive = (-not $NonInteractive) -and [Environment]::UserInteractive
+
+if ($isInteractive) {
+    Write-Host "[-] Interactive Installation Setup" -ForegroundColor Yellow
+    Write-Host "    Press ENTER to accept the recommended default shown in [brackets]." -ForegroundColor DarkGray
+    Write-Host ""
+
+    # 1. Install Directory
+    $InstallDir = Prompt-Setting -PromptText "1. Installation Directory" -DefaultVal $InstallDir
+
+    # 2. Ingest Directory
+    $defaultIngest = if ($IngestDir) { $IngestDir } else { Join-Path $InstallDir "ingest" }
+    $IngestDir = Prompt-Setting -PromptText "2. Scanner Audio Ingest Directory (SDRTrunk/ProScan recordings)" -DefaultVal $defaultIngest
+
+    # 3. Compute Mode
+    $defaultMode = if ($Mode) { $Mode.ToLower() } else { $recommendedMode }
+    $modeChoice = Prompt-Setting -PromptText "3. Hardware Acceleration Mode (cpu / cuda)" -DefaultVal $defaultMode
+    $Mode = if ($modeChoice.ToLower() -eq "cuda") { "cuda" } else { "cpu" }
+
+    # 4. Whisper Model
+    Write-Host ""
+    Write-Host "4. Whisper Speech-to-Text Model:" -ForegroundColor White
+    Write-Host "   [1] sepiaapps/whisper-small.en-police-radio            (CrimeRadar Police Radio - Recommended)" -ForegroundColor Green
+    Write-Host "   [2] xxbubziexx/whisper-small-public-safety-v2-FINAL   (ScanScribe Public Safety v2 Final)" -ForegroundColor Green
+    Write-Host "   [3] openai/whisper-base                               (Lightweight / Low-RAM)"
+    Write-Host "   [4] openai/whisper-small                              (Standard General English)"
+    Write-Host "   [5] openai/whisper-medium                             (High Accuracy / Requires 8GB+ VRAM)"
+    Write-Host "   [6] Custom Hugging Face model repository"
+    $modelChoice = Prompt-Setting -PromptText "   Choose [1-6] or enter Model ID" -DefaultVal "1"
+
+    switch ($modelChoice) {
+        "1" {
+            $Model = "whisper-small.en-police-radio"
+            $CustomModelUrl = "sepiaapps/whisper-small.en-police-radio"
+        }
+        "2" {
+            $Model = "whisper-small-public-safety-v2-FINAL"
+            $CustomModelUrl = "xxbubziexx/whisper-small-public-safety-v2-FINAL"
+        }
+        "3" {
+            $Model = "whisper-base"
+            $CustomModelUrl = "openai/whisper-base"
+        }
+        "4" {
+            $Model = "whisper-small"
+            $CustomModelUrl = "openai/whisper-small"
+        }
+        "5" {
+            $Model = "whisper-medium"
+            $CustomModelUrl = "openai/whisper-medium"
+        }
+        "6" {
+            $customInput = Prompt-Setting -PromptText "   Enter Hugging Face Model ID (e.g. xxbubziexx/whisper-small-public-safety-v2-FINAL)" -DefaultVal "xxbubziexx/whisper-small-public-safety-v2-FINAL"
+            $CustomModelUrl = $customInput
+            $Model = if ($customInput -like "*/*") { $customInput.Split("/")[-1] } else { $customInput }
+        }
+        default {
+            if ($modelChoice -like "*/*") {
+                $CustomModelUrl = $modelChoice
+                $Model = $modelChoice.Split("/")[-1]
+            } else {
+                $Model = $modelChoice
+            }
+        }
+    }
+
+    # 5. Incident NER Model
+    Write-Host ""
+    Write-Host "5. Public Safety Incident Entity Extraction (NER):" -ForegroundColor White
+    Write-Host "   [1] xxbubziexx/incident_ner_v1  (Recommended: Unit, Address, Call Type Extraction)" -ForegroundColor Green
+    Write-Host "   [2] Custom Hugging Face model ID or path"
+    Write-Host "   [3] None (Disable NER)"
+    $nerChoice = Prompt-Setting -PromptText "   Choose [1-3]" -DefaultVal "1"
+
+    switch ($nerChoice) {
+        "1" {
+            $NerModel = "xxbubziexx/incident_ner_v1"
+        }
+        "2" {
+            $NerModel = Prompt-Setting -PromptText "   Enter NER model repository ID or path" -DefaultVal "xxbubziexx/incident_ner_v1"
+        }
+        "3" {
+            $NerModel = ""
+        }
+        default {
+            $NerModel = $nerChoice
+        }
+    }
+
+    # 6. Worker Threads
+    Write-Host ""
+    $defaultWorkers = if ($Workers -gt 0) { $Workers } else { $recommendedWorkers }
+    $workersInput = Prompt-Setting -PromptText "6. Parallel Worker Threads (transcription concurrency)" -DefaultVal "$defaultWorkers"
+    $Workers = [int]$workersInput
+
+    # 7. Web Port
+    $defaultPort = if ($Port -gt 0) { $Port } else { 8000 }
+    $portInput = Prompt-Setting -PromptText "7. Web Dashboard Port" -DefaultVal "$defaultPort"
+    $Port = [int]$portInput
+
+    # 8. Autostart
+    $defaultAuto = if ($AutoStart -ne $null) { if ($AutoStart) { "Y" } else { "N" } } else { "Y" }
+    $autoInput = Prompt-Setting -PromptText "8. Start ScanScribe silently in background at Windows logon? (Y/N)" -DefaultVal $defaultAuto
+    $AutoStart = ($autoInput.ToUpper() -eq "Y" -or $autoInput.ToUpper() -eq "YES")
+
+    # Confirmation Summary
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "              Installation Profile Confirmation            " -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "  Install Directory : $InstallDir"
+    Write-Host "  Ingest Directory  : $IngestDir"
+    Write-Host "  Compute Mode      : $($Mode.ToUpper())"
+    Write-Host "  Whisper Model     : $Model"
+    Write-Host "  Incident NER      : $(if ($NerModel) { $NerModel } else { 'Disabled' })"
+    Write-Host "  Worker Threads    : $Workers"
+    Write-Host "  Web Port          : $Port"
+    Write-Host "  Autostart at Logon: $(if ($AutoStart) { 'Yes' } else { 'No' })"
+    Write-Host "============================================================" -ForegroundColor Cyan
+    $confirm = Prompt-Setting -PromptText "Proceed with installation? (Y/N)" -DefaultVal "Y"
+    if ($confirm.ToUpper() -ne "Y" -and $confirm.ToUpper() -ne "YES") {
+        Write-Host "[-] Installation cancelled by user." -ForegroundColor Yellow
+        exit 0
+    }
+    Write-Host ""
+} else {
+    # Non-interactive fallback
+    if (-not $Mode) { $Mode = $recommendedMode }
+    if (-not $Model) { 
+        $Model = "whisper-small.en-police-radio"
+        if (-not $CustomModelUrl) { $CustomModelUrl = "sepiaapps/whisper-small.en-police-radio" }
+    }
+    if (-not $NerModel) { $NerModel = "xxbubziexx/incident_ner_v1" }
+    if ($Workers -le 0) { $Workers = $recommendedWorkers }
+    if ($Port -le 0) { $Port = 8000 }
+    if ($AutoStart -eq $null) { $AutoStart = $true }
+    if (-not $IngestDir) { $IngestDir = Join-Path $InstallDir "ingest" }
+}
 
 # 2. Directory Creation
 Write-Host "[1/7] Creating application directories..." -ForegroundColor Green
@@ -113,8 +264,10 @@ if ($currentScriptDir -and (Test-Path (Join-Path $currentScriptDir "app\main.py"
         $extractPath = Join-Path $env:TEMP "scanscribe-extract"
         Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
         Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-        $sourceDir = Join-Path $extractPath "scanscribe-$Branch"
-        Copy-Item -Path "$sourceDir\*" -Destination $InstallDir -Recurse -Force
+        $extractedRoot = Get-ChildItem -Path $extractPath -Directory | Select-Object -First 1
+        if ($extractedRoot) {
+            Copy-Item -Path "$($extractedRoot.FullName)\*" -Destination $InstallDir -Recurse -Force
+        }
         Remove-Item -Path $zipPath, $extractPath -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
@@ -159,10 +312,26 @@ if ($Mode -eq "cuda") {
 }
 
 $reqFile = Join-Path $InstallDir "requirements.txt"
+$pyprojectFile = Join-Path $InstallDir "pyproject.toml"
+
 if (Test-Path $reqFile) {
-    Write-Host "    Installing application packages..."
+    Write-Host "    Installing application packages from requirements.txt..."
     & $uvExe pip install -r $reqFile --python $venvPython
 }
+
+if (Test-Path $pyprojectFile) {
+    Write-Host "    Registering ScanScribe package in virtual environment..."
+    if (Test-Path $reqFile) {
+        & $uvExe pip install -e $InstallDir --python $venvPython --no-deps
+    } else {
+        & $uvExe pip install -e $InstallDir --python $venvPython
+    }
+}
+
+# Explicit safety guarantee: Ensure core web runtime is present
+Write-Host "    Verifying core runtime dependencies (uvicorn, fastapi)..."
+& $uvExe pip install "uvicorn[standard]>=0.30.0" "fastapi>=0.115.0" "huggingface-hub>=0.23.0" "pyyaml>=6.0" --python $venvPython --quiet
+
 
 # 6. Bundled FFmpeg Check / Download
 Write-Host "[5/7] Verifying FFmpeg audio processing engine..." -ForegroundColor Green
@@ -199,6 +368,8 @@ if (-not (Test-Path $modelDir) -or -not (Get-ChildItem -Path $modelDir -File)) {
         $CustomModelUrl 
     } elseif ($Model -eq "whisper-small.en-police-radio") { 
         "sepiaapps/whisper-small.en-police-radio" 
+    } elseif ($Model -eq "whisper-small-public-safety-v2-FINAL") {
+        "xxbubziexx/whisper-small-public-safety-v2-FINAL"
     } elseif ($Model -like "*/*") {
         $Model
     } else { 
@@ -230,17 +401,19 @@ except Exception as e:
     Write-Host "    Model $Model already present in models directory."
 }
 
-# Pre-load Incident NER model (xxbubziexx/incident_ner_v1)
-$nerDir = Join-Path $InstallDir "models\incident_ner_v1"
-if (-not (Test-Path $nerDir) -or -not (Get-ChildItem -Path $nerDir -File)) {
-    Write-Host "    Downloading incident NER model from Hugging Face (xxbubziexx/incident_ner_v1)..."
-    $nerDownloadScript = @"
+# Pre-load Incident NER model
+if ($NerModel) {
+    $nerDirName = if ($NerModel -like "*/*") { $NerModel.Split("/")[-1] } else { $NerModel }
+    $nerDir = Join-Path $InstallDir "models\$nerDirName"
+    if (-not (Test-Path $nerDir) -or -not (Get-ChildItem -Path $nerDir -File)) {
+        Write-Host "    Downloading incident NER model from Hugging Face ($NerModel)..."
+        $nerDownloadScript = @"
 import os
 import sys
 from huggingface_hub import snapshot_download
 
 target_dir = r'$nerDir'
-repo_id = 'xxbubziexx/incident_ner_v1'
+repo_id = '$NerModel'
 
 print(f'[*] Fetching weights for {repo_id}...')
 try:
@@ -254,9 +427,12 @@ try:
 except Exception as e:
     print(f'[!] Incident NER model download warning: {e}', file=sys.stderr)
 "@
-    & $venvPython -c $nerDownloadScript
+        & $venvPython -c $nerDownloadScript
+    } else {
+        Write-Host "    Incident NER model already present in models directory."
+    }
 } else {
-    Write-Host "    Incident NER model already present in models directory."
+    $nerDirName = ""
 }
 
 # 8. Generate .env and config.yml
@@ -307,7 +483,12 @@ data['model']['workers'] = $Workers
 if 'events_pipeline' not in data:
     data['events_pipeline'] = {}
 
-data['events_pipeline']['ner_model_path'] = r'$InstallDir/models/incident_ner_v1'.replace('\\', '/')
+ner_dir = '$nerDirName'
+if ner_dir:
+    data['events_pipeline']['ner_model_path'] = r'$InstallDir/models/' + ner_dir
+    data['events_pipeline']['enabled'] = True
+else:
+    data['events_pipeline']['enabled'] = False
 
 with open(config_file, 'w', encoding='utf-8') as f:
     yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
