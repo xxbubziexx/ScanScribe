@@ -56,42 +56,56 @@ RECOMMENDED_MODE=$([ "$DETECTED_GPU" = "true" ] && echo "cuda" || echo "cpu")
 prompt_user() {
   local prompt_text="$1"
   local default_val="$2"
+  local default_hint="${3:-}"
+  local hint="$default_val"
+  if [ -n "$default_hint" ]; then
+    hint="$default_val ($default_hint)"
+  fi
+  echo -e "\033[1;37m$prompt_text\033[0m" >&2
+  echo -e "   \033[0;90m[Default: $hint] -> Press ENTER to keep default\033[0m" >&2
   local user_val=""
-  read -r -p "$prompt_text [$default_val]: " user_val
+  read -r -p "   Selection: " user_val
   if [ -z "$user_val" ]; then
+    echo -e "   \033[0;32m-> Kept default: $default_val\033[0m" >&2
     echo "$default_val"
   else
+    echo -e "   \033[0;36m-> Selected: $user_val\033[0m" >&2
     echo "$user_val"
   fi
 }
 
 if [ -t 0 ] && [ "$NON_INTERACTIVE" != "true" ]; then
-  echo "[-] Interactive Installation Setup"
-  echo "    Press ENTER to accept the recommended default shown in [brackets]."
+  echo "============================================================"
+  echo "               Interactive Installation Setup               "
+  echo "============================================================"
+  echo "  Tip: Press ENTER on any prompt to accept the recommended default."
   echo ""
 
   # 1. Install Directory
   INSTALL_DIR=$(prompt_user "1. Installation Directory" "$INSTALL_DIR")
+  echo ""
 
   # 2. Ingest Directory
   DEFAULT_INGEST="${INGEST_DIR:-$INSTALL_DIR/ingest}"
   INGEST_DIR=$(prompt_user "2. Scanner Audio Ingest Directory (SDRTrunk/ProScan recordings)" "$DEFAULT_INGEST")
+  echo ""
 
   # 3. Compute Mode
   DEFAULT_MODE="${MODE:-$RECOMMENDED_MODE}"
-  MODE_CHOICE=$(prompt_user "3. Hardware Acceleration Mode (cpu / cuda)" "$DEFAULT_MODE")
+  MODE_HINT=$([ "$DETECTED_GPU" = "true" ] && echo "NVIDIA GPU detected" || echo "CPU mode detected")
+  MODE_CHOICE=$(prompt_user "3. Hardware Acceleration Mode (cpu / cuda)" "$DEFAULT_MODE" "$MODE_HINT")
   MODE=$([ "$MODE_CHOICE" = "cuda" ] && echo "cuda" || echo "cpu")
+  echo ""
 
   # 4. Whisper Model
-  echo ""
   echo "4. Whisper Speech-to-Text Model:"
-  echo "   [1] sepiaapps/whisper-small.en-police-radio            (CrimeRadar Police Radio - Recommended)"
+  echo "   [1] sepiaapps/whisper-small.en-police-radio            (CrimeRadar Police Radio - Recommended Default)"
   echo "   [2] xxbubziexx/whisper-small-public-safety-v2-FINAL   (ScanScribe Public Safety v2 Final)"
   echo "   [3] openai/whisper-base                               (Lightweight / Low-RAM)"
   echo "   [4] openai/whisper-small                              (Standard General English)"
   echo "   [5] openai/whisper-medium                             (High Accuracy / Requires 8GB+ VRAM)"
   echo "   [6] Custom Hugging Face model repository"
-  MODEL_CHOICE=$(prompt_user "   Choose [1-6] or enter Model ID" "1")
+  MODEL_CHOICE=$(prompt_user "   Choose model [1-6] or enter Model ID" "1" "sepiaapps/whisper-small.en-police-radio")
 
   case "$MODEL_CHOICE" in
     1)
@@ -128,14 +142,14 @@ if [ -t 0 ] && [ "$NON_INTERACTIVE" != "true" ]; then
       fi
       ;;
   esac
+  echo ""
 
   # 5. Incident NER Model
-  echo ""
   echo "5. Public Safety Incident Entity Extraction (NER):"
-  echo "   [1] xxbubziexx/incident_ner_v1  (Recommended: Unit, Address, Call Type Extraction)"
+  echo "   [1] xxbubziexx/incident_ner_v1  (Recommended Default: Unit, Address, Call Type Extraction)"
   echo "   [2] Custom Hugging Face model ID or path"
   echo "   [3] None (Disable NER)"
-  NER_CHOICE=$(prompt_user "   Choose [1-3]" "1")
+  NER_CHOICE=$(prompt_user "   Choose NER option [1-3]" "1" "xxbubziexx/incident_ner_v1")
 
   case "$NER_CHOICE" in
     1)
@@ -151,15 +165,17 @@ if [ -t 0 ] && [ "$NON_INTERACTIVE" != "true" ]; then
       NER_MODEL="$NER_CHOICE"
       ;;
   esac
+  echo ""
 
   # 6. Worker Threads
-  echo ""
   DEFAULT_WORKERS=$([ "$WORKERS" -gt 0 ] && echo "$WORKERS" || echo "$RECOMMENDED_WORKERS")
-  WORKERS=$(prompt_user "6. Parallel Worker Threads (transcription concurrency)" "$DEFAULT_WORKERS")
+  WORKERS=$(prompt_user "6. Parallel Worker Threads (transcription concurrency)" "$DEFAULT_WORKERS" "Auto-detected $DETECTED_CORES CPU cores")
+  echo ""
 
   # 7. Web Port
   DEFAULT_PORT=$([ "$PORT" -gt 0 ] && echo "$PORT" || echo "8000")
   PORT=$(prompt_user "7. Web Dashboard Port" "$DEFAULT_PORT")
+  echo ""
 
   # Confirmation Summary
   echo ""

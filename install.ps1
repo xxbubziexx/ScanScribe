@@ -65,12 +65,18 @@ $recommendedMode = if ($detectedGpu) { "cuda" } else { "cpu" }
 function Prompt-Setting {
     param(
         [string]$PromptText,
-        [string]$DefaultVal
+        [string]$DefaultVal,
+        [string]$DefaultHint = ""
     )
-    $inputVal = Read-Host "$PromptText [$DefaultVal]"
+    $hint = if ($DefaultHint) { "$DefaultVal ($DefaultHint)" } else { "$DefaultVal" }
+    Write-Host "$PromptText" -ForegroundColor White
+    Write-Host "   [Default: $hint] -> Press ENTER to keep default" -ForegroundColor DarkGray
+    $inputVal = Read-Host "   Selection"
     if ([string]::IsNullOrWhiteSpace($inputVal)) {
+        Write-Host "   -> Kept default: $DefaultVal" -ForegroundColor Green
         return $DefaultVal
     }
+    Write-Host "   -> Selected: $($inputVal.Trim())" -ForegroundColor Cyan
     return $inputVal.Trim()
 }
 
@@ -100,34 +106,39 @@ function Validate-DirectoryPath {
 $isInteractive = (-not $NonInteractive) -and [Environment]::UserInteractive
 
 if ($isInteractive) {
-    Write-Host "[-] Interactive Installation Setup" -ForegroundColor Yellow
-    Write-Host "    Press ENTER to accept the recommended default shown in [brackets]." -ForegroundColor DarkGray
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "               Interactive Installation Setup               " -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "  Tip: Press ENTER on any prompt to accept the recommended default." -ForegroundColor Yellow
     Write-Host ""
 
     # 1. Install Directory
     $rawInstall = Prompt-Setting -PromptText "1. Installation Directory" -DefaultVal $InstallDir
     $InstallDir = Validate-DirectoryPath -PathValue $rawInstall -DefaultPath $InstallDir
+    Write-Host ""
 
     # 2. Ingest Directory
     $defaultIngest = if ($IngestDir) { $IngestDir } else { Join-Path $InstallDir "ingest" }
     $rawIngest = Prompt-Setting -PromptText "2. Scanner Audio Ingest Directory (SDRTrunk/ProScan recordings)" -DefaultVal $defaultIngest
     $IngestDir = Validate-DirectoryPath -PathValue $rawIngest -DefaultPath $defaultIngest
+    Write-Host ""
 
     # 3. Compute Mode
     $defaultMode = if ($Mode) { $Mode.ToLower() } else { $recommendedMode }
-    $modeChoice = Prompt-Setting -PromptText "3. Hardware Acceleration Mode (cpu / cuda)" -DefaultVal $defaultMode
+    $modeHint = if ($detectedGpu) { "NVIDIA GPU detected" } else { "CPU mode detected" }
+    $modeChoice = Prompt-Setting -PromptText "3. Hardware Acceleration Mode (cpu / cuda)" -DefaultVal $defaultMode -DefaultHint $modeHint
     $Mode = if ($modeChoice.ToLower() -eq "cuda") { "cuda" } else { "cpu" }
+    Write-Host ""
 
     # 4. Whisper Model
-    Write-Host ""
     Write-Host "4. Whisper Speech-to-Text Model:" -ForegroundColor White
-    Write-Host "   [1] sepiaapps/whisper-small.en-police-radio            (CrimeRadar Police Radio - Recommended)" -ForegroundColor Green
+    Write-Host "   [1] sepiaapps/whisper-small.en-police-radio            (CrimeRadar Police Radio - Recommended Default)" -ForegroundColor Green
     Write-Host "   [2] xxbubziexx/whisper-small-public-safety-v2-FINAL   (ScanScribe Public Safety v2 Final)" -ForegroundColor Green
     Write-Host "   [3] openai/whisper-base                               (Lightweight / Low-RAM)"
     Write-Host "   [4] openai/whisper-small                              (Standard General English)"
     Write-Host "   [5] openai/whisper-medium                             (High Accuracy / Requires 8GB+ VRAM)"
     Write-Host "   [6] Custom Hugging Face model repository"
-    $modelChoice = Prompt-Setting -PromptText "   Choose [1-6] or enter Model ID" -DefaultVal "1"
+    $modelChoice = Prompt-Setting -PromptText "   Choose model [1-6] or enter Model ID" -DefaultVal "1" -DefaultHint "sepiaapps/whisper-small.en-police-radio"
 
     switch ($modelChoice) {
         "1" {
@@ -164,14 +175,14 @@ if ($isInteractive) {
             }
         }
     }
+    Write-Host ""
 
     # 5. Incident NER Model
-    Write-Host ""
     Write-Host "5. Public Safety Incident Entity Extraction (NER):" -ForegroundColor White
-    Write-Host "   [1] xxbubziexx/incident_ner_v1  (Recommended: Unit, Address, Call Type Extraction)" -ForegroundColor Green
+    Write-Host "   [1] xxbubziexx/incident_ner_v1  (Recommended Default: Unit, Address, Call Type Extraction)" -ForegroundColor Green
     Write-Host "   [2] Custom Hugging Face model ID or path"
     Write-Host "   [3] None (Disable NER)"
-    $nerChoice = Prompt-Setting -PromptText "   Choose [1-3]" -DefaultVal "1"
+    $nerChoice = Prompt-Setting -PromptText "   Choose NER option [1-3]" -DefaultVal "1" -DefaultHint "xxbubziexx/incident_ner_v1"
 
     switch ($nerChoice) {
         "1" {
@@ -187,16 +198,18 @@ if ($isInteractive) {
             $NerModel = $nerChoice
         }
     }
+    Write-Host ""
 
     # 6. Worker Threads
-    Write-Host ""
     $defaultWorkers = if ($Workers -gt 0) { $Workers } else { $recommendedWorkers }
-    $workersInput = Prompt-Setting -PromptText "6. Parallel Worker Threads (transcription concurrency)" -DefaultVal "$defaultWorkers"
+    $workersHint = "Auto-detected $detectedCores CPU cores"
+    $workersInput = Prompt-Setting -PromptText "6. Parallel Worker Threads (transcription concurrency)" -DefaultVal "$defaultWorkers" -DefaultHint $workersHint
     $parsedWorkers = 0
     if (-not [int]::TryParse($workersInput, [ref]$parsedWorkers) -or $parsedWorkers -le 0) {
         $parsedWorkers = $defaultWorkers
     }
     $Workers = $parsedWorkers
+    Write-Host ""
 
     # 7. Web Port
     $defaultPort = if ($Port -gt 0) { $Port } else { 8000 }
@@ -206,6 +219,7 @@ if ($isInteractive) {
         $parsedPort = $defaultPort
     }
     $Port = $parsedPort
+    Write-Host ""
 
     # 8. Autostart
     $defaultAuto = if ($AutoStart -ne $null) { if ($AutoStart) { "Y" } else { "N" } } else { "Y" }
@@ -226,7 +240,7 @@ if ($isInteractive) {
     Write-Host "  Web Port          : $Port"
     Write-Host "  Autostart at Logon: $(if ($AutoStart) { 'Yes' } else { 'No' })"
     Write-Host "============================================================" -ForegroundColor Cyan
-    $confirm = Prompt-Setting -PromptText "Proceed with installation? (Y/N)" -DefaultVal "Y"
+    $confirm = Prompt-Setting -PromptText "Proceed with installation? (Y/N)" -DefaultVal "Y" -DefaultHint "Proceed with installation"
     if ($confirm.ToUpper() -ne "Y" -and $confirm.ToUpper() -ne "YES") {
         Write-Host "[-] Installation cancelled by user." -ForegroundColor Yellow
         exit 0
