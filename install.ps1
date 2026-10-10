@@ -74,6 +74,29 @@ function Prompt-Setting {
     return $inputVal.Trim()
 }
 
+function Validate-DirectoryPath {
+    param(
+        [string]$PathValue,
+        [string]$DefaultPath
+    )
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return $DefaultPath
+    }
+    $trimmed = $PathValue.Trim()
+    if ($trimmed.StartsWith("irm") -or $trimmed.StartsWith("iex") -or $trimmed.StartsWith("http") -or $trimmed.Contains("|") -or $trimmed.Contains('"')) {
+        Write-Host "    [!] Notice: Invalid path or accidental command paste detected." -ForegroundColor DarkYellow
+        Write-Host "        Using default path: $DefaultPath" -ForegroundColor DarkYellow
+        return $DefaultPath
+    }
+    try {
+        $null = [System.IO.Path]::GetFullPath($trimmed)
+        return $trimmed
+    } catch {
+        Write-Host "    [!] Notice: Invalid path syntax. Using default path: $DefaultPath" -ForegroundColor DarkYellow
+        return $DefaultPath
+    }
+}
+
 $isInteractive = (-not $NonInteractive) -and [Environment]::UserInteractive
 
 if ($isInteractive) {
@@ -82,11 +105,13 @@ if ($isInteractive) {
     Write-Host ""
 
     # 1. Install Directory
-    $InstallDir = Prompt-Setting -PromptText "1. Installation Directory" -DefaultVal $InstallDir
+    $rawInstall = Prompt-Setting -PromptText "1. Installation Directory" -DefaultVal $InstallDir
+    $InstallDir = Validate-DirectoryPath -PathValue $rawInstall -DefaultPath $InstallDir
 
     # 2. Ingest Directory
     $defaultIngest = if ($IngestDir) { $IngestDir } else { Join-Path $InstallDir "ingest" }
-    $IngestDir = Prompt-Setting -PromptText "2. Scanner Audio Ingest Directory (SDRTrunk/ProScan recordings)" -DefaultVal $defaultIngest
+    $rawIngest = Prompt-Setting -PromptText "2. Scanner Audio Ingest Directory (SDRTrunk/ProScan recordings)" -DefaultVal $defaultIngest
+    $IngestDir = Validate-DirectoryPath -PathValue $rawIngest -DefaultPath $defaultIngest
 
     # 3. Compute Mode
     $defaultMode = if ($Mode) { $Mode.ToLower() } else { $recommendedMode }
@@ -167,12 +192,20 @@ if ($isInteractive) {
     Write-Host ""
     $defaultWorkers = if ($Workers -gt 0) { $Workers } else { $recommendedWorkers }
     $workersInput = Prompt-Setting -PromptText "6. Parallel Worker Threads (transcription concurrency)" -DefaultVal "$defaultWorkers"
-    $Workers = [int]$workersInput
+    $parsedWorkers = 0
+    if (-not [int]::TryParse($workersInput, [ref]$parsedWorkers) -or $parsedWorkers -le 0) {
+        $parsedWorkers = $defaultWorkers
+    }
+    $Workers = $parsedWorkers
 
     # 7. Web Port
     $defaultPort = if ($Port -gt 0) { $Port } else { 8000 }
     $portInput = Prompt-Setting -PromptText "7. Web Dashboard Port" -DefaultVal "$defaultPort"
-    $Port = [int]$portInput
+    $parsedPort = 0
+    if (-not [int]::TryParse($portInput, [ref]$parsedPort) -or $parsedPort -le 0) {
+        $parsedPort = $defaultPort
+    }
+    $Port = $parsedPort
 
     # 8. Autostart
     $defaultAuto = if ($AutoStart -ne $null) { if ($AutoStart) { "Y" } else { "N" } } else { "Y" }
