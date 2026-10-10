@@ -135,6 +135,15 @@ python -m app.cli setup --gpu --yes --start
 
 # Database migration
 python -m app.cli migrate
+
+# Clean uninstallation (preserves recordings, database, and models)
+scanscribe uninstall
+# Or with standalone script:
+.\uninstall.ps1  # Windows
+./uninstall.sh   # Linux
+
+# Complete purge (removes recordings, database, models, and configs)
+scanscribe uninstall --purge
 ```
 
 

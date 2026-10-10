@@ -1,12 +1,12 @@
 """ScanScribe CLI: server control + maintenance.
 
 Usage:
-    python -m app.cli start|stop|restart|status|logs|open
+    python -m app.cli start|stop|restart|status|logs|open|uninstall
     python -m app.cli rebuild_entity_observations [--since YYYY-MM-DD] [--monitor MID] [--dry-run]
 
 Subcommands:
-    start / stop / restart / status / logs / open
-        Background server lifecycle (see app/server_control.py).
+    start / stop / restart / status / logs / open / uninstall
+        Background server lifecycle and uninstallation (see app/server_control.py).
     rebuild_entity_observations
         Recompute and re-insert EntityObservation rows for existing SpanStore rows.
         Use after changing rules in app/services/entity_normalize.py. Idempotent:
@@ -237,6 +237,15 @@ def _add_lifecycle_commands(sub: argparse._SubParsersAction) -> None:
     p_logs.set_defaults(func=sc.cmd_logs)
 
     sub.add_parser("open", help="Open the dashboard in your browser").set_defaults(func=sc.cmd_open)
+
+    p_uninst = sub.add_parser("uninstall", help="Uninstall ScanScribe, clear caches and virtual environment")
+    p_uninst.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt")
+    p_uninst.add_argument(
+        "--purge",
+        action="store_true",
+        help="Also permanently delete database, recordings, models, and local configuration",
+    )
+    p_uninst.set_defaults(func=sc.cmd_uninstall)
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -1,4 +1,4 @@
-﻿"""ScanScribe server lifecycle commands (start/stop/restart/status/logs/open).
+"""ScanScribe server lifecycle commands (start/stop/restart/status/logs/open).
 
 Used by app.cli; split out so the maintenance CLI stays small.
 """
@@ -8,6 +8,7 @@ import sys
 import time
 import subprocess
 import signal
+import shutil
 from pathlib import Path
 import urllib.request
 import urllib.error
@@ -300,5 +301,163 @@ def cmd_open(args):
     print(f"[*] Opening {url} in your browser...")
     webbrowser.open(url)
     return 0
+
+
+def cmd_uninstall(args):
+    """Uninstall ScanScribe: stop server, remove autostart, clean PATH, clear caches and venv."""
+    force = getattr(args, "yes", False)
+    purge = getattr(args, "purge", False)
+
+    print("\n========================================================")
+    print("                ScanScribe Uninstaller                  ")
+    print("========================================================")
+    print("This will:")
+    print("  1. Stop any running ScanScribe background service")
+    print("  2. Remove background tasks (Task Scheduler / systemd)")
+    print("  3. Remove ScanScribe from user PATH")
+    print("  4. Clear all Python bytecode caches (__pycache__, *.pyc)")
+    print("  5. Remove isolated virtual environment (.venv) & dependencies")
+    if purge:
+        print("\n  [!] PURGE ENABLED: Will permanently delete database, audio storage,")
+        print("      logs, and local configurations (.env, config.yml)!")
+    else:
+        print("\n  [i] User database (data/), recordings (audio_storage/),")
+        print("      models, and config will be PRESERVED.")
+    print("========================================================\n")
+
+    if not force:
+        try:
+            resp = input("Are you sure you want to proceed? [y/N]: ").strip().lower()
+            if resp not in ("y", "yes"):
+                print("Uninstall cancelled.")
+                return 0
+        except (KeyboardInterrupt, EOFError):
+            print("\nUninstall cancelled.")
+            return 0
+
+    # 1. Stop server
+    cmd_stop(args)
+
+    # 2. Remove Task Scheduler (Windows) or systemd (Linux)
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["schtasks", "/delete", "/tn", "ScanScribe", "/f"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            print("[✓] Removed Windows Task Scheduler task (ScanScribe).")
+        except Exception as e:
+            print(f"[!] Note: Could not remove Task Scheduler task: {e}")
+    else:
+        systemd_unit = Path.home() / ".config" / "systemd" / "user" / "scanscribe.service"
+        if systemd_unit.is_file():
+            try:
+                subprocess.run(
+                    ["systemctl", "--user", "disable", "--now", "scanscribe"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                systemd_unit.unlink(missing_ok=True)
+                subprocess.run(
+                    ["systemctl", "--user", "daemon-reload"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                print("[✓] Removed systemd user service.")
+            except Exception as e:
+                print(f"[!] Note: Could not remove systemd service: {e}")
+
+    # 3. Clean User PATH on Windows
+    if sys.platform == "win32":
+        bin_dir = str(BASE_DIR / "bin")
+        try:
+            ps_script = (
+                f'$p = [Environment]::GetEnvironmentVariable("PATH", "User"); '
+                f'if ($p) {{ $new = ($p -split ";" | Where-Object {{ $_ -and $_.Trim() -ne "{bin_dir}" }}) -join ";"; '
+                f'[Environment]::SetEnvironmentVariable("PATH", $new, "User") }}'
+            )
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_script],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            print("[✓] Cleaned ScanScribe bin directory from user PATH.")
+        except Exception as e:
+            print(f"[!] Note: Could not clean PATH: {e}")
+
+    # 4. Clear Python caches
+    pycache_count = 0
+    pyc_count = 0
+    for root, dirs, files in os.walk(BASE_DIR):
+        if ".git" in root or ".venv" in root:
+            continue
+        for d in list(dirs):
+            if d == "__pycache__":
+                pycache_dir = Path(root) / d
+                try:
+                    shutil.rmtree(pycache_dir, ignore_errors=True)
+                    pycache_count += 1
+                except Exception:
+                    pass
+        for f in files:
+            if f.endswith((".pyc", ".pyo")):
+                try:
+                    (Path(root) / f).unlink(missing_ok=True)
+                    pyc_count += 1
+                except Exception:
+                    pass
+
+    print(f"[✓] Cleared Python cache ({pycache_count} __pycache__ folders, {pyc_count} .pyc files).")
+
+    # 5. Optional Purge
+    if purge:
+        for folder_name in ["data", "audio_storage", "models", "logs"]:
+            f_path = BASE_DIR / folder_name
+            if f_path.is_dir():
+                try:
+                    shutil.rmtree(f_path, ignore_errors=True)
+                except Exception:
+                    pass
+        for conf_file in [".env", "config.yml"]:
+            c_path = BASE_DIR / conf_file
+            if c_path.is_file():
+                try:
+                    c_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
+        print("[✓] Purged database, audio storage, models, and local configuration.")
+
+    # 6. Remove .venv and dependencies
+    venv_dir = BASE_DIR / ".venv"
+    if venv_dir.is_dir():
+        is_inside_venv = False
+        try:
+            is_inside_venv = venv_dir.resolve() in Path(sys.executable).resolve().parents
+        except Exception:
+            pass
+
+        if is_inside_venv and sys.platform == "win32":
+            del_cmd = f'timeout /t 1 /nobreak >nul & rmdir /s /q "{venv_dir}"'
+            DETACHED = 0x00000008 | 0x00000200
+            subprocess.Popen(
+                f'cmd.exe /c "{del_cmd}"',
+                shell=True,
+                creationflags=DETACHED,
+            )
+            print("[✓] Virtual environment (.venv) scheduled for deletion.")
+        else:
+            try:
+                shutil.rmtree(venv_dir, ignore_errors=True)
+                print("[✓] Removed virtual environment (.venv) and all dependencies.")
+            except Exception as e:
+                print(f"[!] Warning: Could not completely remove .venv: {e}")
+
+    # Remove PID file
+    _remove_pid()
+
+    print("\n[✓] ScanScribe has been uninstalled successfully.\n")
+    return 0
+
 
 
