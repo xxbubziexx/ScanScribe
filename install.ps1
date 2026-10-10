@@ -21,7 +21,8 @@ param(
     [int]$Workers = 0,
     [int]$Port = 8000,
     [bool]$AutoStart = $true,
-    [string]$CustomModelUrl = ""
+    [string]$CustomModelUrl = "",
+    [string]$Branch = "snapshot"
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,11 +36,7 @@ Write-Host ""
 
 # 1. Spec & Configuration Auto-tuning
 if (-not $Model) {
-    if ($Ram -le 4) {
-        $Model = "whisper-base"
-    } else {
-        $Model = "whisper-small"
-    }
+    $Model = "whisper-small.en-police-radio"
 }
 
 if ($Workers -le 0) {
@@ -94,10 +91,10 @@ if ($currentScriptDir -and (Test-Path (Join-Path $currentScriptDir "app\main.py"
     }
 } else {
     # Installing via one-liner from remote
-    Write-Host "    Fetching latest ScanScribe release from GitHub..."
+    Write-Host "    Fetching latest ScanScribe release from GitHub ($Branch branch)..."
     if (Get-Command git -ErrorAction SilentlyContinue) {
         if (-not (Test-Path (Join-Path $InstallDir "app\main.py"))) {
-            git clone https://github.com/xxbubziexx/scanscribe.git $InstallDir
+            git clone -b $Branch https://github.com/xxbubziexx/scanscribe.git $InstallDir
         } else {
             Write-Host "    Existing install found. Pulling updates..."
             Set-Location $InstallDir
@@ -105,12 +102,12 @@ if ($currentScriptDir -and (Test-Path (Join-Path $currentScriptDir "app\main.py"
         }
     } else {
         # Fallback to ZIP download
-        $zipUrl = "https://github.com/xxbubziexx/scanscribe/archive/refs/heads/main.zip"
-        $zipPath = Join-Path $env:TEMP "scanscribe-main.zip"
+        $zipUrl = "https://github.com/xxbubziexx/scanscribe/archive/refs/heads/$Branch.zip"
+        $zipPath = Join-Path $env:TEMP "scanscribe-$Branch.zip"
         $extractPath = Join-Path $env:TEMP "scanscribe-extract"
         Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
         Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-        $sourceDir = Join-Path $extractPath "scanscribe-main"
+        $sourceDir = Join-Path $extractPath "scanscribe-$Branch"
         Copy-Item -Path "$sourceDir\*" -Destination $InstallDir -Recurse -Force
         Remove-Item -Path $zipPath, $extractPath -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -192,7 +189,15 @@ Write-Host "[6/7] Pre-loading Whisper model ($Model)..." -ForegroundColor Green
 $modelDir = Join-Path $InstallDir "models\$Model"
 if (-not (Test-Path $modelDir) -or -not (Get-ChildItem -Path $modelDir -File)) {
     Write-Host "    Downloading model weights from Hugging Face..."
-    $hfRepo = if ($CustomModelUrl) { $CustomModelUrl } else { "openai/$Model" }
+    $hfRepo = if ($CustomModelUrl) { 
+        $CustomModelUrl 
+    } elseif ($Model -eq "whisper-small.en-police-radio") { 
+        "sepiaapps/whisper-small.en-police-radio" 
+    } elseif ($Model -like "*/*") {
+        $Model
+    } else { 
+        "openai/$Model" 
+    }
     
     $downloadScript = @"
 import os
@@ -217,6 +222,35 @@ except Exception as e:
     & $venvPython -c $downloadScript
 } else {
     Write-Host "    Model $Model already present in models directory."
+}
+
+# Pre-load Incident NER model (xxbubziexx/incident_ner_v1)
+$nerDir = Join-Path $InstallDir "models\incident_ner_v1"
+if (-not (Test-Path $nerDir) -or -not (Get-ChildItem -Path $nerDir -File)) {
+    Write-Host "    Downloading incident NER model from Hugging Face (xxbubziexx/incident_ner_v1)..."
+    $nerDownloadScript = @"
+import os
+import sys
+from huggingface_hub import snapshot_download
+
+target_dir = r'$nerDir'
+repo_id = 'xxbubziexx/incident_ner_v1'
+
+print(f'[*] Fetching weights for {repo_id}...')
+try:
+    snapshot_download(
+        repo_id=repo_id,
+        local_dir=target_dir,
+        ignore_patterns=['*.msgpack', '*.h5', '*.ot'],
+        local_dir_use_symlinks=False
+    )
+    print('[+] Incident NER model download complete!')
+except Exception as e:
+    print(f'[!] Incident NER model download warning: {e}', file=sys.stderr)
+"@
+    & $venvPython -c $nerDownloadScript
+} else {
+    Write-Host "    Incident NER model already present in models directory."
 }
 
 # 8. Generate .env and config.yml
@@ -260,8 +294,14 @@ if 'model' not in data:
     data['model'] = {}
 
 data['model']['name'] = '$Model'
+data['model']['path'] = r'$InstallDir/models'.replace('\\', '/')
 data['model']['device'] = '$Mode'
 data['model']['workers'] = $Workers
+
+if 'events_pipeline' not in data:
+    data['events_pipeline'] = {}
+
+data['events_pipeline']['ner_model_path'] = r'$InstallDir/models/incident_ner_v1'.replace('\\', '/')
 
 with open(config_file, 'w', encoding='utf-8') as f:
     yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)

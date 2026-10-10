@@ -42,12 +42,44 @@ def _normalize_label(label: str) -> str:
     return s
 
 
+def _resolve_ner_target(model_path: str) -> str:
+    """Resolve NER model load target from local directory or Hugging Face Hub."""
+    if not model_path:
+        model_path = "./models/incident_ner_v1"
+
+    # 1. Direct path check
+    direct = Path(model_path)
+    if direct.is_dir():
+        return str(direct.resolve())
+
+    # 2. Check relative to workspace models/incident_ner_v1
+    ws_path = Path("models") / "incident_ner_v1"
+    if ws_path.is_dir():
+        return str(ws_path.resolve())
+
+    # 3. Check relative to app root
+    app_root_ner = Path(__file__).resolve().parent.parent.parent / "models" / "incident_ner_v1"
+    if app_root_ner.is_dir():
+        return str(app_root_ner)
+
+    # 4. If explicit Hugging Face repo ID
+    if "/" in model_path and not direct.exists():
+        return model_path
+
+    # 5. Default fallback to Hugging Face Hub repo ID
+    if "incident_ner" in model_path:
+        return "xxbubziexx/incident_ner_v1"
+
+    return str(direct.resolve())
+
+
 def load_ner_model(model_path: str) -> bool:
-    """Load NER pipeline from local folder. Returns True on success."""
+    """Load NER pipeline from local folder or Hugging Face Hub. Returns True on success."""
     global _pipeline
-    path = Path(model_path).resolve()
-    if not path.is_dir():
-        logger.error("NER model path is not a directory: %s", path)
+    target = _resolve_ner_target(model_path)
+    target_path = Path(target)
+    if not target_path.is_dir() and "/" not in target:
+        logger.error("NER model path is not a directory or valid HuggingFace repo: %s", target)
         return False
     try:
         from transformers import pipeline
@@ -63,14 +95,14 @@ def load_ner_model(model_path: str) -> bool:
 
         _pipeline = pipeline(
             "ner",
-            model=str(path),
+            model=target,
             aggregation_strategy="simple",
             device=device,
         )
-        logger.info("NER model loaded from %s (device=%s)", path, device)
+        logger.info("NER model loaded from %s (device=%s)", target, device)
         return True
     except Exception as e:
-        logger.exception("Failed to load NER model from %s: %s", path, e)
+        logger.exception("Failed to load NER model from %s: %s", target, e)
         _pipeline = None
         return False
 

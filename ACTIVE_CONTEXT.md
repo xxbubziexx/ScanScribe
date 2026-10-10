@@ -57,6 +57,40 @@ This living document is the **shared memory** between different AI models, human
 
 ---
 
+### 2026-10-10 16:35 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Configured Hugging Face model `sepiaapps/whisper-small.en-police-radio` (the battle-tested CrimeRadar public safety foundation model) as the default installation and runtime Whisper model across ScanScribe.
+  - Updated [`app/config.py`](file:///a:/Scanscribe_Projects/scanscribe/app/config.py) and [`config.yml.example`](file:///a:/Scanscribe_Projects/scanscribe/config.yml.example) default model name to `whisper-small.en-police-radio`.
+  - Added robust `_resolve_model_target()` in [`app/services/transcription_engine.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/transcription_engine.py) to resolve model weights from local directories, workspace `./models`, or directly stream/load from Hugging Face Hub if weights are not yet pre-downloaded locally.
+  - Updated native installer scripts [`install.ps1`](file:///a:/Scanscribe_Projects/scanscribe/install.ps1) and [`install.sh`](file:///a:/Scanscribe_Projects/scanscribe/install.sh) to automatically map `whisper-small.en-police-radio` to `sepiaapps/whisper-small.en-police-radio` for automated `snapshot_download` and set native `model.path` in generated `config.yml`.
+  - Updated interactive station configurator in [`scanscribe_landing_page/index.html`](file:///a:/Scanscribe_Projects/scanscribe_landing_page/index.html) to reflect the CrimeRadar police radio model default.
+  - Placed NER pipeline integration on standby per user request.
+- **Live Ingestion Impact:** None. Transcriptions continue to route through `TranscriptionEngine` with identical input/output schemas.
+- **Gotchas / Warnings for Next Model:**
+  - `sepiaapps/whisper-small.en-police-radio` is a `small` Whisper variant (~967MB weights); it easily runs in ~1.1GB RAM / 1.2GB VRAM across CPU or CUDA.
+  - If users don't pre-download weights via `install.ps1`/`install.sh`, `transcription_engine.py` will automatically fall back to downloading directly from Hugging Face Hub on first load.
+- **Verification Performed:**
+  - Ran full test suite: 77 passed in 12.43s.
+- **Next Tasks / Unfinished Work:** Standby for NER model integration.
+
+---
+
+### 2026-10-10 17:55 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Integrated public-safety NER model [`xxbubziexx/incident_ner_v1`](https://huggingface.co/xxbubziexx/incident_ner_v1) as the default Named Entity Recognition model across ScanScribe.
+  - Updated [`app/config.py`](file:///a:/Scanscribe_Projects/scanscribe/app/config.py) (`EventsPipelineConfig.ner_model_path: "./models/incident_ner_v1"`) and [`config.yml.example`](file:///a:/Scanscribe_Projects/scanscribe/config.yml.example).
+  - Added smart target resolution `_resolve_ner_target()` in [`app/services/ner_service.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/ner_service.py) supporting local folder paths, workspace `./models/incident_ner_v1`, and automatic fallbacks to Hugging Face Hub `xxbubziexx/incident_ner_v1`.
+  - Updated native installer scripts [`install.ps1`](file:///a:/Scanscribe_Projects/scanscribe/install.ps1) and [`install.sh`](file:///a:/Scanscribe_Projects/scanscribe/install.sh) to automatically pre-download `xxbubziexx/incident_ner_v1` into `<InstallDir>/models/incident_ner_v1` and tune `config.yml` with the absolute model path.
+  - Updated station installer descriptions in [`scanscribe_landing_page/index.html`](file:///a:/Scanscribe_Projects/scanscribe_landing_page/index.html) to feature both the CrimeRadar public safety Whisper and Incident NER models.
+- **Live Ingestion Impact:** None. Zero schema changes or breaking changes to existing database or pipeline logic.
+- **Gotchas / Warnings for Next Model:**
+  - Both Whisper (`sepiaapps/whisper-small.en-police-radio`) and NER (`xxbubziexx/incident_ner_v1`) are configured for full local execution or seamless Hugging Face Hub loading.
+- **Verification Performed:**
+  - Full pytest suite ran: 77 passed in 12.27s (0 failures, 0 warnings).
+- **Next Tasks / Unfinished Work:** All requested models (Whisper + NER) are fully wired into configuration, installer scripts, landing page, and inference engines.
+
+
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)

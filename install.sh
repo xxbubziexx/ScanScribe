@@ -13,6 +13,7 @@ PORT="${PORT:-8000}"
 MODEL="${MODEL:-}"
 AUTOSTART="${AUTOSTART:-true}"
 CUSTOM_MODEL_URL="${CUSTOM_MODEL_URL:-}"
+BRANCH="${BRANCH:-snapshot}"
 
 # Parse command line flags if passed
 while [[ $# -gt 0 ]]; do
@@ -26,6 +27,7 @@ while [[ $# -gt 0 ]]; do
     --model) MODEL="$2"; shift 2 ;;
     --autostart) AUTOSTART="$2"; shift 2 ;;
     --custom-model-url) CUSTOM_MODEL_URL="$2"; shift 2 ;;
+    --branch) BRANCH="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -39,11 +41,7 @@ echo ""
 
 # 1. Spec Auto-tuning
 if [ -z "$MODEL" ]; then
-  if [ "$RAM" -le 4 ]; then
-    MODEL="whisper-base"
-  else
-    MODEL="whisper-small"
-  fi
+  MODEL="whisper-small.en-police-radio"
 fi
 
 if [ "$WORKERS" -le 0 ]; then
@@ -75,9 +73,9 @@ if [ -f "$SCRIPT_DIR/app/main.py" ] && [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
   cp -r "$SCRIPT_DIR"/* "$INSTALL_DIR/"
 elif [ ! -f "$INSTALL_DIR/app/main.py" ]; then
   if command -v git &>/dev/null; then
-    git clone https://github.com/xxbubziexx/scanscribe.git "$INSTALL_DIR"
+    git clone -b "$BRANCH" https://github.com/xxbubziexx/scanscribe.git "$INSTALL_DIR"
   else
-    curl -fsSL https://github.com/xxbubziexx/scanscribe/archive/refs/heads/main.tar.gz | tar -xz -C "$INSTALL_DIR" --strip-components=1
+    curl -fsSL "https://github.com/xxbubziexx/scanscribe/archive/refs/heads/$BRANCH.tar.gz" | tar -xz -C "$INSTALL_DIR" --strip-components=1
   fi
 fi
 
@@ -128,11 +126,40 @@ fi
 echo "[6/7] Pre-loading Whisper model ($MODEL)..."
 MODEL_DIR="$INSTALL_DIR/models/$MODEL"
 if [ ! -d "$MODEL_DIR" ] || [ -z "$(ls -A "$MODEL_DIR" 2>/dev/null)" ]; then
-  HF_REPO="${CUSTOM_MODEL_URL:-openai/$MODEL}"
+  if [ -n "$CUSTOM_MODEL_URL" ]; then
+    HF_REPO="$CUSTOM_MODEL_URL"
+  elif [ "$MODEL" = "whisper-small.en-police-radio" ]; then
+    HF_REPO="sepiaapps/whisper-small.en-police-radio"
+  elif [[ "$MODEL" == *"/"* ]]; then
+    HF_REPO="$MODEL"
+  else
+    HF_REPO="openai/$MODEL"
+  fi
   "$VENV_PY" - <<EOF
+import sys
 from huggingface_hub import snapshot_download
-print(f"[*] Downloading {repo_id}...")
-snapshot_download(repo_id="$HF_REPO", local_dir="$MODEL_DIR", ignore_patterns=['*.msgpack', '*.h5', '*.ot', '*.onnx'], local_dir_use_symlinks=False)
+print("[*] Downloading $HF_REPO...")
+try:
+    snapshot_download(repo_id="$HF_REPO", local_dir="$MODEL_DIR", ignore_patterns=['*.msgpack', '*.h5', '*.ot', '*.onnx'], local_dir_use_symlinks=False)
+    print("[+] Model download complete!")
+except Exception as e:
+    print(f"[!] Model download warning: {e}", file=sys.stderr)
+EOF
+fi
+
+# Pre-load Incident NER model (xxbubziexx/incident_ner_v1)
+echo "    Pre-loading Incident NER model (xxbubziexx/incident_ner_v1)..."
+NER_DIR="$INSTALL_DIR/models/incident_ner_v1"
+if [ ! -d "$NER_DIR" ] || [ -z "$(ls -A "$NER_DIR" 2>/dev/null)" ]; then
+  "$VENV_PY" - <<EOF
+import sys
+from huggingface_hub import snapshot_download
+print("[*] Downloading xxbubziexx/incident_ner_v1...")
+try:
+    snapshot_download(repo_id="xxbubziexx/incident_ner_v1", local_dir="$NER_DIR", ignore_patterns=['*.msgpack', '*.h5', '*.ot'], local_dir_use_symlinks=False)
+    print("[+] Incident NER model download complete!")
+except Exception as e:
+    print(f"[!] Incident NER model download warning: {e}", file=sys.stderr)
 EOF
 fi
 
@@ -164,8 +191,12 @@ except Exception:
 if "model" not in data:
     data["model"] = {}
 data["model"]["name"] = "$MODEL"
+data["model"]["path"] = "$INSTALL_DIR/models"
 data["model"]["device"] = "$MODE"
 data["model"]["workers"] = $WORKERS
+if "events_pipeline" not in data:
+    data["events_pipeline"] = {}
+data["events_pipeline"]["ner_model_path"] = "$INSTALL_DIR/models/incident_ner_v1"
 with open(config_file, "w") as f:
     yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
 EOF

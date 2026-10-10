@@ -41,6 +41,38 @@ class TranscriptionEngine:
         self.model_name = self.config.model.name
         self.model_path = Path(self.config.model.path) / self.model_name
         self._vad_model = None  # Lazy-loaded Silero VAD
+
+    def _resolve_model_target(self) -> str:
+        """
+        Resolve the model identifier or filesystem path for Whisper.
+        Prefers existing local directories, then relative ./models, then HuggingFace Hub IDs.
+        """
+        # 1. Configured local path
+        if self.model_path.exists():
+            return str(self.model_path)
+
+        # 2. Local workspace directory ./models/<model_name>
+        rel_path = Path("models") / self.model_name
+        if rel_path.exists():
+            return str(rel_path)
+
+        # 3. Public safety default aliases -> local whisper-small.en-police-radio
+        if self.model_name in ("whisper-small.en-police-radio", "xxbubziexx-whisper-small-public-safety", "whisper-public-safety-latest2"):
+            alt_local = Path(self.config.model.path) / "whisper-small.en-police-radio"
+            if alt_local.exists():
+                return str(alt_local)
+            alt_rel = Path("models") / "whisper-small.en-police-radio"
+            if alt_rel.exists():
+                return str(alt_rel)
+            # Default to Hugging Face Hub repo ID
+            return "sepiaapps/whisper-small.en-police-radio"
+
+        # 4. If model_name is an explicit Hugging Face repo ID
+        if "/" in self.model_name:
+            return self.model_name
+
+        # 5. Default fallback to string of model_path
+        return str(self.model_path)
         
     def load_model(self):
         """Load Whisper model at startup (CPU or GPU)."""
@@ -82,12 +114,13 @@ class TranscriptionEngine:
             logger.info(f"⚙️ CPU optimization: {num_threads} threads (of {CPU_COUNT} available)")
         
         # Load model and processor
-        logger.info(f"📦 Loading model: {self.model_name}")
+        load_target = self._resolve_model_target()
+        logger.info(f"📦 Loading model: {self.model_name} (from: {load_target})")
         
         try:
-            self.processor = WhisperProcessor.from_pretrained(str(self.model_path))
+            self.processor = WhisperProcessor.from_pretrained(load_target)
             self.model = WhisperForConditionalGeneration.from_pretrained(
-                str(self.model_path),
+                load_target,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                 low_cpu_mem_usage=True
             )

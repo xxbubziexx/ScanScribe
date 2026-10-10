@@ -10,13 +10,13 @@
 
 # ==================== MODEL SETTINGS ====================
 model:
-  # Whisper model folder name (must match directory inside ./models/)
-  name: whisper-public-safety-latest2
-  # Model directory path (use /app/models in Docker)
+  # Whisper model folder name (e.g. whisper-small.en-police-radio or HuggingFace repo ID)
+  name: whisper-small.en-police-radio
+  # Model directory path (/app/models in Docker, or local ./models path in native mode)
   path: /app/models
   # Parallel transcription worker threads (0 = all CPU cores)
-  workers: 16
-  # Device: cpu or cuda (GPU requires NVIDIA Docker runtime)
+  workers: 4
+  # Device: cpu or cuda (GPU requires NVIDIA CUDA runtime)
   device: cpu
 
 # ==================== WATCHER SETTINGS ====================
@@ -83,8 +83,8 @@ queue:
 # ==================== EVENTS PIPELINE ====================
 events_pipeline:
   enabled: true
-  # Path to NER model folder (model.safetensors, config.json, tokenizer)
-  ner_model_path: "./models/incident_ner_full_syn_junk"  # e.g. ./models/incident_ner_v1
+  # Path to NER model folder or Hugging Face repo (e.g. ./models/incident_ner_v1 or xxbubziexx/incident_ner_v1)
+  ner_model_path: "./models/incident_ner_v1"
   # Strip commas from span text before NER (recommended: true)
   ner_strip_commas: true
   # Minimum NER confidence to keep an entity (0.0 = disabled)

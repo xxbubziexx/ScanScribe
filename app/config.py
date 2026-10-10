@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class ModelConfig(BaseModel):
     """Model configuration."""
-    name: str = "xxbubziexx-whisper-small-public-safety"
+    name: str = "whisper-small.en-police-radio"
     path: str = "/app/models"
     workers: int = 3
     device: Literal["cpu", "cuda"] = "cpu"
@@ -236,7 +236,7 @@ class EventsPipelineConfig(BaseModel):
     """Events pipeline: NER entity extraction + Single-pass OpenRouter LLM router."""
     enabled: bool = False
     # Path to NER model folder (contains model.safetensors, config.json, tokenizer)
-    ner_model_path: str = ""
+    ner_model_path: str = "./models/incident_ner_v1"
     # Strip ASCII commas from span text before NER only. false = revert to raw transcript for NER
     ner_strip_commas: bool = True
     # Minimum per-span confidence score (0.0–1.0) to keep an NER entity. 0.0 = disabled.
