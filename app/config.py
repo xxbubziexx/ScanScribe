@@ -8,13 +8,36 @@ from typing import Any, Dict, List, Literal, Optional
 from pydantic import Field
 import logging
 
+_BASE_DIR = Path(__file__).resolve().parent.parent
+_ENV_FILE = _BASE_DIR / ".env"
+
 logger = logging.getLogger(__name__)
+
+def _load_env_file(env_path: Path) -> None:
+    """Load key-value pairs from .env into os.environ without third-party dependencies."""
+    if not env_path.is_file():
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                v = v.strip().strip("'\"")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception as e:
+        logger.warning(f"Could not load .env file from {env_path}: {e}")
+
+_load_env_file(_ENV_FILE)
 
 
 class ModelConfig(BaseModel):
     """Model configuration."""
     name: str = "whisper-small.en-police-radio"
-    path: str = "/app/models"
+    path: str = str(_BASE_DIR / "models")
     workers: int = 3
     device: Literal["cpu", "cuda"] = "cpu"
 
@@ -313,7 +336,15 @@ class Settings:
     
     def __init__(self):
         # Load config.yml
-        config_path = os.getenv("CONFIG_PATH", "/app/config.yml")
+        config_path = os.getenv("CONFIG_PATH")
+        if not config_path:
+            local_config = _BASE_DIR / "config.yml"
+            if local_config.exists():
+                config_path = str(local_config)
+            elif Path("/app/config.yml").exists():
+                config_path = "/app/config.yml"
+            else:
+                config_path = str(local_config)
         self.config_path = config_path
         
         try:
@@ -346,10 +377,10 @@ class Settings:
         self.algorithm = "HS256"
         
         # Directory paths from environment variables
-        self.ingest_dir = Path(os.getenv("INGEST_DIR", "/app/ingest"))
-        self.output_dir = Path(os.getenv("OUTPUT_DIR", "/app/audio_storage"))
-        self.log_dir = Path(os.getenv("LOG_DIR", "/app/logs"))
-        self.db_path = Path(os.getenv("DB_PATH", "/app/data/scanscribe.db"))
+        self.ingest_dir = Path(os.getenv("INGEST_DIR", str(_BASE_DIR / "ingest")))
+        self.output_dir = Path(os.getenv("OUTPUT_DIR", str(_BASE_DIR / "audio_storage")))
+        self.log_dir = Path(os.getenv("LOG_DIR", str(_BASE_DIR / "logs")))
+        self.db_path = Path(os.getenv("DB_PATH", str(_BASE_DIR / "data" / "scanscribe.db")))
         
         # Aliases for easier access (commonly used settings)
         self.model_name = self.config.model.name
@@ -376,7 +407,15 @@ def reload_settings():
 def save_config(config_dict: dict, config_path: str = None) -> bool:
     """Save configuration to YAML file."""
     if config_path is None:
-        config_path = os.getenv("CONFIG_PATH", "/app/config.yml")
+        config_path = os.getenv("CONFIG_PATH")
+        if not config_path:
+            local_config = _BASE_DIR / "config.yml"
+            if local_config.exists():
+                config_path = str(local_config)
+            elif Path("/app/config.yml").exists():
+                config_path = "/app/config.yml"
+            else:
+                config_path = str(local_config)
     
     try:
         # Direct write (atomic rename doesn't work well with Docker bind mounts)
