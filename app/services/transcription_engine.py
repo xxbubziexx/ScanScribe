@@ -139,6 +139,43 @@ class TranscriptionEngine:
         logger.info(f"📦 Loading model: {self.model_name} (from: {load_target})")
         
         try:
+            # 1. Load model weights first to inspect architecture and vocabulary
+            self.model = WhisperForConditionalGeneration.from_pretrained(
+                load_target,
+                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
+                low_cpu_mem_usage=True
+            )
+            
+            # 2. Determine whether model is English-only (vocab 51864) or Multilingual (vocab 51865)
+            model_vocab = getattr(self.model.config, "vocab_size", 51864)
+            is_multilingual = getattr(self.model.config, "is_multilingual", None)
+            self.is_english_only = (
+                (model_vocab == 51864)
+                or (is_multilingual is False)
+                or (".en" in self.model_name.lower())
+                or (".en" in str(load_target).lower())
+            )
+            
+            if self.is_english_only:
+                if "base" in self.model_name.lower():
+                    base_arch = "openai/whisper-base.en"
+                elif "medium" in self.model_name.lower():
+                    base_arch = "openai/whisper-medium.en"
+                elif "tiny" in self.model_name.lower():
+                    base_arch = "openai/whisper-tiny.en"
+                else:
+                    base_arch = "openai/whisper-small.en"
+            else:
+                if "base" in self.model_name.lower():
+                    base_arch = "openai/whisper-base"
+                elif "medium" in self.model_name.lower():
+                    base_arch = "openai/whisper-medium"
+                elif "large" in self.model_name.lower():
+                    base_arch = "openai/whisper-large-v3"
+                else:
+                    base_arch = "openai/whisper-small"
+
+            # 3. Load processor matching model architecture
             try:
                 self.processor = WhisperProcessor.from_pretrained(load_target)
             except Exception as proc_err:
@@ -154,21 +191,18 @@ class TranscriptionEngine:
                 except Exception as comp_err:
                     logger.warning(
                         f"Component initialization failed ({comp_err}); "
-                        "falling back to compatible base Whisper processor"
+                        f"falling back to compatible base Whisper processor ({base_arch})"
                     )
-                    base_arch = "openai/whisper-small"
-                    if "base" in self.model_name.lower():
-                        base_arch = "openai/whisper-base"
-                    elif "medium" in self.model_name.lower():
-                        base_arch = "openai/whisper-medium"
-                    elif "large" in self.model_name.lower():
-                        base_arch = "openai/whisper-large-v3"
                     self.processor = WhisperProcessor.from_pretrained(base_arch)
-            self.model = WhisperForConditionalGeneration.from_pretrained(
-                load_target,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                low_cpu_mem_usage=True
-            )
+
+            # 4. Critical Token Alignment Guard: Ensure processor tokenizer vocabulary matches model vocabulary
+            proc_vocab = len(self.processor.tokenizer)
+            if proc_vocab != model_vocab:
+                logger.warning(
+                    f"⚠️ Tokenizer vocab size ({proc_vocab}) does not match model vocab size "
+                    f"({model_vocab}). Swapping to {base_arch} to prevent token misalignment."
+                )
+                self.processor = WhisperProcessor.from_pretrained(base_arch)
             
             # Move model to device
             self.model.to(self.device)
@@ -294,11 +328,18 @@ class TranscriptionEngine:
             stride_length_samples = STRIDE_LENGTH_S * sr
             audio_len = len(audio)
             
-            # English-only transcription
-            forced_decoder_ids = self.processor.get_decoder_prompt_ids(
-                language="en",
-                task="transcribe"
-            )
+            # English-only vs multilingual decoder setup
+            if getattr(self, "is_english_only", False) or getattr(self.model.config, "vocab_size", 51865) == 51864:
+                forced_decoder_ids = None
+            else:
+                try:
+                    forced_decoder_ids = self.processor.get_decoder_prompt_ids(
+                        language="en",
+                        task="transcribe"
+                    )
+                except Exception as err:
+                    logger.debug("get_decoder_prompt_ids skipped: %s", err)
+                    forced_decoder_ids = None
             
             logger.info("🔄 Transcribing (en)...")
             
@@ -369,13 +410,18 @@ class TranscriptionEngine:
             return_tensors="pt"
         ).input_features.to(device=self.device, dtype=self.model.dtype)        
         # Generate transcription
+        gen_kwargs = {
+            "num_beams": self.config.transcription.beam_size,
+            "max_length": 448,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
+        if forced_decoder_ids is not None:
+            gen_kwargs["forced_decoder_ids"] = forced_decoder_ids
+
         generated_ids = self.model.generate(
             input_features,
-            forced_decoder_ids=forced_decoder_ids,
-            num_beams=self.config.transcription.beam_size,
-            max_length=448,
-            return_dict_in_generate=True,
-            output_scores=True
+            **gen_kwargs
         )
         
         # Decode
