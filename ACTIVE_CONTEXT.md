@@ -106,6 +106,23 @@ This living document is the **shared memory** between different AI models, human
   - Confirmed `git diff main origin/snapshot` is completely empty.
 - **Next Tasks / Unfinished Work:** Branch consolidation complete; `main` is now the single source of truth.
 
+---
+
+### 2026-10-10 22:50 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Added optional OpenRouter LLM API key configuration choice to native installation scripts:
+    - **[`install.ps1`](file:///a:/Scanscribe_Projects/scanscribe/install.ps1):** Added `[string]$OpenRouterApiKey` parameter and interactive prompt (Prompt 6) with clear explanation ("Powers real-time dispatch incident routing, clustering, and thread summaries. Leave blank and press ENTER to skip"). Injects `OPENROUTER_API_KEY` into `.env` and updates `openrouter: api_key` in `config.yml`. Added to installation confirmation table.
+    - **[`install.sh`](file:///a:/Scanscribe_Projects/scanscribe/install.sh):** Added `--openrouter-key` flag and interactive prompt 6 with identical optional skip behavior, `.env` injection, `config.yml` configuration, and confirmation summary display.
+  - Synchronized documentation in `README.md` and verified `scanscribe_landing_page/index.html` download URLs point to `main`.
+  - Enforced Git branching policy in `AGENTS.md` and `.agents/skills/handoff/SKILL.md` (all active development on `snapshot`, `main` reserved for verified releases).
+  - Promoted changes to both `snapshot` and `main` (`805e1f7`), keeping working tree on `snapshot`.
+- **Live Ingestion Impact:** None. OpenRouter remains optional; if omitted, incident summary generation gracefully degrades/bypasses remote LLM calls without error.
+- **Verification Performed:**
+  - Full pytest test suite: 84/84 tests passing.
+  - Verified git status clean and synchronized across `origin/snapshot` and `origin/main`.
+- **Next Tasks / Unfinished Work:** Ready for user testing.
+
+
 
 
 
