@@ -128,7 +128,21 @@ class TranscriptionEngine:
         logger.info(f"📦 Loading model: {self.model_name} (from: {load_target})")
         
         try:
-            self.processor = WhisperProcessor.from_pretrained(load_target)
+            try:
+                self.processor = WhisperProcessor.from_pretrained(load_target)
+            except Exception as proc_err:
+                logger.warning(
+                    f"WhisperProcessor.from_pretrained failed for {load_target} ({proc_err}); "
+                    "falling back to compatible base Whisper processor"
+                )
+                base_arch = "openai/whisper-small"
+                if "base" in self.model_name.lower():
+                    base_arch = "openai/whisper-base"
+                elif "medium" in self.model_name.lower():
+                    base_arch = "openai/whisper-medium"
+                elif "large" in self.model_name.lower():
+                    base_arch = "openai/whisper-large-v3"
+                self.processor = WhisperProcessor.from_pretrained(base_arch)
             self.model = WhisperForConditionalGeneration.from_pretrained(
                 load_target,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
