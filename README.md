@@ -50,76 +50,69 @@ An open-source, AI-powered transcription and incident intelligence system purpos
 
 ## Prerequisites
 
-- **Docker & Docker Compose** (v2.0+)
-- **Python 3.8+** (for running the setup wizard)
-- **Whisper Model** (`models/whisper-*`) placed inside `./models/`
-- **NER Model** (`models/incident_ner_*`) placed inside `./models/`
+- **Python 3.10+** (automatically bootstrapped with `uv` if using installer scripts)
+- **Windows 10/11 / Windows Server** or **Ubuntu 20.04+ / Debian 11+**
 - **Hardware Requirements:**
-  - 8 GB+ RAM recommended for CPU transcription.
-  - 16 GB+ RAM / NVIDIA GPU (6 GB+ VRAM) recommended for GPU transcription or local LLM execution.
+  - 8 GB+ RAM recommended for CPU transcription (4+ worker threads).
+  - 16 GB+ RAM / NVIDIA GPU (6 GB+ VRAM) with CUDA for GPU acceleration.
+- *(Optional)* **Docker & Docker Compose** (v2.0+) — see [Docker Guide](docker/README.md).
 
 ---
 
-## Fast Interactive Setup (Recommended)
+## 1-Minute Quick Start (Native Station)
 
-ScanScribe provides an automated setup wizard (`install.sh` / `install.ps1` or the unified `scanscribe` CLI) that checks your system, generates security keys, configures CPU or GPU hardware acceleration, and initializes your environment in under a minute.
+ScanScribe runs natively on Windows and Linux stations with automated isolated Python environment management powered by Astral `uv`.
 
-### Step 1: Install Prerequisites
-1. **Docker Desktop / Docker Engine:**
-   - **Windows & macOS:** Download and start [Docker Desktop](https://www.docker.com/products/docker-desktop/).
-   - **Linux:** Install [Docker Engine & Compose Plugin](https://docs.docker.com/engine/install/).
-2. **Python 3.10+:**
-   - Ensure Python is installed on your host system (`python3 --version` or `python --version`).
+### One-Line Automated Install
 
-### Step 2: Clone the Repository
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.ps1 | iex
+```
+
+**Linux / macOS (Bash):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.sh | bash
+```
+
+### Or Clone & Run Interactively
 ```bash
 git clone https://github.com/xxbubziexx/ScanScribe.git
 cd ScanScribe
+
+# On Windows:
+.\install.ps1
+
+# On Linux:
+./install.sh
 ```
 
-### Step 3: Run the Setup Wizard
-Launch the setup script for your operating system:
+### What the Native Installer Automates:
+- [x] Provisions isolated Python runtime with `uv` (zero conflicts with host Python).
+- [x] Automatically detects and configures CPU threads or NVIDIA CUDA acceleration.
+- [x] Pre-downloads battle-tested CrimeRadar Whisper STT and Incident NER models.
+- [x] Generates cryptographically secure JWT secrets and initializes the SQLite database.
+- [x] Registers the cross-platform `scanscribe` CLI command into your PATH.
+- [x] Configures automatic silent background service startup on user logon.
 
-- **Linux / macOS / Git Bash:**
-  ```bash
-  ./install.sh
-  ```
-- **Windows (PowerShell):**
-  ```powershell
-  .\install.ps1
-  ```
-  *(If blocked by Windows execution policy, run: `powershell -ExecutionPolicy Bypass -File .\install.ps1`)*
-- **Universal CLI:**
-  ```bash
-  python -m app.cli setup
-  # Or with package installed:
-  scanscribe setup
-  ```
+---
 
-### Step 4: Interactive Prompts
-The wizard will guide you through:
-1. **Hardware Acceleration:** Automatically checks for an NVIDIA GPU via `nvidia-smi`. Select `[1] CPU` or `[2] GPU (CUDA)`. The wizard copies the matching `docker-compose.yml` and `requirements.txt` pair and sets `device` in `config.yml`.
-2. **Admin Password:** Sets the initial password for the default `admin` account.
-3. **Local Timezone:** Sets your local timezone (e.g. `America/Chicago`, `America/New_York`, `UTC`).
-4. **Instant Boot:** Optionally launches the container immediately via Docker Compose.
+## Service Management & CLI Commands
 
-### What the Setup Script Automates:
-- [x] Generates a cryptographically secure 64-character random `SECRET_KEY` in `.env`.
-- [x] Configures `docker-compose.yml` and `requirements.txt` for CPU or GPU.
-- [x] Sets up `config.yml` with the correct device and worker threads.
-- [x] Bootstraps initial administrator credentials in `.env`.
-- [x] Creates all required folders (`./data`, `./logs`, `./audio_storage`, `./models`).
-- [x] Validates model directories and launches `docker compose up -d --build`.
+Manage ScanScribe from anywhere via the unified terminal CLI:
 
-### Step 5: Access the Web Interface
-Once started, navigate to:
-**`http://localhost:8000`**
+```bash
+scanscribe start     # Start ScanScribe background service
+scanscribe stop      # Gracefully stop running server and workers
+scanscribe restart   # Restart server with updated configuration
+scanscribe status    # Health check, active PID, port, and update notification
+scanscribe logs      # Live tail consolidated system logs
+scanscribe open      # Open Command Center in default browser (http://localhost:8000)
+scanscribe update    # Pull latest release and synchronize dependencies
+scanscribe uninstall # Clean uninstall (preserves database, recordings, and models)
+```
 
-Log in using your administrator credentials:
-- **Username:** `admin`
-- **Password:** *(the password chosen during setup, default: `admin`)*
-
-*(Note: On any fresh installation, the very first user who registers through the web interface is also automatically granted full Administrator privileges).*
+For containerized deployments, see [docker/README.md](docker/README.md).
 
 ---
 
