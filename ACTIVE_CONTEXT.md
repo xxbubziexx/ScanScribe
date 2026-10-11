@@ -89,6 +89,24 @@ This living document is the **shared memory** between different AI models, human
   - Full pytest suite ran: 77 passed in 12.27s (0 failures, 0 warnings).
 - **Next Tasks / Unfinished Work:** All requested models (Whisper + NER) are fully wired into configuration, installer scripts, landing page, and inference engines.
 
+---
+
+### 2026-10-10 22:30 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Diagnosed and resolved Whisper tokenizer vocabulary alignment bug for English-only fine-tuned models (`vocab_size == 51864` vs multilingual `51865`), resolving gibberish transcriptions.
+  - Executed Branch Consolidation Master Plan:
+    - **Phase 1:** Created immutable annotated tags `archive/main-legacy-2026-10-10` and `archive/ui-upgrade-react-2026-10-10`, pushed backup branches `legacy/main-pre-refactor` and `legacy/ui-upgrade-react`, and verified full offline backup `scanscribe-backup-2026-10-10.bundle`.
+    - **Phase 2:** Successfully consolidated `snapshot` into `main` using `-s ours` (preserving complete commit history with zero force-push). Fast-forwarded `main` to the unified tree.
+    - Tagged and pushed official release `v2.0.0`.
+  - Updated `README.md` to document the 1-minute native station installer and CLI commands.
+- **Live Ingestion Impact:** None. All live endpoints and models preserved.
+- **Verification Performed:**
+  - Ran full test suite: 84 passed in 13.80s (100% green).
+  - Verified `https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.ps1` and `install.sh` return HTTP 200 OK.
+  - Confirmed `git diff main origin/snapshot` is completely empty.
+- **Next Tasks / Unfinished Work:** Branch consolidation complete; `main` is now the single source of truth.
+
+
 
 
 <!-- 

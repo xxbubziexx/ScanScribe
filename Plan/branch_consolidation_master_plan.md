@@ -1,6 +1,6 @@
 # Branch Consolidation Master Plan
 
-**Created:** 2026-10-10 · **Status:** PLANNED (not executed)
+**Created:** 2026-10-10 · **Status:** COMPLETED (v2.0.0 released on main)
 **Goal:** Make `main` the single source of truth again, without losing any history.
 
 | Phase | Objective | Plan file | Destructive? |
