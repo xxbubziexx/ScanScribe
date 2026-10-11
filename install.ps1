@@ -535,6 +535,8 @@ OUTPUT_DIR=$($InstallDir -replace '\\', '/')/audio_storage
 LOG_DIR=$($InstallDir -replace '\\', '/')/logs
 DB_PATH=$($InstallDir -replace '\\', '/')/data/scanscribe.db
 CONFIG_PATH=$($InstallDir -replace '\\', '/')/config.yml
+SCANSCRIBE_DEFAULT_ADMIN_USERNAME=admin
+SCANSCRIBE_DEFAULT_ADMIN_PASSWORD=admin
 "@
 Set-Content -Path (Join-Path $InstallDir ".env") -Value $envContent -Encoding UTF8
 
@@ -611,6 +613,11 @@ Write-Host "Starting ScanScribe service..." -ForegroundColor Cyan
 
 & (Join-Path $binDir "scanscribe.cmd") start --port $Port
 
+Write-Host ""
+Write-Host "Initial Web Administrator Login:" -ForegroundColor Cyan
+Write-Host "  URL     : http://localhost:$Port"
+Write-Host "  Username: admin"
+Write-Host "  Password: admin  (please change password after first login)"
 Write-Host ""
 Write-Host "All set! You can control ScanScribe anytime from any terminal:" -ForegroundColor Yellow
 Write-Host "  scanscribe status    - Check health and queue statistics"
