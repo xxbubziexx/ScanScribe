@@ -389,4 +389,6 @@ echo "  scanscribe status    - Check health and status"
 echo "  scanscribe logs      - Live stream logs"
 echo "  scanscribe stop      - Stop the background server"
 echo "  scanscribe start     - Start the background server"
+echo "  scanscribe update    - Pull updates, sync packages, and migrate database"
+
 echo ""

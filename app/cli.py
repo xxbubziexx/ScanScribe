@@ -1,11 +1,11 @@
 """ScanScribe CLI: server control + maintenance.
 
 Usage:
-    python -m app.cli start|stop|restart|status|logs|open|uninstall
+    python -m app.cli start|stop|restart|status|logs|open|update|uninstall
     python -m app.cli rebuild_entity_observations [--since YYYY-MM-DD] [--monitor MID] [--dry-run]
 
 Subcommands:
-    start / stop / restart / status / logs / open / uninstall
+    start / stop / restart / status / logs / open / update / uninstall
         Background server lifecycle and uninstallation (see app/server_control.py).
     rebuild_entity_observations
         Recompute and re-insert EntityObservation rows for existing SpanStore rows.
@@ -219,6 +219,7 @@ def _add_lifecycle_commands(sub: argparse._SubParsersAction) -> None:
     p_start.add_argument("--host", type=str, default=sc.DEFAULT_HOST, help="Host to bind to (default: 0.0.0.0)")
     p_start.add_argument("--silent", action="store_true", help="No banner or browser launch")
     p_start.add_argument("--foreground", action="store_true", help="Run in foreground instead of detached")
+    p_start.add_argument("--no-update-check", action="store_true", help="Skip checking for updates on launch")
     p_start.set_defaults(func=sc.cmd_start)
 
     sub.add_parser("stop", help="Stop the running ScanScribe instance").set_defaults(func=sc.cmd_stop)
@@ -230,6 +231,13 @@ def _add_lifecycle_commands(sub: argparse._SubParsersAction) -> None:
     p_restart.set_defaults(func=sc.cmd_restart)
 
     sub.add_parser("status", help="Show PID, port and health").set_defaults(func=sc.cmd_status)
+
+    p_update = sub.add_parser("update", help="Update ScanScribe codebase, sync packages, and run database migrations")
+    p_update.add_argument("--branch", type=str, default="main", help="Git branch to pull updates from (default: main)")
+    p_update.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts and auto-restart if running")
+    p_update.add_argument("--restart", action="store_true", help="Automatically restart background service after updating")
+    p_update.add_argument("--force", action="store_true", help="Re-sync dependencies and migrations even if already up to date")
+    p_update.set_defaults(func=sc.cmd_update)
 
     p_logs = sub.add_parser("logs", help="View or stream live logs")
     p_logs.add_argument("-n", "--lines", type=int, default=50, help="Previous lines to show (default: 50)")
