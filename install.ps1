@@ -430,7 +430,7 @@ if (Test-Path $pyprojectFile) {
 
 # Explicit safety guarantee: Ensure core web runtime is present
 Write-Host "    Verifying core runtime dependencies (uvicorn, fastapi, slowapi, alembic, httpx)..."
-& $uvExe pip install "uvicorn[standard]>=0.30.0" "fastapi>=0.115.0" "slowapi>=0.1.9" "alembic>=1.13.3" "httpx>=0.27.2" "huggingface-hub>=0.23.0" "pyyaml>=6.0" --python $venvPython --quiet
+& $uvExe pip install "uvicorn[standard]>=0.30.0" "fastapi>=0.115.0" "slowapi>=0.1.9" "alembic>=1.13.3" "httpx>=0.27.2" "huggingface-hub>=0.23.2,<1.0" "pyyaml>=6.0" --python $venvPython --quiet
 
 
 

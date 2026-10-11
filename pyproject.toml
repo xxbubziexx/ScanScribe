@@ -22,6 +22,7 @@ dependencies = [
     "torchaudio>=2.2.0",
     "soundfile>=0.12.1",
     "transformers>=4.45.0",
+    "huggingface-hub>=0.23.2,<1.0",
     "slowapi>=0.1.9",
     "python-multipart>=0.0.12",
     "python-jose[cryptography]>=3.3.0",
@@ -38,6 +39,11 @@ dev = [
 
 [project.scripts]
 scanscribe = "app.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["tests*", "data*", "logs*", "models*", "ingest*", "audio_storage*", "Plan*", "docker*", "screenshots*", "alembic*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
