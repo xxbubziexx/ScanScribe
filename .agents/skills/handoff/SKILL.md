@@ -60,11 +60,12 @@ Read [`ACTIVE_CONTEXT.md`](file:///a:/Scanscribe_Projects/scanscribe/ACTIVE_CONT
 
 Also review **Section 2 (In-Progress Features & Next Objectives)** and check off completed items or add newly discovered tasks.
 
-### Step 5: Remind the Human Developer to Push
-Advise the user to commit and push their changes:
+### Step 5: Commit and Push to `snapshot`
+Commit and push changes to the development branch:
 ```bash
 git add .
 git commit -m "feat/fix: <summary>"
-git push
+git push origin snapshot
 ```
-This ensures the live Ubuntu server or the next workstation receives both the code and the updated [`ACTIVE_CONTEXT.md`](file:///a:/Scanscribe_Projects/scanscribe/ACTIVE_CONTEXT.md) in a single pull.
+Per [`AGENTS.md`](file:///a:/Scanscribe_Projects/scanscribe/AGENTS.md) §5, active development commits are always pushed to `snapshot`, reserving `main` strictly for verified release promotions.
+
