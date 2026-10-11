@@ -28,6 +28,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Ensure script execution policy allows running local scripts for CurrentUser
+try {
+    $currentPolicy = Get-ExecutionPolicy -Scope CurrentUser
+    if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "Undefined") {
+        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force -ErrorAction SilentlyContinue
+    }
+} catch {
+    # Silently ignore if locked by enterprise Group Policy
+}
+
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "         ScanScribe Native Windows Station Installer       " -ForegroundColor Cyan
