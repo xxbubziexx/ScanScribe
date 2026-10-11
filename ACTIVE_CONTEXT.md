@@ -141,6 +141,25 @@ This living document is the **shared memory** between different AI models, human
   - Verified local and remote branch alignment (`origin/main` & `origin/snapshot`).
 - **Next Tasks / Unfinished Work:** System fully stable and ready for ongoing live operations or next feature requests.
 
+---
+
+### 2026-10-11 11:15 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Upgraded companion scanner forwarding utility in `A:\Scanscribe_Projects\scanscribe_uploader` ([`Scanscribe-Uploader-Client`](https://github.com/xxbubziexx/Scanscribe-Uploader-Client)):
+    - **Interactive Setup Wizard (`--setup`):** Fixed bug where `--setup` flag was documented in README/quick-start but missing from argparse. Added full step-by-step wizard (server URL, credential verification, local watch folder creation, and auto-cleanup options).
+    - **Server Diagnostic Check (`--test` / `--ping`):** Added live network latency ping, credential test against `/api/auth/login`, and upload pipeline inspection against `/api/upload/status`.
+    - **Removed Hardcoded IP:** Replaced hardcoded `192.168.10.120` defaults across config and documentation with `http://localhost:8000` default and generic `http://192.168.1.100:8000` examples.
+    - **Windows Console Encoding Fix:** Configured Windows UTF-8 console output code page (`CP 65001`) and stream reconfiguration to prevent `cp1252` `UnicodeEncodeError` crashes on Windows command prompt/PowerShell.
+    - **Interactive Menu Enhancements:** Added direct access to connection test (`7`) and setup wizard (`8`), plus secure password masking via `getpass`.
+    - **Documentation & Scripts:** Updated [`README.md`](file:///A:/Scanscribe_Projects/scanscribe_uploader/README.md), [`README-CONSOLE.md`](file:///A:/Scanscribe_Projects/scanscribe_uploader/README-CONSOLE.md), [`BUILD.md`](file:///A:/Scanscribe_Projects/scanscribe_uploader/BUILD.md), and [`quick-start.bat`](file:///A:/Scanscribe_Projects/scanscribe_uploader/quick-start.bat).
+  - Pushed changes cleanly to GitHub (`Scanscribe-Uploader-Client` commit `18a33c4`).
+- **Live Ingestion Impact:** None. Zero server schema changes. Endpoint compatibility with `/api/upload/audio` and `/api/upload/status` preserved 100%.
+- **Verification Performed:**
+  - Tested `--help`, `--version`, and `--test` under Python 3.11.
+  - Confirmed `cp1252` encoding fix resolves console crash.
+- **Next Tasks / Unfinished Work:** Standalone PyInstaller Windows executable build or Task Scheduler auto-start can be packaged when ready.
+
+
 
 
 
