@@ -1,7 +1,7 @@
 # ScanScribe
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/screenshots/Screenshot_1.png" alt="ScanScribe Banner" width="100%">
+  <img src="screenshots/command_center_map.png" alt="ScanScribe Tactical Command Center" width="100%">
 </p>
 
 <p align="center">
@@ -29,22 +29,40 @@ Whether running as a dedicated field station on Windows or a 24/7 ingestion serv
 
 ## Visual Showcase
 
-### Tactical Command Center & Live Feed
-*Real-time audio feed, live waveform playback, and tactical incident stream.*
+### 🗺️ Tactical Command Center & Live Map
+*Interactive geospatial dispatch map with real-time incident pins, live emergency call feeds, and inline waveform audio playback.*
 <p align="center">
-  <img src="screenshots/Screenshot_1.png" alt="ScanScribe Dashboard" width="90%">
+  <img src="screenshots/command_center_map.png" alt="Tactical Command Center" width="95%">
 </p>
 
-### Deep Search & Advanced Metadata Filtering
-*Search transcriptions by unit, talkgroup, frequency, confidence score, or text queries.*
+### 🎙️ Real-Time Audio Feed & Live System Telemetry
+*Streaming radio audio processing feed with live confidence ratings, silence gate trimming, hardware resource meters, and streaming system logs.*
 <p align="center">
-  <img src="screenshots/Screenshot_2.png" alt="Search Engine" width="90%">
+  <img src="screenshots/main_feed.png" alt="Live Audio Feed and System Telemetry" width="95%">
 </p>
 
-### Activity Analytics & Incident Insights
-*Hourly traffic breakdowns, busiest talkgroups, unit deployment metrics, and AI hourly recaps.*
+### 🧠 Incident Intelligence Hub & Event Threads
+*Automated incident thread aggregation powered by public safety NER and single-pass LLM routing, showing unit callsigns, incident classification, and structured spans.*
 <p align="center">
-  <img src="screenshots/Screenshot_3.png" alt="Analytics Dashboard" width="90%">
+  <img src="screenshots/events_dashboard.png" alt="Incident Intelligence Dashboard" width="95%">
+</p>
+
+### 📈 Activity Analytics & Traffic Telemetry
+*Hourly dispatch volume curves, busiest talkgroup analysis, peak hour identification, and multi-parameter transcription search.*
+<p align="center">
+  <img src="screenshots/insights_graph.png" alt="Analytics and Incident Insights" width="95%">
+</p>
+
+### 📝 Automated AI Incident Summaries
+*Automated chronological intelligence reports categorized by medical emergencies, transport runs, police dispatches, and traffic stops.*
+<p align="center">
+  <img src="screenshots/summary_example.png" alt="AI Dispatch Hourly Summary" width="95%">
+</p>
+
+### 🗄️ Database Explorer Suite
+*Unified data viewer for pipeline incidents, transcript spans, token-level NER observations, and audio logs with CSV export.*
+<p align="center">
+  <img src="screenshots/database_manager.png" alt="Database Explorer Suite" width="95%">
 </p>
 
 ---
