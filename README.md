@@ -1,81 +1,105 @@
 # ScanScribe
 
-An open-source, AI-powered transcription and incident intelligence system purpose-built for public safety radio scanning. ScanScribe captures raw radio transmissions from SDR receivers or scanner software, transcribes them with OpenAI Whisper, extracts critical entities with custom NER, routes dispatches into live incident threads via LLMs, and maps them in real time on an interactive tactical Command Center.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/screenshots/Screenshot_1.png" alt="ScanScribe Banner" width="100%">
+</p>
+
+<p align="center">
+  <strong>AI-Powered Public Safety Radio Transcription, Incident Intelligence & Tactical Live Mapping</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/xxbubziexx/ScanScribe/releases"><img src="https://img.shields.io/badge/Release-v2.0.0-blue.svg?style=flat-square" alt="Release v2.0.0"></a>
+  <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=flat-square" alt="Python 3.10+"></a>
+  <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/badge/Runtime-uv%20Isolated-purple.svg?style=flat-square" alt="Runtime uv"></a>
+  <a href="https://pytorch.org"><img src="https://img.shields.io/badge/Inference-CPU%20%7C%20CUDA-green.svg?style=flat-square" alt="Inference CPU | CUDA"></a>
+  <a href="https://huggingface.co"><img src="https://img.shields.io/badge/Whisper-Fine--Tuned-orange.svg?style=flat-square" alt="Fine-Tuned Whisper"></a>
+  <a href="https://github.com/xxbubziexx/ScanScribe/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Proprietary-red.svg?style=flat-square" alt="License"></a>
+</p>
 
 ---
 
-## Screenshots
+## Overview
 
-### Tactical Command Center & Live Map
-*Interactive map with draggable pins, auto-reverse geocoding, address autocomplete, and inline audio playback.*
+**ScanScribe** is an enterprise-grade, end-to-end intelligence station purpose-built for public safety radio monitoring. It captures raw transmissions from SDR receivers (SDRTrunk) or hardware scanners (ProScan), runs high-throughput local speech-to-text with specialized public safety Whisper models, extracts incident entities (units, addresses, event types) using token-level NER, routes transmissions into real-time incident threads via single-pass LLMs, and maps active calls live on a tactical Command Center.
 
-### ScanScribe Dashboard & Live Feed
-<img src="screenshots/Screenshot_1.png" alt="ScanScribe Dashboard">
-
-### Search and Advanced Filtering
-<img src="screenshots/Screenshot_2.png" alt="Search Engine for Transcriptions">
-
-### Real-Time Insights & Activity Analytics
-<img src="screenshots/Screenshot_3.png" alt="Advanced Insights">
+Whether running as a dedicated field station on Windows or a 24/7 ingestion server on Linux, ScanScribe provides immediate situational awareness for dispatchers, researchers, and scanner hobbyists.
 
 ---
 
-## Key Features
+## Visual Showcase
 
-- **High-Performance Whisper Transcription**
-  - Multi-worker parallel processing, Voice Activity Detection (VAD) filtering, and silence removal.
-  - Native support for both **CPU** (optimized multi-threading) and **NVIDIA GPU** (CUDA acceleration).
-- **Tactical Command Center & Live Map**
-  - Real-time incident mapping powered by Leaflet and OpenStreetMap Nominatim (100% free, no API keys required).
-  - **Draggable Markers**: Drag and release any pin to automatically update incident coordinates and reverse-geocode to the nearest street address.
-  - **Type-Ahead Address Search**: Instant autocomplete search bar on incident cards to quickly find and pin locations.
-  - **Corridor & Highway Midpoint Geocoding**: Automatically resolves directional highway dispatches (e.g. *Southbound US Highway 67*) to the highway corridor within the monitor's county jurisdiction.
-  - **Custom Landmark Aliases**: Built-in and config-extensible landmark resolver (e.g. local restaurants, parks, mile markers).
-  - **Inline Radio Dispatch Player**: Compact audio waveform player directly on incident cards for instant transmission verification.
-- **AI Events Pipeline & Incident Routing**
-  - Public-safety entity extraction (NER) identifies event types, units, addresses, and cross-streets.
-  - **Single-Pass LLM Router**: Fast, robust routing powered by OpenRouter (Gemini, Claude, or free tier models) or local Ollama instances.
-  - Automatically manages incident lifecycles (`CREATE`, `ATTACH`, `CLOSE`, `BROADCAST`), normalizes headers, and generates thread summaries.
-  - **Absolute Truth Known Units**: Configure known unit identifiers per monitor/department to eliminate hallucinated callsigns.
-- **Dataset Studio & Fine-Tuning Pipeline**
-  - In-browser review tool to inspect transcriptions against raw audio, edit corrections, and tag reviewed samples.
-  - **1-Click Fine-Tuning Export**: Exports reviewed audio and HuggingFace-compatible `metadata.csv` for fine-tuning custom Whisper models.
-- **Enterprise-Grade Web Interface & Security**
-  - Fast, modern React SPA (Vite, TypeScript, Tailwind CSS, dark tactical theme).
-  - Real-time WebSocket streaming for zero-latency dashboard updates.
-  - Raw console output & real-time pipeline event trace terminals.
-  - JWT authentication with automatic **Admin promotion on first registration** and SlowAPI rate-limiting protection.
+### Tactical Command Center & Live Feed
+*Real-time audio feed, live waveform playback, and tactical incident stream.*
+<p align="center">
+  <img src="screenshots/Screenshot_1.png" alt="ScanScribe Dashboard" width="90%">
+</p>
+
+### Deep Search & Advanced Metadata Filtering
+*Search transcriptions by unit, talkgroup, frequency, confidence score, or text queries.*
+<p align="center">
+  <img src="screenshots/Screenshot_2.png" alt="Search Engine" width="90%">
+</p>
+
+### Activity Analytics & Incident Insights
+*Hourly traffic breakdowns, busiest talkgroups, unit deployment metrics, and AI hourly recaps.*
+<p align="center">
+  <img src="screenshots/Screenshot_3.png" alt="Analytics Dashboard" width="90%">
+</p>
 
 ---
 
-## Prerequisites
+## Core Capabilities
 
-- **Python 3.10+** (automatically bootstrapped with `uv` if using installer scripts)
-- **Windows 10/11 / Windows Server** or **Ubuntu 20.04+ / Debian 11+**
-- **Hardware Requirements:**
-  - 8 GB+ RAM recommended for CPU transcription (4+ worker threads).
-  - 16 GB+ RAM / NVIDIA GPU (6 GB+ VRAM) with CUDA for GPU acceleration.
-- *(Optional)* **Docker & Docker Compose** (v2.0+) — see [Docker Guide](docker/README.md).
+### 🎙️ Specialized Public Safety Transcription
+- **Pre-Tuned Foundation Models**: Ships pre-configured with **`sepiaapps/whisper-small.en-police-radio`** (CrimeRadar) and supports custom fine-tuned checkpoints like **`xxbubziexx/whisper-small-public-safety-v2-FINAL`**.
+- **Voice Activity Detection (VAD) & Silence Gate**: Built-in Silero VAD cuts radio dead-air and noise floor squelch before transcription, dramatically reducing compute time.
+- **Hardware Acceleration**: Automatic runtime optimization for both **CPU** (multi-threaded AVX2/AVX-512) and **NVIDIA GPU** (CUDA FP16).
+- **Exact Vocabulary Alignment**: Automatically safeguards against tokenizer token-shift, guaranteeing clean, distortion-free English transcripts.
+
+### 🗺️ Tactical Command Center & Live Map
+- **Interactive Mapping**: Powered by Leaflet with OpenStreetMap Nominatim geocoding (100% free, zero external API keys required).
+- **Draggable Pins & Instant Reverse-Geocoding**: Drag any marker to adjust an incident location; coordinates and nearest street addresses re-calculate immediately.
+- **Type-Ahead Address Search**: Instant autocomplete search bar on incident cards to quickly locate landmarks or intersections.
+- **Corridor & Highway Midpoint Resolution**: Intelligently parses directional dispatches (e.g. *"Southbound US Highway 67"*) to highway corridor coordinates within jurisdictional boundaries.
+- **Custom Landmark Engine**: Extensible config dictionary mapping local slang (e.g. *"Walmart North"*, *"Mile Marker 112"*) to physical addresses.
+- **Inline Audio Waveform Player**: Playback the original transmission snippet directly on any map marker or incident card.
+
+### 🧠 Incident NER & Single-Pass LLM Routing
+- **Public-Safety Named Entity Recognition (NER)**: Powered by [`xxbubziexx/incident_ner_v1`](https://huggingface.co/xxbubziexx/incident_ner_v1) to extract units, locations, event types, and cross-streets.
+- **Single-Pass LLM Classifier**: Ultra-fast routing via OpenRouter (Gemini, Claude, Llama 3) or local Ollama instances.
+- **Automated Incident Lifecycle**: Intelligently triggers `CREATE`, `ATTACH`, `CLOSE`, or `BROADCAST` actions to maintain organized incident threads.
+- **Absolute Truth Known Units**: Enforces real department unit rosters to prevent hallucinated callsigns.
+
+### 📊 Dataset Studio & Fine-Tuning Pipeline
+- **In-Browser Review Station**: Inspect transcriptions side-by-side with original radio audio, edit corrections, and mark verification status.
+- **1-Click Fine-Tuning Export**: Exports reviewed audio snippets with Hugging Face-ready `metadata.csv` formatting for training your own custom Whisper models.
+
+### ⚡ Unified High-Performance Architecture
+- **Single Consolidated SQLite Database**: All accounts, settings, transcripts, and incidents live in a unified `data/scanscribe.db` using WAL mode and managed via Alembic migrations.
+- **Modern React SPA**: Built with Vite, TypeScript, and Tailwind CSS in a dark tactical palette.
+- **Zero-Latency WebSockets**: Pushes transcripts and incident updates to connected browsers the second audio finishes processing.
+- **Enterprise Security**: JWT authentication with automatic Administrator elevation on first registration, plus SlowAPI rate-limiting protection.
 
 ---
 
 ## 1-Minute Quick Start (Native Station)
 
-ScanScribe runs natively on Windows and Linux stations with automated isolated Python environment management powered by Astral `uv`.
+ScanScribe runs natively on **Windows** and **Linux** with zero manual dependency configuration. An isolated Python environment is automatically bootstrapped using Astral `uv`.
 
-### One-Line Automated Install
+### Option A: One-Line Automated Install
 
-**Windows (PowerShell):**
+**Windows (PowerShell as Administrator or Standard User):**
 ```powershell
 irm https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.ps1 | iex
 ```
 
-**Linux / macOS (Bash):**
+**Linux / Ubuntu Server (Bash):**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.sh | bash
 ```
 
-### Or Clone & Run Interactively
+### Option B: Clone & Run Interactively
 ```bash
 git clone https://github.com/xxbubziexx/ScanScribe.git
 cd ScanScribe
@@ -87,19 +111,19 @@ cd ScanScribe
 ./install.sh
 ```
 
-### What the Native Installer Automates:
-- [x] Provisions isolated Python runtime with `uv` (zero conflicts with host Python).
-- [x] Automatically detects and configures CPU threads or NVIDIA CUDA acceleration.
-- [x] Pre-downloads battle-tested CrimeRadar Whisper STT and Incident NER models.
-- [x] Generates cryptographically secure JWT secrets and initializes the SQLite database.
-- [x] Registers the cross-platform `scanscribe` CLI command into your PATH.
-- [x] Configures automatic silent background service startup on user logon.
+### What the Installer Automates:
+- [x] Bootstraps isolated Python 3.11 runtime using Astral `uv` (will never touch or conflict with your system Python).
+- [x] Detects hardware capabilities and configures multi-threaded CPU or NVIDIA CUDA acceleration.
+- [x] Downloads and verifies the public safety Whisper STT and Incident NER models.
+- [x] Generates cryptographically secure JWT secrets and initializes the SQLite database (`alembic upgrade head`).
+- [x] Installs the cross-platform `scanscribe` CLI command into your PATH.
+- [x] Registers an automated silent background task at Windows logon or Linux systemd user service.
 
 ---
 
-## Service Management & CLI Commands
+## Service Management & CLI Palette
 
-Manage ScanScribe from anywhere via the unified terminal CLI:
+Once installed, manage ScanScribe from any command prompt or terminal:
 
 ```bash
 scanscribe start     # Start ScanScribe background service
@@ -112,127 +136,71 @@ scanscribe update    # Pull latest release and synchronize dependencies
 scanscribe uninstall # Clean uninstall (preserves database, recordings, and models)
 ```
 
-For containerized deployments, see [docker/README.md](docker/README.md).
-
----
-
-### Non-Interactive & Automated Deployments (CLI Flags)
-For automated scripting, server provisioning, or CI/CD pipelines, use the `scanscribe` CLI commands:
-
+### Automated / Non-Interactive Deployment Flags
 ```bash
-# Automated CPU setup and immediate launch
+# Automated non-interactive install
 python -m app.cli setup --cpu --yes --start
-
-# Automated GPU setup and immediate launch
-python -m app.cli setup --gpu --yes --start
 
 # Database migration
 python -m app.cli migrate
-
-# Clean uninstallation (preserves recordings, database, and models)
-scanscribe uninstall
-# Or with standalone script:
-.\uninstall.ps1  # Windows
-./uninstall.sh   # Linux
 
 # Complete purge (removes recordings, database, models, and configs)
 scanscribe uninstall --purge
 ```
 
-
 ---
 
-## Manual Docker Setup Alternative
+## System Architecture
 
-If you prefer configuring files manually without the setup wizard:
+```mermaid
+flowchart TD
+    subgraph Ingestion
+        A[SDRTrunk / ProScan] -->|WAV / MP3| B[ingest/ Directory]
+        C[Uploader Client] -->|HTTP POST| B
+    end
 
-### 1. Configure Environment
-```bash
-cp .env.example .env
-```
-Open `.env` and set a random 64-character `SECRET_KEY`:
-```bash
-python3 -c "import secrets; print(secrets.token_hex(32))"
-```
+    subgraph Audio Processing
+        B --> D[Directory Watcher & Queue Worker]
+        D --> E[Silero Voice Activity Detection]
+        E -->|Silence Trimmed Audio| F[Transcription Engine]
+        F -->|PyTorch / CUDA| G[Whisper STT Model]
+    end
 
-### 2. Choose CPU or GPU
-Copy the appropriate configuration files:
+    subgraph Intelligence Pipeline
+        G --> H[Incident NER Engine]
+        H -->|Units, Locations, Events| I[Single-Pass LLM Router]
+        I -->|OpenRouter / Ollama| J[Incident Thread Manager]
+        J --> K[Nominatim Geocoder]
+    end
 
-**For CPU:**
-```bash
-cp docker/docker-compose.cpu.example docker-compose.yml
-cp docker/requirements.cpu.example requirements.txt
-```
-In `config.yml`, ensure `model.device: cpu`.
-
-**For NVIDIA GPU (CUDA):**
-```bash
-cp docker/docker-compose.gpu.example docker-compose.yml
-cp docker/requirements.gpu.example requirements.txt
-```
-In `config.yml`, set `model.device: cuda`.
-
-### 3. Initialize `config.yml`
-```bash
-cp config.yml.example config.yml
-```
-Ensure `model.name` points to your Whisper directory inside `./models/`.
-
-### 4. Build and Start
-```bash
-docker compose up -d --build
+    subgraph Storage & Presentation
+        G --> L[(Unified DB: data/scanscribe.db)]
+        J --> L
+        K --> L
+        L --> M[FastAPI Application]
+        M -->|WebSocket & REST| N[React SPA Command Center]
+    end
 ```
 
 ---
 
-## Models Setup
+## Audio Ingestion & Scanner Setup
 
-Place your model checkpoints into the `./models/` directory:
+### 1. Ingest Directory
+Point your SDR receiver or scanner software to save audio into the configured ingest folder (default: `C:\ScanScribe\ingest` on Windows, `~/scanscribe/ingest` on Linux). ScanScribe processes incoming audio files instantly.
 
-```
-models/
-├── whisper-small/              # Base or fine-tuned Whisper model
-│   ├── config.json
-│   ├── model.bin (or safetensors)
-│   └── tokenizer.json
-└── incident_ner_v1/            # Public-safety NER model
-    ├── config.json
-    └── pytorch_model.bin
-```
+### 2. Scanner Software Configurations
 
-- **Whisper Speech-to-Text:** Use any standard HuggingFace Whisper model (e.g. [`openai/whisper-small`](https://huggingface.co/openai/whisper-small)) or your own fine-tuned model.
-- **Public Safety NER:** Download the fine-tuned public-safety NER model from [HuggingFace: xxbubziexx/incident_ner_v1](https://huggingface.co/xxbubziexx/incident_ner_v1).
+#### SDRTrunk
+Supported natively out of the box. SDRTrunk writes standard radio metadata into audio header tags, which ScanScribe parses automatically.
 
----
+#### ProScan
+To maximize metadata capture (talkgroups, channel names, and timestamps), configure ProScan logging:
+1. **Filename Format**: `%TT %D %C` *(enables precise timestamp extraction from filename)*
+2. **Title (TIT2) Tag**: `%TG %G %C` *(enables talkgroup, system, and channel extraction)*
 
-## Architecture Overview
-
-```
-ScanScribe Container (Port 8000)
-│
-├── FastAPI Application
-│   ├── Auth & User Management (JWT, SlowAPI rate-limiting)
-│   ├── Transcriptions API & Audio Streaming (/{audio_path})
-│   ├── Command Center API (Geocoding, Autocomplete, Draggable Pins)
-│   ├── Events Pipeline API (Incident Threads, Spans, Debug Telemetry)
-│   ├── Dataset Review & Export API (/api/logs/export-dataset)
-│   └── Settings, Health, & System Maintenance
-│
-├── Background Workers
-│   ├── Audio Watcher & Queue Ingestion (./ingest directory or HTTP client)
-│   ├── Whisper Transcription Engine (Multi-worker pool, VAD filtering)
-│   ├── NER Extractor (Local PyTorch NER inference)
-│   ├── AI Events Router (Single-pass LLM: OpenRouter or Ollama)
-│   └── Auto-Close Worker (Sweeps idle incidents by transmission age)
-│
-├── React Frontend SPA (Vite + TypeScript + Leaflet)
-│   └── Served directly from /app/ (Vite build in app/frontend/dist)
-│
-└── Persistent SQLite Storage (./data/)
-    ├── scanscribe.db        (Users, application settings)
-    ├── scanscribe_logs.db   (Transcription entries, review tags)
-    └── scanscribe_events.db (Monitors, incidents, transcript links)
-```
+### 3. Remote Scanning via ScanScribe Uploader Client
+If your radio scanner is connected to a dedicated receiver PC, use the companion [ScanScribe Uploader Client](https://github.com/xxbubziexx/Scanscribe-Uploader-Client). The client watches output directories on the scanner machine, verifies write stability, and securely posts files to your central ScanScribe server via HTTP.
 
 ---
 
@@ -242,64 +210,92 @@ ScanScribe Container (Port 8000)
 
 | Variable | Description | Default |
 |---|---|---|
-| `SECRET_KEY` | **Required.** Cryptographic secret for signing JWT auth tokens | *(Generated)* |
-| `TZ` | Container local timezone | `America/Chicago` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Lifetime of user login sessions | `1440` (24h) |
-| `SCANSCRIBE_DEFAULT_ADMIN_PASSWORD` | Bootstraps initial `admin` account password on fresh DB | `admin` |
+| `SECRET_KEY` | Cryptographic secret for signing JWT auth tokens | *(Auto-generated)* |
+| `TZ` | Server local timezone (e.g. `America/Chicago`, `UTC`) | `America/Chicago` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | User login session lifetime in minutes | `1440` (24h) |
+| `SCANSCRIBE_DEFAULT_ADMIN_PASSWORD` | Password for the initial administrator account | `admin` |
 | `OPENROUTER_API_KEY` | API key for OpenRouter LLM routing | *(Optional)* |
-| `OPENROUTER_BASE_URL` | Base URL for OpenRouter API | `https://openrouter.ai/api/v1` |
+| `OPENROUTER_BASE_URL` | Endpoint root for OpenRouter | `https://openrouter.ai/api/v1` |
 | `OPENROUTER_MODEL` | Default model identifier for events routing | `openrouter/free` |
-| `GEOCODE_PROVIDER` | Geocoding provider (`nominatim`, `google`, `mapbox`) | `nominatim` |
+| `GEOCODE_PROVIDER` | Geocoding service (`nominatim`, `google`, `mapbox`) | `nominatim` |
 
 ### Key Settings in `config.yml`
 
-| Section | Setting | Description |
-|---|---|---|
-| `model` | `name` | Folder name inside `./models/` containing Whisper weights |
-| `model` | `device` | `cpu` or `cuda` |
-| `model` | `workers` | Parallel worker threads for transcription |
-| `events_pipeline` | `enabled` | Enable/disable AI incident routing pipeline |
-| `events_pipeline` | `ner_model_path` | Relative path to local NER checkpoint folder |
-| `events_pipeline` | `auto_close_stale_seconds` | Seconds of inactivity before auto-closing incidents |
-| `openrouter` | `api_key` | OpenRouter API Key (can also be passed via `.env`) |
-| `openrouter` | `model_name` | Model name (e.g. `google/gemini-2.5-flash`, `openrouter/free`) |
-| `landmarks` | *(dictionary)* | Custom alias-to-address mappings (e.g. `"lady queen": "523 Center St, Bismarck, MO"`) |
-| `storage` | `retention_days` | Number of days to retain audio and logs (`0` = keep forever) |
+```yaml
+# Whisper Transcription
+model:
+  name: "whisper-small.en-police-radio"  # HuggingFace hub model or local path
+  device: "cpu"                           # cpu or cuda
+  workers: 4                             # Concurrency threads for transcription
+
+# Incident Intelligence Pipeline
+events_pipeline:
+  enabled: true
+  ner_model_path: "./models/incident_ner_v1"
+  auto_close_stale_seconds: 3600         # Close inactive threads after 1 hour
+
+# LLM Routing
+openrouter:
+  api_key: ""                            # Or specify in .env
+  model_name: "openrouter/free"          # e.g. google/gemini-2.5-flash
+
+# Landmark Aliases (Local Slang Resolution)
+landmarks:
+  "walmart north": "2150 N Main St, Springfield, IL"
+  "high school": "100 Eagle Way, Springfield, IL"
+
+# Storage Retention
+storage:
+  retention_days: 0                      # 0 = keep all recordings forever
+```
 
 ---
 
-## Audio Ingestion & Scanner Integration
+## Containerized Deployment (Docker)
 
-### ScanScribe Windows Uploader Client
-For users streaming from dedicated scanner PCs, use the companion [ScanScribe Uploader Client on GitHub](https://github.com/xxbubziexx/Scanscribe-Uploader-Client). The client monitors your radio scanner's output folder, verifies audio file write stability, and securely uploads files to the ScanScribe server via HTTP.
-
-### Scanner Software Configuration (SDRTrunk & ProScan)
-ScanScribe automatically parses metadata (talkgroups, frequencies, systems, and timestamps) directly from audio metadata tags or filenames.
-
-- **SDRTrunk**: Supported natively out of the box with standard recording configurations.
-- **ProScan**:
-  1. Custom filename format: `%TT %D %C` *(enables precise timestamp extraction from filename)*.
-  2. Custom TIT2 (Title) tag: `%TG %G %C` *(enables talkgroup and channel extraction)*.
-
----
-
-## Daily Docker Management Commands
+ScanScribe also supports isolated container deployment with Docker & Docker Compose:
 
 ```bash
-# View live application logs
-docker compose logs -f
+cd docker
+docker compose -f docker-compose.cpu.yml up -d --build
+# Or for NVIDIA GPU:
+docker compose -f docker-compose.gpu.yml up -d --build
+```
 
-# Check container status
-docker compose ps
+For complete instructions on Docker environment setup, GPU drivers, and volume mappings, see the [Docker Guide](docker/README.md).
 
-# Restart ScanScribe (after config changes)
-docker compose restart scanscribe
+---
 
-# Stop ScanScribe
-docker compose down
+## Hardware Recommendations
 
-# Rebuild after code updates
-docker compose up -d --build
+| Component | Minimum (CPU) | Recommended (CPU) | Recommended (GPU) |
+|---|---|---|---|
+| **Processor** | 4-Core x86_64 | 8-Core Intel / AMD | 6+ Core CPU |
+| **Memory** | 8 GB RAM | 16 GB RAM | 16 GB RAM |
+| **Graphics** | N/A | N/A | NVIDIA GPU (6 GB+ VRAM, Pascal or newer) |
+| **Disk Space** | 10 GB free | 50 GB+ SSD | 50 GB+ NVMe SSD |
+| **OS** | Windows 10/11, Ubuntu 20.04+ | Windows 11, Ubuntu 22.04+ | Windows 11, Ubuntu 22.04+ |
+
+---
+
+## Contributing & Development
+
+```bash
+# Clone the repository
+git clone https://github.com/xxbubziexx/ScanScribe.git
+cd ScanScribe
+
+# Install dev dependencies with uv
+uv venv
+uv pip install -r requirements.txt -e . "pytest>=8.3.0" "pytest-asyncio>=0.24.0"
+
+# Run test suite
+pytest
+
+# Frontend development (React SPA)
+cd app/frontend
+npm install
+npm run dev
 ```
 
 ---
@@ -307,3 +303,4 @@ docker compose up -d --build
 ## License
 
 Proprietary — ScanScribe Project
+All rights reserved.
