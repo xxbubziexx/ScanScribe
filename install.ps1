@@ -26,7 +26,7 @@ param(
     [switch]$NonInteractive
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -344,26 +344,18 @@ if (-not (Test-Path $uvExe)) {
 # Install isolated Python 3.11 and create venv
 Write-Host "    Configuring Python 3.11 runtime..."
 & $uvExe python install 3.11 --quiet
-& $uvExe venv (Join-Path $InstallDir ".venv") --python 3.11 --quiet
+& $uvExe venv (Join-Path $InstallDir ".venv") --python 3.11 --allow-existing --quiet
 
 $venvPython = Join-Path $InstallDir ".venv\Scripts\python.exe"
 
 # 5. Install PyTorch & Dependencies
 Write-Host "[4/7] Installing AI transcription dependencies..." -ForegroundColor Green
 
-# Verify Microsoft Visual C++ 2015-2022 Runtime prerequisite (Required by PyTorch / c10.dll)
-$vcInstalled = $false
-$vcRegKey = "HKLM:\SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\X64"
-if (Test-Path $vcRegKey) {
-    $val = (Get-ItemProperty -Path $vcRegKey -Name "Installed" -ErrorAction SilentlyContinue).Installed
-    if ($val -eq 1) { $vcInstalled = $true }
-}
-if (-not $vcInstalled -and (Test-Path "$env:WINDIR\System32\vcruntime140_1.dll")) {
-    $vcInstalled = $true
-}
-
-if (-not $vcInstalled) {
-    Write-Host "    Installing Microsoft Visual C++ 2015-2022 Runtime (PyTorch requirement)..."
+# Verify Microsoft Visual C++ 2015-2022 Runtime prerequisite (Specifically vcruntime140_1.dll required by PyTorch c10.dll)
+$vc140_1 = Join-Path $env:WINDIR "System32\vcruntime140_1.dll"
+if (-not (Test-Path $vc140_1)) {
+    Write-Host "    Visual C++ 2015-2022 Runtime (vcruntime140_1.dll) not found." -ForegroundColor DarkYellow
+    Write-Host "    Installing Microsoft Visual C++ 2015-2022 Runtime (PyTorch requirement)..." -ForegroundColor Yellow
     $vcUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
     $vcExe = Join-Path $env:TEMP "vc_redist.x64.exe"
     try {
@@ -374,6 +366,8 @@ if (-not $vcInstalled) {
     } catch {
         Write-Host "    Notice: Could not automatically install Visual C++ Runtime ($($_.Exception.Message))." -ForegroundColor DarkYellow
     }
+} else {
+    Write-Host "    Visual C++ 2015-2022 Runtime verified." -ForegroundColor DarkGray
 }
 
 if ($Mode -eq "cuda") {
@@ -384,19 +378,25 @@ if ($Mode -eq "cuda") {
     & $uvExe pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu --python $venvPython
 }
 
-# Verify PyTorch DLL loading
+# Verify PyTorch DLL loading safely
 $testTorch = & $venvPython -c "import torch; print('PyTorch initialized:', torch.__version__)" 2>&1
-if ($LASTEXITCODE -ne 0 -and ($testTorch -like "*c10.dll*" -or $testTorch -like "*WinError 1114*")) {
-    Write-Host "    Resolving dynamic link library dependency for PyTorch..." -ForegroundColor Yellow
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "    Notice: Resolving PyTorch runtime dependencies..." -ForegroundColor Yellow
     $vcUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
     $vcExe = Join-Path $env:TEMP "vc_redist.x64.exe"
     try {
         Invoke-WebRequest -Uri $vcUrl -OutFile $vcExe -UseBasicParsing
         Start-Process -FilePath $vcExe -ArgumentList "/install", "/quiet", "/norestart" -Wait
         Remove-Item -Path $vcExe -Force -ErrorAction SilentlyContinue
+        $testTorch = & $venvPython -c "import torch; print('PyTorch initialized:', torch.__version__)" 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "    PyTorch dynamic libraries resolved successfully." -ForegroundColor Green
+        }
     } catch {
         Write-Host "    Please install Microsoft Visual C++ x64 Redistributable: https://aka.ms/vs/17/release/vc_redist.x64.exe" -ForegroundColor Yellow
     }
+} else {
+    Write-Host "    $testTorch" -ForegroundColor DarkGreen
 }
 
 $reqFile = Join-Path $InstallDir "requirements.txt"
