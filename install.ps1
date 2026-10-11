@@ -262,25 +262,8 @@ if ($isInteractive) {
     if (-not $IngestDir) { $IngestDir = Join-Path $InstallDir "ingest" }
 }
 
-# 2. Directory Creation
-Write-Host "[1/7] Creating application directories..." -ForegroundColor Green
-$directories = @(
-    $InstallDir,
-    (Join-Path $InstallDir "bin"),
-    (Join-Path $InstallDir "data"),
-    (Join-Path $InstallDir "logs"),
-    (Join-Path $InstallDir "models"),
-    (Join-Path $InstallDir "audio_storage"),
-    $IngestDir
-)
-foreach ($dir in $directories) {
-    if (-not (Test-Path $dir)) {
-        New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    }
-}
-
-# 3. Source Code Setup
-Write-Host "[2/7] Preparing application code..." -ForegroundColor Green
+# 2. Source Code Setup
+Write-Host "[1/7] Preparing application code..." -ForegroundColor Green
 $currentScriptDir = if ($PSScriptRoot) { 
     $PSScriptRoot 
 } elseif ($MyInvocation -and $MyInvocation.MyCommand -and $MyInvocation.MyCommand.Path) { 
@@ -293,6 +276,9 @@ if ($currentScriptDir -and (Test-Path (Join-Path $currentScriptDir "app\main.py"
     # Installing from local repository
     if ($currentScriptDir -ne $InstallDir) {
         Write-Host "    Copying files from local workspace to $InstallDir..."
+        if (-not (Test-Path $InstallDir)) {
+            New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+        }
         Copy-Item -Path "$currentScriptDir\*" -Destination $InstallDir -Recurse -Force -Exclude ".venv", "data", "logs"
     }
 } else {
@@ -300,7 +286,18 @@ if ($currentScriptDir -and (Test-Path (Join-Path $currentScriptDir "app\main.py"
     Write-Host "    Fetching latest ScanScribe release from GitHub ($Branch branch)..."
     if (Get-Command git -ErrorAction SilentlyContinue) {
         if (-not (Test-Path (Join-Path $InstallDir "app\main.py"))) {
-            git clone -b $Branch https://github.com/xxbubziexx/scanscribe.git $InstallDir
+            $hasExistingFiles = (Test-Path $InstallDir) -and (Get-ChildItem -Path $InstallDir -Force | Select-Object -First 1)
+            if (-not $hasExistingFiles) {
+                git clone -b $Branch https://github.com/xxbubziexx/scanscribe.git $InstallDir
+            } else {
+                $tempClone = Join-Path $env:TEMP "scanscribe-clone-$([System.Guid]::NewGuid().ToString().Substring(0,8))"
+                git clone -b $Branch https://github.com/xxbubziexx/scanscribe.git $tempClone
+                Copy-Item -Path "$tempClone\*" -Destination $InstallDir -Recurse -Force
+                if (Test-Path "$tempClone\.git") {
+                    Copy-Item -Path "$tempClone\.git" -Destination $InstallDir -Recurse -Force
+                }
+                Remove-Item -Path $tempClone -Recurse -Force -ErrorAction SilentlyContinue
+            }
         } else {
             Write-Host "    Existing install found. Pulling updates..."
             Set-Location $InstallDir
@@ -322,6 +319,23 @@ if ($currentScriptDir -and (Test-Path (Join-Path $currentScriptDir "app\main.py"
 }
 
 Set-Location $InstallDir
+
+# 3. Directory Creation
+Write-Host "[2/7] Creating application directories..." -ForegroundColor Green
+$directories = @(
+    $InstallDir,
+    (Join-Path $InstallDir "bin"),
+    (Join-Path $InstallDir "data"),
+    (Join-Path $InstallDir "logs"),
+    (Join-Path $InstallDir "models"),
+    (Join-Path $InstallDir "audio_storage"),
+    $IngestDir
+)
+foreach ($dir in $directories) {
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+}
 
 # 4. Bootstrap UV (Astral's fast Python runtime & package manager)
 Write-Host "[3/7] Setting up isolated Python environment with uv..." -ForegroundColor Green

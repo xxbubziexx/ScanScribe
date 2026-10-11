@@ -204,24 +204,33 @@ else
   [ -z "$INGEST_DIR" ] && INGEST_DIR="$INSTALL_DIR/ingest"
 fi
 
-# 2. Directory Creation
-echo "[1/7] Creating directories..."
-mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/bin" "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/models" "$INSTALL_DIR/audio_storage" "$INGEST_DIR"
-
-# 3. Source Code Setup
-echo "[2/7] Fetching application code..."
+# 2. Source Code Setup
+echo "[1/7] Fetching application code..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$SCRIPT_DIR/app/main.py" ] && [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
+  mkdir -p "$INSTALL_DIR"
   cp -r "$SCRIPT_DIR"/* "$INSTALL_DIR/"
 elif [ ! -f "$INSTALL_DIR/app/main.py" ]; then
   if command -v git &>/dev/null; then
-    git clone -b "$BRANCH" https://github.com/xxbubziexx/scanscribe.git "$INSTALL_DIR"
+    if [ ! -d "$INSTALL_DIR" ] || [ -z "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]; then
+      git clone -b "$BRANCH" https://github.com/xxbubziexx/scanscribe.git "$INSTALL_DIR"
+    else
+      TEMP_CLONE=$(mktemp -d)
+      git clone -b "$BRANCH" https://github.com/xxbubziexx/scanscribe.git "$TEMP_CLONE"
+      cp -r "$TEMP_CLONE"/. "$INSTALL_DIR/"
+      rm -rf "$TEMP_CLONE"
+    fi
   else
+    mkdir -p "$INSTALL_DIR"
     curl -fsSL "https://github.com/xxbubziexx/scanscribe/archive/refs/heads/$BRANCH.tar.gz" | tar -xz -C "$INSTALL_DIR" --strip-components=1
   fi
 fi
 
 cd "$INSTALL_DIR"
+
+# 3. Directory Creation
+echo "[2/7] Creating directories..."
+mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/models" "$INSTALL_DIR/audio_storage" "$INGEST_DIR"
 
 # 4. Bootstrap UV
 echo "[3/7] Setting up isolated Python runtime with uv..."
