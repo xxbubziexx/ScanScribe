@@ -260,16 +260,13 @@ fi
 
 if [ -f "$INSTALL_DIR/pyproject.toml" ]; then
   echo "    Registering ScanScribe package in virtual environment..."
-  if [ -f "$INSTALL_DIR/requirements.txt" ]; then
-    "$UV_CMD" pip install -e "$INSTALL_DIR" --python "$VENV_PY" --no-deps
-  else
-    "$UV_CMD" pip install -e "$INSTALL_DIR" --python "$VENV_PY"
-  fi
+  "$UV_CMD" pip install -e "$INSTALL_DIR" --python "$VENV_PY"
 fi
 
 # Explicit safety guarantee: Ensure core web runtime is present
-echo "    Verifying core runtime dependencies (uvicorn, fastapi)..."
-"$UV_CMD" pip install "uvicorn[standard]>=0.30.0" "fastapi>=0.115.0" "huggingface-hub>=0.23.0" "pyyaml>=6.0" --python "$VENV_PY" --quiet
+echo "    Verifying core runtime dependencies (uvicorn, fastapi, slowapi, alembic, httpx)..."
+"$UV_CMD" pip install "uvicorn[standard]>=0.30.0" "fastapi>=0.115.0" "slowapi>=0.1.9" "alembic>=1.13.3" "httpx>=0.27.2" "huggingface-hub>=0.23.0" "pyyaml>=6.0" --python "$VENV_PY" --quiet
+
 
 
 # 6. Check FFmpeg

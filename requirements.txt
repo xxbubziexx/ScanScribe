@@ -9,6 +9,8 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-multipart==0.0.9
 jinja2==3.1.4
+slowapi>=0.1.9
+httpx>=0.27.2
 
 # Authentication & Security
 bcrypt==4.0.1
@@ -18,6 +20,7 @@ pydantic[email]==2.9.2
 
 # Database
 sqlalchemy==2.0.36
+alembic>=1.13.3
 
 # AI & Transcription
 transformers==4.46.3

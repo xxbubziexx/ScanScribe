@@ -368,16 +368,13 @@ if (Test-Path $reqFile) {
 
 if (Test-Path $pyprojectFile) {
     Write-Host "    Registering ScanScribe package in virtual environment..."
-    if (Test-Path $reqFile) {
-        & $uvExe pip install -e $InstallDir --python $venvPython --no-deps
-    } else {
-        & $uvExe pip install -e $InstallDir --python $venvPython
-    }
+    & $uvExe pip install -e $InstallDir --python $venvPython
 }
 
 # Explicit safety guarantee: Ensure core web runtime is present
-Write-Host "    Verifying core runtime dependencies (uvicorn, fastapi)..."
-& $uvExe pip install "uvicorn[standard]>=0.30.0" "fastapi>=0.115.0" "huggingface-hub>=0.23.0" "pyyaml>=6.0" --python $venvPython --quiet
+Write-Host "    Verifying core runtime dependencies (uvicorn, fastapi, slowapi, alembic, httpx)..."
+& $uvExe pip install "uvicorn[standard]>=0.30.0" "fastapi>=0.115.0" "slowapi>=0.1.9" "alembic>=1.13.3" "httpx>=0.27.2" "huggingface-hub>=0.23.0" "pyyaml>=6.0" --python $venvPython --quiet
+
 
 
 # 6. Bundled FFmpeg Check / Download
