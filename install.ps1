@@ -27,6 +27,8 @@ param(
 )
 
 $ErrorActionPreference = "Continue"
+$env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8 = "1"
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -537,6 +539,8 @@ DB_PATH=$($InstallDir -replace '\\', '/')/data/scanscribe.db
 CONFIG_PATH=$($InstallDir -replace '\\', '/')/config.yml
 SCANSCRIBE_DEFAULT_ADMIN_USERNAME=admin
 SCANSCRIBE_DEFAULT_ADMIN_PASSWORD=admin
+PYTHONIOENCODING=utf-8
+PYTHONUTF8=1
 "@
 Set-Content -Path (Join-Path $InstallDir ".env") -Value $envContent -Encoding UTF8
 

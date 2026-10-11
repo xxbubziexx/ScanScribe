@@ -18,6 +18,14 @@ import logging
 
 logger = logging.getLogger("scanscribe.server_control")
 
+if sys.platform == "win32":
+    for _s in (sys.stdout, sys.stderr):
+        if hasattr(_s, "reconfigure"):
+            try:
+                _s.reconfigure(encoding="utf-8", errors="backslashreplace")
+            except Exception:
+                pass
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 PID_FILE = BASE_DIR / ".scanscribe.pid"
 LOG_DIR = BASE_DIR / "logs"
@@ -155,6 +163,8 @@ def cmd_start(args):
 
     env = os.environ.copy()
     env["PYTHONPATH"] = str(BASE_DIR) + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
 
     if sys.platform == "win32":
         DETACHED_PROCESS = 0x00000008
@@ -301,8 +311,13 @@ def cmd_logs(args):
     try:
         with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
+            enc = getattr(sys.stdout, "encoding", "ascii") or "ascii"
             for line in lines[-num_lines:]:
-                print(line, end="")
+                try:
+                    sys.stdout.write(line)
+                except UnicodeEncodeError:
+                    sys.stdout.write(line.encode(enc, errors="backslashreplace").decode(enc, errors="replace"))
+            sys.stdout.flush()
 
             if not follow:
                 return 0
@@ -312,7 +327,12 @@ def cmd_logs(args):
             while True:
                 line = f.readline()
                 if line:
-                    print(line, end="", flush=True)
+                    try:
+                        sys.stdout.write(line)
+                        sys.stdout.flush()
+                    except UnicodeEncodeError:
+                        sys.stdout.write(line.encode(enc, errors="backslashreplace").decode(enc, errors="replace"))
+                        sys.stdout.flush()
                 else:
                     time.sleep(0.2)
     except KeyboardInterrupt:

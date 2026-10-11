@@ -111,11 +111,22 @@ class TranscriptionEngine:
                 num_threads = CPU_COUNT
             
             # Intra-op parallelism (within operations)
-            torch.set_num_threads(num_threads)
-            # Inter-op parallelism (between operations)
-            torch.set_num_interop_threads(max(1, num_threads // 2))
+            try:
+                torch.set_num_threads(num_threads)
+            except Exception as e:
+                logger.debug("PyTorch set_num_threads skipped: %s", e)
+
+            # Inter-op parallelism (between operations - must only be set once before parallel work starts)
+            try:
+                torch.set_num_interop_threads(max(1, num_threads // 2))
+            except Exception as e:
+                logger.debug("PyTorch set_num_interop_threads skipped: %s", e)
+
             # Optimize denormal numbers
-            torch.set_flush_denormal(True)
+            try:
+                torch.set_flush_denormal(True)
+            except Exception as e:
+                logger.debug("PyTorch set_flush_denormal skipped: %s", e)
             
             # Set environment variables for additional optimization
             os.environ.setdefault('OMP_NUM_THREADS', str(num_threads))
@@ -133,16 +144,26 @@ class TranscriptionEngine:
             except Exception as proc_err:
                 logger.warning(
                     f"WhisperProcessor.from_pretrained failed for {load_target} ({proc_err}); "
-                    "falling back to compatible base Whisper processor"
+                    "attempting component-wise fallback"
                 )
-                base_arch = "openai/whisper-small"
-                if "base" in self.model_name.lower():
-                    base_arch = "openai/whisper-base"
-                elif "medium" in self.model_name.lower():
-                    base_arch = "openai/whisper-medium"
-                elif "large" in self.model_name.lower():
-                    base_arch = "openai/whisper-large-v3"
-                self.processor = WhisperProcessor.from_pretrained(base_arch)
+                try:
+                    from transformers import AutoFeatureExtractor, AutoTokenizer
+                    fe = AutoFeatureExtractor.from_pretrained(load_target)
+                    tok = AutoTokenizer.from_pretrained(load_target)
+                    self.processor = WhisperProcessor(feature_extractor=fe, tokenizer=tok)
+                except Exception as comp_err:
+                    logger.warning(
+                        f"Component initialization failed ({comp_err}); "
+                        "falling back to compatible base Whisper processor"
+                    )
+                    base_arch = "openai/whisper-small"
+                    if "base" in self.model_name.lower():
+                        base_arch = "openai/whisper-base"
+                    elif "medium" in self.model_name.lower():
+                        base_arch = "openai/whisper-medium"
+                    elif "large" in self.model_name.lower():
+                        base_arch = "openai/whisper-large-v3"
+                    self.processor = WhisperProcessor.from_pretrained(base_arch)
             self.model = WhisperForConditionalGeneration.from_pretrained(
                 load_target,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,

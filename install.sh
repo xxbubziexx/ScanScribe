@@ -336,6 +336,8 @@ DB_PATH=$INSTALL_DIR/data/scanscribe.db
 CONFIG_PATH=$INSTALL_DIR/config.yml
 SCANSCRIBE_DEFAULT_ADMIN_USERNAME=admin
 SCANSCRIBE_DEFAULT_ADMIN_PASSWORD=admin
+PYTHONIOENCODING=utf-8
+PYTHONUTF8=1
 EOF
 
 if [ ! -f "$INSTALL_DIR/config.yml" ] && [ -f "$INSTALL_DIR/config.yml.example" ]; then

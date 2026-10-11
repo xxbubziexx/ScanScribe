@@ -53,8 +53,20 @@ class WebSocketHandler(logging.Handler):
             self.handleError(record)
 
 
+import sys
+
+# Ensure standard console streams on Windows support UTF-8 characters without charmap UnicodeEncodeErrors
+if sys.platform == "win32":
+    for _stream in (sys.stdout, sys.stderr):
+        if hasattr(_stream, "reconfigure"):
+            try:
+                _stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+            except Exception:
+                pass
+
+
 class ColoredConsoleHandler(logging.StreamHandler):
-    """Console handler with emoji preservation for Docker logs."""
+    """Console handler with emoji preservation and Windows CP1252/Unicode safety."""
     
     # ANSI color codes
     COLORS = {
@@ -74,7 +86,13 @@ class ColoredConsoleHandler(logging.StreamHandler):
             
             # Add color based on level
             color = self.COLORS.get(record.levelname, self.COLORS['RESET'])
-            stream.write(f"{color}{msg}{self.COLORS['RESET']}\n")
+            formatted_text = f"{color}{msg}{self.COLORS['RESET']}\n"
+            try:
+                stream.write(formatted_text)
+            except UnicodeEncodeError:
+                encoding = getattr(stream, "encoding", None) or "ascii"
+                safe_msg = formatted_text.encode(encoding, errors="backslashreplace").decode(encoding, errors="replace")
+                stream.write(safe_msg)
             self.flush()
             
         except Exception:
@@ -129,7 +147,8 @@ def setup_logging(app_name: str = "scanscribe", level: str = "INFO"):
         file_handler = logging.handlers.RotatingFileHandler(
             log_file,
             maxBytes=10 * 1024 * 1024,  # 10 MB
-            backupCount=5
+            backupCount=5,
+            encoding="utf-8",
         )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(detailed_formatter)
