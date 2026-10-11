@@ -14,7 +14,8 @@ MODEL="${MODEL:-}"
 AUTOSTART="${AUTOSTART:-true}"
 CUSTOM_MODEL_URL="${CUSTOM_MODEL_URL:-}"
 NER_MODEL="${NER_MODEL:-xxbubziexx/incident_ner_v1}"
-BRANCH="${BRANCH:-snapshot}"
+OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}"
+BRANCH="${BRANCH:-main}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
 
 # Parse command line flags if passed
@@ -28,6 +29,7 @@ while [[ $# -gt 0 ]]; do
     --port) PORT="$2"; shift 2 ;;
     --model) MODEL="$2"; shift 2 ;;
     --ner-model) NER_MODEL="$2"; shift 2 ;;
+    --openrouter-key) OPENROUTER_API_KEY="$2"; shift 2 ;;
     --autostart) AUTOSTART="$2"; shift 2 ;;
     --custom-model-url) CUSTOM_MODEL_URL="$2"; shift 2 ;;
     --branch) BRANCH="$2"; shift 2 ;;
@@ -167,14 +169,28 @@ if [ -t 0 ] && [ "$NON_INTERACTIVE" != "true" ]; then
   esac
   echo ""
 
-  # 6. Worker Threads
-  DEFAULT_WORKERS=$([ "$WORKERS" -gt 0 ] && echo "$WORKERS" || echo "$RECOMMENDED_WORKERS")
-  WORKERS=$(prompt_user "6. Parallel Worker Threads (transcription concurrency)" "$DEFAULT_WORKERS" "Auto-detected $DETECTED_CORES CPU cores")
+  # 6. OpenRouter API Key (Optional)
+  echo "6. OpenRouter LLM API Key (Optional for Incident Intelligence Pipeline):"
+  echo "   Powers real-time dispatch incident routing, clustering, and thread summaries."
+  echo "   Leave blank and press ENTER to skip (can be configured anytime in Settings)."
+  read -r -p "   OpenRouter API Key (Optional): " OPENROUTER_INPUT || true
+  if [ -n "${OPENROUTER_INPUT:-}" ]; then
+    OPENROUTER_API_KEY="$(echo "$OPENROUTER_INPUT" | tr -d ' ')"
+    echo "   -> Configured OpenRouter API Key"
+  else
+    OPENROUTER_API_KEY=""
+    echo "   -> Skipped (can be configured later in Web Dashboard)"
+  fi
   echo ""
 
-  # 7. Web Port
+  # 7. Worker Threads
+  DEFAULT_WORKERS=$([ "$WORKERS" -gt 0 ] && echo "$WORKERS" || echo "$RECOMMENDED_WORKERS")
+  WORKERS=$(prompt_user "7. Parallel Worker Threads (transcription concurrency)" "$DEFAULT_WORKERS" "Auto-detected $DETECTED_CORES CPU cores")
+  echo ""
+
+  # 8. Web Port
   DEFAULT_PORT=$([ "$PORT" -gt 0 ] && echo "$PORT" || echo "8000")
-  PORT=$(prompt_user "7. Web Dashboard Port" "$DEFAULT_PORT")
+  PORT=$(prompt_user "8. Web Dashboard Port" "$DEFAULT_PORT")
   echo ""
 
   # Confirmation Summary
@@ -187,6 +203,7 @@ if [ -t 0 ] && [ "$NON_INTERACTIVE" != "true" ]; then
   echo "  Compute Mode      : $MODE"
   echo "  Whisper Model     : $MODEL"
   echo "  Incident NER      : ${NER_MODEL:-Disabled}"
+  echo "  OpenRouter API    : $([ -n "$OPENROUTER_API_KEY" ] && echo 'Configured' || echo 'Skipped / None')"
   echo "  Worker Threads    : $WORKERS"
   echo "  Web Port          : $PORT"
   echo "============================================================"
@@ -345,6 +362,7 @@ DB_PATH=$INSTALL_DIR/data/scanscribe.db
 CONFIG_PATH=$INSTALL_DIR/config.yml
 SCANSCRIBE_DEFAULT_ADMIN_USERNAME=admin
 SCANSCRIBE_DEFAULT_ADMIN_PASSWORD=admin
+$([ -n "$OPENROUTER_API_KEY" ] && echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY")
 PYTHONIOENCODING=utf-8
 PYTHONUTF8=1
 EOF
@@ -374,6 +392,10 @@ if "$NER_DIR_NAME":
     data["events_pipeline"]["enabled"] = True
 else:
     data["events_pipeline"]["enabled"] = False
+if "$OPENROUTER_API_KEY":
+    if "openrouter" not in data:
+        data["openrouter"] = {}
+    data["openrouter"]["api_key"] = "$OPENROUTER_API_KEY"
 with open(config_file, "w") as f:
     yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
 EOF

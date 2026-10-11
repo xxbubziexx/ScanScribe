@@ -22,7 +22,8 @@ param(
     [Nullable[bool]]$AutoStart = $null,
     [string]$CustomModelUrl = "",
     [string]$NerModel = "",
-    [string]$Branch = "snapshot",
+    [string]$OpenRouterApiKey = "",
+    [string]$Branch = "main",
     [switch]$NonInteractive
 )
 
@@ -202,10 +203,24 @@ if ($isInteractive) {
     }
     Write-Host ""
 
-    # 6. Worker Threads
+    # 6. OpenRouter LLM API Key (Optional)
+    Write-Host "6. OpenRouter LLM API Key (Optional for Incident Intelligence Pipeline):" -ForegroundColor White
+    Write-Host "   Powers real-time dispatch incident routing, clustering, and thread summaries." -ForegroundColor DarkGray
+    Write-Host "   Leave blank and press ENTER to skip (can be configured anytime in Settings)." -ForegroundColor DarkGray
+    $openRouterInput = Read-Host "   OpenRouter API Key (Optional)"
+    if (-not [string]::IsNullOrWhiteSpace($openRouterInput)) {
+        $OpenRouterApiKey = $openRouterInput.Trim()
+        Write-Host "   -> Configured OpenRouter API Key" -ForegroundColor Green
+    } else {
+        $OpenRouterApiKey = ""
+        Write-Host "   -> Skipped (can be configured later in Web Dashboard)" -ForegroundColor DarkGray
+    }
+    Write-Host ""
+
+    # 7. Worker Threads
     $defaultWorkers = if ($Workers -gt 0) { $Workers } else { $recommendedWorkers }
     $workersHint = "Auto-detected $detectedCores CPU cores"
-    $workersInput = Prompt-Setting -PromptText "6. Parallel Worker Threads (transcription concurrency)" -DefaultVal "$defaultWorkers" -DefaultHint $workersHint
+    $workersInput = Prompt-Setting -PromptText "7. Parallel Worker Threads (transcription concurrency)" -DefaultVal "$defaultWorkers" -DefaultHint $workersHint
     $parsedWorkers = 0
     if (-not [int]::TryParse($workersInput, [ref]$parsedWorkers) -or $parsedWorkers -le 0) {
         $parsedWorkers = $defaultWorkers
@@ -213,9 +228,9 @@ if ($isInteractive) {
     $Workers = $parsedWorkers
     Write-Host ""
 
-    # 7. Web Port
+    # 8. Web Port
     $defaultPort = if ($Port -gt 0) { $Port } else { 8000 }
-    $portInput = Prompt-Setting -PromptText "7. Web Dashboard Port" -DefaultVal "$defaultPort"
+    $portInput = Prompt-Setting -PromptText "8. Web Dashboard Port" -DefaultVal "$defaultPort"
     $parsedPort = 0
     if (-not [int]::TryParse($portInput, [ref]$parsedPort) -or $parsedPort -le 0) {
         $parsedPort = $defaultPort
@@ -223,9 +238,9 @@ if ($isInteractive) {
     $Port = $parsedPort
     Write-Host ""
 
-    # 8. Autostart
+    # 9. Autostart
     $defaultAuto = if ($AutoStart -ne $null) { if ($AutoStart) { "Y" } else { "N" } } else { "Y" }
-    $autoInput = Prompt-Setting -PromptText "8. Start ScanScribe silently in background at Windows logon? (Y/N)" -DefaultVal $defaultAuto
+    $autoInput = Prompt-Setting -PromptText "9. Start ScanScribe silently in background at Windows logon? (Y/N)" -DefaultVal $defaultAuto
     $AutoStart = ($autoInput.ToUpper() -eq "Y" -or $autoInput.ToUpper() -eq "YES")
 
     # Confirmation Summary
@@ -238,6 +253,7 @@ if ($isInteractive) {
     Write-Host "  Compute Mode      : $($Mode.ToUpper())"
     Write-Host "  Whisper Model     : $Model"
     Write-Host "  Incident NER      : $(if ($NerModel) { $NerModel } else { 'Disabled' })"
+    Write-Host "  OpenRouter API    : $(if ($OpenRouterApiKey) { 'Configured' } else { 'Skipped / None' })"
     Write-Host "  Worker Threads    : $Workers"
     Write-Host "  Web Port          : $Port"
     Write-Host "  Autostart at Logon: $(if ($AutoStart) { 'Yes' } else { 'No' })"
@@ -543,6 +559,8 @@ $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
 $rng.GetBytes($secretBytes)
 $secretKey = -join ($secretBytes | ForEach-Object { "{0:x2}" -f $_ })
 
+$openRouterEnvLine = if ($OpenRouterApiKey) { "OPENROUTER_API_KEY=$OpenRouterApiKey`n" } else { "" }
+
 $envContent = @"
 SECRET_KEY=$secretKey
 PORT=$Port
@@ -553,7 +571,7 @@ DB_PATH=$($InstallDir -replace '\\', '/')/data/scanscribe.db
 CONFIG_PATH=$($InstallDir -replace '\\', '/')/config.yml
 SCANSCRIBE_DEFAULT_ADMIN_USERNAME=admin
 SCANSCRIBE_DEFAULT_ADMIN_PASSWORD=admin
-PYTHONIOENCODING=utf-8
+${openRouterEnvLine}PYTHONIOENCODING=utf-8
 PYTHONUTF8=1
 "@
 Set-Content -Path (Join-Path $InstallDir ".env") -Value $envContent -Encoding UTF8
@@ -594,6 +612,12 @@ if ner_dir:
     data['events_pipeline']['enabled'] = True
 else:
     data['events_pipeline']['enabled'] = False
+
+openrouter_key = '$OpenRouterApiKey'
+if openrouter_key:
+    if 'openrouter' not in data:
+        data['openrouter'] = {}
+    data['openrouter']['api_key'] = openrouter_key
 
 with open(config_file, 'w', encoding='utf-8') as f:
     yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
