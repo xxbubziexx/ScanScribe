@@ -70,6 +70,7 @@ Thumbs.db
 # Temporary
 *.tmp
 *.bak
+*.pid
 
 # Local-only compose (templates are docker-compose.*.example)
 docker-compose.yml

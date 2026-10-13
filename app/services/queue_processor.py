@@ -13,6 +13,7 @@ from ..config import get_settings
 from ..database import SessionLocal, LogsSessionLocal, EventsSessionLocal
 from ..models.log_entry import LogEntry
 from ..utils.audio_metadata import extract_audio_metadata, get_talkgroup_from_metadata
+from ..utils.audio_file_ops import safe_async_unlink
 from .transcription_engine import get_engine
 from .websocket import websocket_manager
 from .watcher import get_watcher_service
@@ -298,7 +299,7 @@ class QueueProcessor:
             
             if not result:
                 logger.error("❌ Transcription failed, purging file")
-                audio_path.unlink()
+                await safe_async_unlink(audio_path)
                 file_handled = True
                 return
             
@@ -323,9 +324,9 @@ class QueueProcessor:
                     audio_path_stored = f"audio_storage/{audio_dest.name}"
                     logger.info(f"💾 Speech-only WAV saved: {stored_name}")
                 else:
-                    Path(speech_only_path).unlink()
+                    await safe_async_unlink(speech_only_path)
                     audio_path_stored = "file not saved"
-                audio_path.unlink()
+                await safe_async_unlink(audio_path)
                 file_handled = True
             elif save_audio:
                 # Move original to audio_storage
@@ -335,7 +336,7 @@ class QueueProcessor:
                 file_handled = True
                 logger.info(f"💾 Audio saved: {audio_dest.name}")
             else:
-                audio_path.unlink()
+                await safe_async_unlink(audio_path)
                 file_handled = True
                 audio_path_stored = "file not saved"
                 logger.info("🗑️ Audio deleted (playback disabled)")
@@ -401,12 +402,9 @@ class QueueProcessor:
             logger.error(f"❌ Processing failed for {filename}: {e}")
             # Purge file on error (only if not already handled)
             if not file_handled:
-                try:
-                    if audio_path.exists():
-                        audio_path.unlink()
-                        logger.info(f"🗑️ Purged failed file: {filename}")
-                except Exception:
-                    pass  # File already moved or deleted
+                deleted = await safe_async_unlink(audio_path)
+                if deleted:
+                    logger.info(f"🗑️ Purged failed file: {filename}")
         
         finally:
             db.close()

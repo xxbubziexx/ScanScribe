@@ -1,10 +1,11 @@
 """User management routes."""
 import logging
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
 from datetime import datetime, timezone
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.user import User
@@ -22,9 +23,6 @@ def _format_iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat()
 
 
-from pydantic import ConfigDict
-
-
 class UserResponse(BaseModel):
     """User response model."""
     model_config = ConfigDict(from_attributes=True)
@@ -38,12 +36,20 @@ class UserResponse(BaseModel):
     last_seen_at: Optional[str] = None
 
 
+class UserActionResponse(BaseModel):
+    """Generic action response model for user operations."""
+    model_config = ConfigDict(from_attributes=True)
+
+    message: str
+    is_active: Optional[bool] = None
+
+
 @router.get("/list", response_model=List[UserResponse])
-async def list_users(
+def list_users(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
-    """Get list of all users."""
+) -> List[UserResponse]:
+    """Get list of all users. Runs in threadpool to prevent blocking the event loop."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -64,12 +70,13 @@ async def list_users(
 
 
 
-@router.post("/{user_id}/promote")
-async def promote_user(
+
+@router.post("/{user_id}/promote", response_model=UserActionResponse)
+def promote_user(
     user_id: int,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> UserActionResponse:
     """Promote user to admin."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -83,15 +90,15 @@ async def promote_user(
     
     logger.info(f"User {user.username} promoted to admin by {current_user.username}")
     
-    return {"message": f"{user.username} is now an admin"}
+    return UserActionResponse(message=f"{user.username} is now an admin")
 
 
-@router.post("/{user_id}/demote")
-async def demote_user(
+@router.post("/{user_id}/demote", response_model=UserActionResponse)
+def demote_user(
     user_id: int,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> UserActionResponse:
     """Demote user from admin."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -110,15 +117,15 @@ async def demote_user(
     
     logger.info(f"User {user.username} demoted from admin by {current_user.username}")
     
-    return {"message": f"{user.username} is no longer an admin"}
+    return UserActionResponse(message=f"{user.username} is no longer an admin")
 
 
-@router.delete("/{user_id}")
-async def delete_user(
+@router.delete("/{user_id}", response_model=UserActionResponse)
+def delete_user(
     user_id: int,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> UserActionResponse:
     """Delete a user."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -143,15 +150,15 @@ async def delete_user(
     
     logger.info(f"User {username} deleted by {current_user.username}")
     
-    return {"message": f"User {username} deleted"}
+    return UserActionResponse(message=f"User {username} deleted")
 
 
-@router.post("/{user_id}/toggle-active")
-async def toggle_user_active(
+@router.post("/{user_id}/toggle-active", response_model=UserActionResponse)
+def toggle_user_active(
     user_id: int,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
+) -> UserActionResponse:
     """Toggle user active status."""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -170,4 +177,5 @@ async def toggle_user_active(
     status = "activated" if user.is_active else "deactivated"
     logger.info(f"User {user.username} {status} by {current_user.username}")
     
-    return {"message": f"User {user.username} {status}", "is_active": user.is_active}
+    return UserActionResponse(message=f"User {user.username} {status}", is_active=user.is_active)
+

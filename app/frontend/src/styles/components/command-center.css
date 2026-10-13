@@ -1,11 +1,11 @@
 /* Command Center & Leaflet Styles */
 @layer components {
   .ss-command-center {
-    @apply flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden text-gray-100;
+    @apply flex flex-col h-[calc(100dvh-3.5rem)] w-full overflow-hidden text-gray-100;
   }
 
   .ss-cc-fullscreen {
-    @apply h-screen max-h-screen bg-gray-950;
+    @apply h-[100dvh] max-h-[100dvh] bg-gray-950;
   }
 
   .ss-cc-header {
@@ -94,6 +94,7 @@
 
   .ss-cc-drawer {
     @apply border-t border-white/10 bg-gray-950/95 backdrop-blur-xl transition-all duration-300 z-[1000] shrink-0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
   .ss-cc-drawer-bar {

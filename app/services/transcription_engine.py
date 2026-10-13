@@ -12,6 +12,7 @@ import numpy as np
 import soundfile as sf
 
 from ..config import get_settings
+from ..utils.audio_file_ops import safe_unlink
 
 try:
     from silero_vad import load_silero_vad, get_speech_timestamps
@@ -374,6 +375,9 @@ class TranscriptionEngine:
                     
                     transcript = " ".join(transcripts)
                     confidence = sum(confidences) / len(confidences) if confidences else 0.0
+
+            if self.device == "cuda" and torch.cuda.is_available():
+                torch.cuda.empty_cache()
             
             processing_time = time.time() - start_time
             
@@ -393,11 +397,10 @@ class TranscriptionEngine:
             return out
             
         except Exception as e:
-            if speech_only_audio_path is not None and os.path.isfile(speech_only_audio_path):
-                try:
-                    os.unlink(speech_only_audio_path)
-                except OSError:
-                    pass
+            if speech_only_audio_path is not None:
+                safe_unlink(speech_only_audio_path)
+            if self.device == "cuda" and torch.cuda.is_available():
+                torch.cuda.empty_cache()
             logger.error(f"❌ Transcription failed: {e}")
             return None
 
@@ -436,7 +439,10 @@ class TranscriptionEngine:
         else:
             confidence = 0.85
         
+        # Release tensor references explicitly to prevent caching allocator growth
+        del input_features, generated_ids
         return transcript, confidence
+
     
     def _get_silence_removed_audio(self, audio: np.ndarray, sr: int) -> np.ndarray:
         """

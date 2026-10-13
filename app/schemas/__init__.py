@@ -20,6 +20,20 @@ from .event import (
     EntityObservationListResponse,
     EventResponse,
 )
+from .transcription import (
+    TranscriptionCardItem,
+    RecentTranscriptionsResponse,
+)
+from .upload import (
+    UploadAudioResponse,
+    UploadStatusResponse,
+)
+from .maintenance import (
+    RetentionConfigResponse,
+    DatabaseStatsResponse,
+    PurgeResponse,
+    RedactSsnResponse,
+)
 
 __all__ = [
     "UserBase",
@@ -37,4 +51,15 @@ __all__ = [
     "EntityObservationItem",
     "EntityObservationListResponse",
     "EventResponse",
+    "TranscriptionCardItem",
+    "RecentTranscriptionsResponse",
+    "UploadAudioResponse",
+    "UploadStatusResponse",
+    "RetentionConfigResponse",
+    "DatabaseStatsResponse",
+    "PurgeResponse",
+    "RedactSsnResponse",
 ]
+
+
+

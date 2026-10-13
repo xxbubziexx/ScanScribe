@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, memo } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
@@ -28,6 +28,7 @@ interface CommandCenterMapProps {
 }
 
 function MapClickHandler({
+
   isPlacingPin,
   onMapClick,
 }: {
@@ -302,7 +303,8 @@ function createIncidentDivIcon(
   })
 }
 
-export function CommandCenterMap({
+function CommandCenterMapComponent({
+
   events,
   selectedEventId,
   onSelectEvent,
@@ -653,3 +655,6 @@ export function CommandCenterMap({
     </div>
   )
 }
+
+export const CommandCenterMap = memo(CommandCenterMapComponent)
+

@@ -1,4 +1,5 @@
 """Upload routes for client file transfers."""
+import asyncio
 import os
 import logging
 from pathlib import Path
@@ -10,19 +11,20 @@ from ..models.user import User
 from .auth import get_current_active_user
 from ..config import get_settings
 from ..services.websocket import websocket_manager
+from ..schemas.upload import UploadAudioResponse, UploadStatusResponse
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 logger = logging.getLogger(__name__)
 
 
-@router.post("/audio")
+@router.post("/audio", response_model=UploadAudioResponse)
 async def upload_audio(
     request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
-):
-    """Upload audio file to ingest directory."""
+) -> UploadAudioResponse:
+    """Upload audio file to ingest directory without blocking event loop on disk I/O."""
     settings = get_settings()
     client_ip = request.client.host if request.client else "unknown"
     
@@ -54,32 +56,31 @@ async def upload_audio(
             queue_path = queue_dir / f"{original_stem}_{counter}{file_ext}"
             counter += 1
         
-        # Write file
-        with open(queue_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        # Read uploaded bytes and write to disk in worker thread (non-blocking)
+        content = await file.read()
+        await asyncio.to_thread(queue_path.write_bytes, content)
         
         file_size_mb = len(content) / (1024 * 1024)
         
         logger.info(f"✅ Uploaded: {queue_path.name} ({file_size_mb:.2f} MB) from {current_user.username} @ {client_ip}")
         
-        return {
-            "message": "File uploaded successfully",
-            "filename": queue_path.name,
-            "size_mb": round(file_size_mb, 2),
-            "path": str(queue_path)
-        }
+        return UploadAudioResponse(
+            message="File uploaded successfully",
+            filename=queue_path.name,
+            size_mb=round(file_size_mb, 2),
+            path=str(queue_path)
+        )
         
     except Exception as e:
         logger.error(f"❌ Upload failed from {current_user.username} @ {client_ip}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
-@router.get("/status")
+@router.get("/status", response_model=UploadStatusResponse)
 async def upload_status(
     request: Request,
     current_user: User = Depends(get_current_active_user)
-):
+) -> UploadStatusResponse:
     """Get upload endpoint status."""
     settings = get_settings()
     client_ip = request.client.host if request.client else "unknown"
@@ -91,9 +92,10 @@ async def upload_status(
     )
     
     from .. import __version__
-    return {
-        "online": True,
-        "ingest_directory": str(settings.ingest_dir),
-        "allowed_extensions": settings.config.watchdog_client.extensions,
-        "server_version": __version__
-    }
+    return UploadStatusResponse(
+        online=True,
+        ingest_directory=str(settings.ingest_dir),
+        allowed_extensions=settings.config.watchdog_client.extensions,
+        server_version=__version__
+    )
+

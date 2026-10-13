@@ -132,7 +132,7 @@ export function TopNav() {
               style={{ backgroundColor: '#0f1117' }}
             >
               {/* Drawer Header */}
-              <div className="p-4 border-b border-white/10 bg-white/[0.02] shrink-0">
+              <div className="p-4 pt-[max(1rem,env(safe-area-inset-top))] border-b border-white/10 bg-white/[0.02] shrink-0">
                 <div className="flex items-center justify-between">
                   <span className="text-base font-bold text-white tracking-tight flex items-center gap-2">
                     <span>🎙️</span> ScanScribe
@@ -191,7 +191,7 @@ export function TopNav() {
               </nav>
 
               {/* Drawer Footer */}
-              <div className="p-3 border-t border-white/10 bg-white/[0.01] shrink-0">
+              <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-white/10 bg-white/[0.01] shrink-0">
                 <button
                   type="button"
                   onClick={() => {

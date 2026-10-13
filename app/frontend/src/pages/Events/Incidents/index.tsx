@@ -373,16 +373,16 @@ export function EventsIncidentsPage() {
         {/* Mobile Detail Modal / Sheet (< 1024px) */}
         {!isDesktop && selected && (
           <div
-            className="lg:hidden fixed inset-0 z-50 flex flex-col bg-[#0f1117]"
+            className="lg:hidden fixed inset-0 z-50 flex flex-col bg-[#0f1117] pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
             style={{ backgroundColor: '#0f1117' }}
             role="dialog"
             aria-modal="true"
             aria-label="Incident details"
           >
-            <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-[#141821] shrink-0 min-h-[52px]">
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/10 bg-[#141821] shrink-0 min-h-[56px]">
               <button
                 type="button"
-                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-white transition py-1.5 px-2.5 rounded-lg hover:bg-white/10 bg-white/5 border border-white/10 min-h-[40px] cursor-pointer"
+                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 hover:text-white transition py-2 px-3 rounded-lg hover:bg-white/10 bg-white/5 border border-white/10 min-h-[44px] cursor-pointer"
                 onClick={clearSelectedEvent}
               >
                 <span className="text-base">←</span>

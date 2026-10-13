@@ -1,18 +1,30 @@
 """Settings routes."""
+import asyncio
+import logging
 import os
 import signal
+import tempfile
+import zipfile
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
+
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import Optional
+from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
+from ..config import get_settings, reload_settings, save_config
 from ..database import get_db, get_logs_db
+from ..models.log_entry import LogEntry
 from ..models.user import User
+from ..services.task_manager import task_manager
 from .auth import get_current_active_user, get_current_admin_user
-from ..config import get_settings, save_config, reload_settings
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
+logger = logging.getLogger(__name__)
 
 
 class ConfigContent(BaseModel):
@@ -28,8 +40,10 @@ async def get_config_file(
     settings = get_settings()
     
     try:
-        with open(settings.config_path, 'r') as f:
-            content = f.read()
+        def _read():
+            with open(settings.config_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        content = await asyncio.to_thread(_read)
         return {"content": content}
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="config.yml not found")
@@ -57,20 +71,19 @@ async def save_config_file(
     
     # Save to file
     try:
-        # Direct write (atomic rename doesn't work well with Docker bind mounts)
-        with open(settings.config_path, 'w') as f:
-            f.write(config.content)
+        def _write():
+            with open(settings.config_path, 'w', encoding='utf-8') as f:
+                f.write(config.content)
+        await asyncio.to_thread(_write)
         
         # Reload settings
         reload_settings()
         
         if restart:
-            import asyncio
             async def _deferred_restart():
                 await asyncio.sleep(0.5)
                 os.kill(os.getpid(), signal.SIGTERM)
 
-            from ..services.task_manager import task_manager
             task_manager.spawn(_deferred_restart(), name="deferred-restart")
             return {
                 "message": "Configuration saved successfully. ScanScribe is auto-restarting to apply settings...",
@@ -89,7 +102,6 @@ async def restart_application(
 ):
     """Restart the application to apply config changes."""
     try:
-        # Send SIGTERM to self (docker restart policy will restart)
         pid = os.getpid()
         os.kill(pid, signal.SIGTERM)
         return {"message": "Application restarting..."}
@@ -97,52 +109,70 @@ async def restart_application(
         raise HTTPException(status_code=500, detail=f"Failed to restart: {str(e)}")
 
 
+def _compute_audio_stats(audio_dir: Path) -> dict:
+    total_files = 0
+    total_size = 0
+    file_types = {}
+    
+    if audio_dir.exists():
+        for file_path in audio_dir.rglob("*"):
+            if file_path.is_file():
+                total_files += 1
+                size = file_path.stat().st_size
+                total_size += size
+                
+                ext = file_path.suffix.lower()
+                if ext not in file_types:
+                    file_types[ext] = {"count": 0, "size": 0}
+                file_types[ext]["count"] += 1
+                file_types[ext]["size"] += size
+    
+    total_size_mb = total_size / (1024 * 1024)
+    total_size_gb = total_size / (1024 * 1024 * 1024)
+    
+    return {
+        "total_files": total_files,
+        "total_size_bytes": total_size,
+        "total_size_mb": round(total_size_mb, 2),
+        "total_size_gb": round(total_size_gb, 2),
+        "file_types": file_types,
+        "directory": str(audio_dir)
+    }
+
+
 @router.get("/audio-storage/stats")
 async def get_audio_storage_stats(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Get audio storage statistics."""
-    import logging
-    logger = logging.getLogger(__name__)
-    
+    """Get audio storage statistics asynchronously."""
     settings = get_settings()
     audio_dir = settings.output_dir
     
     try:
-        total_files = 0
-        total_size = 0
-        file_types = {}
-        
-        if audio_dir.exists():
-            for file_path in audio_dir.rglob("*"):
-                if file_path.is_file():
-                    total_files += 1
-                    size = file_path.stat().st_size
-                    total_size += size
-                    
-                    ext = file_path.suffix.lower()
-                    if ext not in file_types:
-                        file_types[ext] = {"count": 0, "size": 0}
-                    file_types[ext]["count"] += 1
-                    file_types[ext]["size"] += size
-        
-        # Convert to MB/GB
-        total_size_mb = total_size / (1024 * 1024)
-        total_size_gb = total_size / (1024 * 1024 * 1024)
-        
-        return {
-            "total_files": total_files,
-            "total_size_bytes": total_size,
-            "total_size_mb": round(total_size_mb, 2),
-            "total_size_gb": round(total_size_gb, 2),
-            "file_types": file_types,
-            "directory": str(audio_dir)
-        }
-        
+        stats = await asyncio.to_thread(_compute_audio_stats, audio_dir)
+        return stats
     except Exception as e:
         logger.error(f"Error getting audio storage stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get stats: {str(e)}")
+
+
+def _purge_disk_files(audio_dir: Path) -> Tuple[int, int, List[str]]:
+    deleted_count = 0
+    deleted_size = 0
+    errors = []
+    
+    if audio_dir.exists():
+        for file_path in audio_dir.rglob("*"):
+            if file_path.is_file():
+                try:
+                    size = file_path.stat().st_size
+                    file_path.unlink()
+                    deleted_count += 1
+                    deleted_size += size
+                except Exception as e:
+                    errors.append(f"{file_path.name}: {str(e)}")
+    return deleted_count, deleted_size, errors
 
 
 @router.post("/audio-storage/purge")
@@ -151,9 +181,6 @@ async def purge_audio_storage(
     db: Session = Depends(get_logs_db)
 ):
     """Purge all saved audio files."""
-    import logging
-    logger = logging.getLogger(__name__)
-    
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -161,28 +188,17 @@ async def purge_audio_storage(
     audio_dir = settings.output_dir
     
     try:
-        deleted_count = 0
-        deleted_size = 0
-        errors = []
+        deleted_count, deleted_size, errors = await asyncio.to_thread(_purge_disk_files, audio_dir)
         
-        if audio_dir.exists():
-            for file_path in audio_dir.rglob("*"):
-                if file_path.is_file():
-                    try:
-                        size = file_path.stat().st_size
-                        file_path.unlink()
-                        deleted_count += 1
-                        deleted_size += size
-                    except Exception as e:
-                        errors.append(f"{file_path.name}: {str(e)}")
-        
-        # Update database entries to "file not saved"
-        from ..models.log_entry import LogEntry
-        
-        updated = db.query(LogEntry).filter(
-            LogEntry.audio_path != "file not saved"
-        ).update({"audio_path": "file not saved"})
-        db.commit()
+        # Update database entries to "file not saved" in worker threadpool
+        def _update_db():
+            updated = db.query(LogEntry).filter(
+                LogEntry.audio_path != "file not saved"
+            ).update({"audio_path": "file not saved"})
+            db.commit()
+            return updated
+
+        updated = await asyncio.to_thread(_update_db)
         
         logger.info(f"Purged {deleted_count} audio files ({deleted_size / (1024*1024):.2f} MB)")
         
@@ -199,20 +215,23 @@ async def purge_audio_storage(
         raise HTTPException(status_code=500, detail=f"Failed to purge: {str(e)}")
 
 
+def _build_audio_zip(audio_dir: Path, zip_path: str) -> int:
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        file_count = 0
+        if audio_dir.exists():
+            for file_path in audio_dir.rglob("*"):
+                if file_path.is_file():
+                    arcname = file_path.relative_to(audio_dir)
+                    zipf.write(file_path, arcname)
+                    file_count += 1
+    return file_count
+
+
 @router.get("/audio-storage/download-zip")
 async def download_audio_zip(
     current_user: User = Depends(get_current_active_user)
 ):
     """Download all saved audio files as a ZIP archive."""
-    import logging
-    import zipfile
-    import tempfile
-    from datetime import datetime
-    from starlette.background import BackgroundTask
-    from fastapi.responses import FileResponse
-
-    logger = logging.getLogger(__name__)
-
     settings = get_settings()
     audio_dir = settings.output_dir
 
@@ -220,17 +239,11 @@ async def download_audio_zip(
         temp_zip = tempfile.NamedTemporaryFile(delete=False, suffix='.zip')
         temp_zip.close()
 
-        with zipfile.ZipFile(temp_zip.name, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            file_count = 0
-            if audio_dir.exists():
-                for file_path in audio_dir.rglob("*"):
-                    if file_path.is_file():
-                        arcname = file_path.relative_to(audio_dir)
-                        zipf.write(file_path, arcname)
-                        file_count += 1
+        file_count = await asyncio.to_thread(_build_audio_zip, audio_dir, temp_zip.name)
 
         if file_count == 0:
-            os.unlink(temp_zip.name)
+            if os.path.exists(temp_zip.name):
+                os.unlink(temp_zip.name)
             raise HTTPException(status_code=404, detail="No audio files to download")
 
         logger.info(f"Created ZIP archive with {file_count} audio files for {current_user.username}")
@@ -251,3 +264,4 @@ async def download_audio_zip(
     except Exception as e:
         logger.error(f"Error creating ZIP archive: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to create ZIP: {str(e)}")
+

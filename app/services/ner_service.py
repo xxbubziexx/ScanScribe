@@ -4,7 +4,22 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional
 
+try:
+    import torch
+    _TORCH_AVAILABLE = True
+except ImportError:
+    torch = None
+    _TORCH_AVAILABLE = False
+
+try:
+    from transformers import pipeline
+    _TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    pipeline = None
+    _TRANSFORMERS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
+
 
 # Entity labels from the fine-tuned model (BIO tags normalized to type names).
 # UNIT:     radio unit / call sign (e.g. "Engine 4", "12U-1771").
@@ -81,25 +96,28 @@ def load_ner_model(model_path: str) -> bool:
     if not target_path.is_dir() and "/" not in target:
         logger.error("NER model path is not a directory or valid HuggingFace repo: %s", target)
         return False
+    if not _TRANSFORMERS_AVAILABLE:
+        logger.error("Transformers library not available; cannot load NER pipeline")
+        return False
+
     try:
-        from transformers import pipeline
         device = -1
-        try:
-            import torch
+        model_kwargs = {}
+        if _TORCH_AVAILABLE and torch is not None:
             if torch.cuda.is_available():
                 device = 0
+                model_kwargs["torch_dtype"] = torch.float16
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 device = "mps"
-        except Exception:
-            pass
 
         _pipeline = pipeline(
             "ner",
             model=target,
             aggregation_strategy="simple",
             device=device,
+            model_kwargs=model_kwargs,
         )
-        logger.info("NER model loaded from %s (device=%s)", target, device)
+        logger.info("NER model loaded from %s (device=%s, kwargs=%s)", target, device, model_kwargs)
         return True
     except Exception as e:
         logger.exception("Failed to load NER model from %s: %s", target, e)
@@ -131,10 +149,15 @@ def extract_entities(transcript: str, threshold: float = 0.0) -> tuple[Dict[str,
         return {}, []
 
     try:
-        results = _pipeline(transcript.strip()) or []
+        if _TORCH_AVAILABLE and torch is not None:
+            with torch.inference_mode():
+                results = _pipeline(transcript.strip()) or []
+        else:
+            results = _pipeline(transcript.strip()) or []
     except Exception as e:
         logger.warning("NER inference failed: %s", e)
         return {}, []
+
 
     if threshold > 0.0:
         results = [r for r in results if float(r.get("score", 0)) >= threshold]

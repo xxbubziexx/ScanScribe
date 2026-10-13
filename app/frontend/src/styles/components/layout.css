@@ -105,11 +105,15 @@
   }
 
   .ss-app {
-    @apply min-h-screen bg-[#0f1117] text-gray-100;
+    @apply min-h-[100dvh] bg-[#0f1117] text-gray-100;
   }
 
   .ss-app-main {
     @apply w-full px-3 py-4 sm:px-6 sm:py-8 md:px-10 md:py-10;
+  }
+
+  .ss-app-main--fullbleed {
+    @apply p-0 overflow-hidden;
   }
 
   .ss-splash {

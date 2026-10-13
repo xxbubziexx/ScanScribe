@@ -312,7 +312,7 @@ export function CommandCenterPage() {
             <div className="relative shrink-0">
               <button
                 type="button"
-                className="ss-btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1 whitespace-nowrap min-h-[38px] cursor-pointer"
+                className="ss-btn-ghost text-xs py-2 px-3 flex items-center gap-1.5 whitespace-nowrap min-h-[44px] cursor-pointer"
                 onClick={() => setMapOptionsOpen(!mapOptionsOpen)}
                 aria-expanded={mapOptionsOpen}
                 aria-label="Map Options"
@@ -361,7 +361,7 @@ export function CommandCenterPage() {
 
             <button
               type="button"
-              className="ss-btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[38px] cursor-pointer"
+              className="ss-btn-ghost text-xs py-2 px-3 flex items-center gap-1.5 whitespace-nowrap shrink-0 min-h-[44px] cursor-pointer"
               onClick={toggleFullscreen}
               title={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
               aria-label={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
@@ -372,7 +372,7 @@ export function CommandCenterPage() {
 
             <button
               type="button"
-              className="ss-btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1 whitespace-nowrap shrink-0 min-h-[38px] cursor-pointer"
+              className="ss-btn-ghost text-xs py-2 px-3 flex items-center gap-1.5 whitespace-nowrap shrink-0 min-h-[44px] cursor-pointer"
               onClick={() => {
                 void queryClient.invalidateQueries({ queryKey: ['events-list'] })
                 void queryClient.invalidateQueries({ queryKey: ['insights-stats'] })
@@ -408,7 +408,7 @@ export function CommandCenterPage() {
               type="button"
               role="tab"
               aria-selected={activeTab === 'map'}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition min-h-[42px] cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition min-h-[44px] cursor-pointer ${
                 activeTab === 'map'
                   ? 'bg-indigo-600 text-white shadow-md'
                   : 'text-gray-400 hover:text-gray-200'
@@ -421,7 +421,7 @@ export function CommandCenterPage() {
               type="button"
               role="tab"
               aria-selected={activeTab === 'feed'}
-              className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition min-h-[42px] cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-semibold rounded-lg transition min-h-[44px] cursor-pointer ${
                 activeTab === 'feed'
                   ? 'bg-indigo-600 text-white shadow-md'
                   : 'text-gray-400 hover:text-gray-200'
@@ -432,6 +432,7 @@ export function CommandCenterPage() {
             </button>
           </div>
         </div>
+
       </header>
 
       {/* Main 2-Pane Body: Map on the Left/Center, Feed Sidebar on the Right */}

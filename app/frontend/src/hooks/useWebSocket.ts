@@ -21,13 +21,10 @@ export function useWebSocket(
   const onOpenRef = useRef(callbacks?.onOpen)
   const onCloseRef = useRef(callbacks?.onClose)
 
-  useEffect(() => {
-    onMessageRef.current = onMessage
-  })
-  useEffect(() => {
-    onOpenRef.current = callbacks?.onOpen
-    onCloseRef.current = callbacks?.onClose
-  })
+  // Keep refs synchronized to latest props without triggering passive effect churn
+  onMessageRef.current = onMessage
+  onOpenRef.current = callbacks?.onOpen
+  onCloseRef.current = callbacks?.onClose
 
   useEffect(() => {
     let ws: WebSocket
@@ -72,7 +69,10 @@ export function useWebSocket(
     return () => {
       cancelled = true
       if (reconnectTimer) clearTimeout(reconnectTimer)
-      ws?.close()
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        ws.close()
+      }
     }
   }, [url])
+
 }
