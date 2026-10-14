@@ -67,10 +67,11 @@ htmlcov/
 Thumbs.db
 .DS_Store
 
-# Temporary
+# Temporary & downloaded binaries
 *.tmp
 *.bak
 *.pid
+bin/*.exe
 
 # Local-only compose (templates are docker-compose.*.example)
 docker-compose.yml
