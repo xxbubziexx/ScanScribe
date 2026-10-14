@@ -73,8 +73,13 @@ def test_extract_cited_ids():
     ids = extract_cited_ids(text)
     assert ids == [1042, 1043]
 
+    grouped_text = "Units dispatched to apartment [TX-490899, TX-490900, TX-490910]."
+    grouped_ids = extract_cited_ids(grouped_text)
+    assert grouped_ids == [490899, 490900, 490910]
+
     empty_ids = extract_cited_ids("No citations in this text.")
     assert empty_ids == []
+
 
 
 def test_format_context_block():

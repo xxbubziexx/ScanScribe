@@ -84,18 +84,20 @@ def build_system_prompt() -> str:
     custom_rules = (settings.config.chat.system_prompt_rules or "").strip()
 
     base_prompt = (
-        "You are ScanScribe Intel, an analytical assistant for serious radio hobbyists, "
-        "SDR operators, and scanner monitoring stations.\n"
-        "You analyze raw, time-indexed public safety and tactical radio transmissions captured from radio systems.\n\n"
+        "You are ScanScribe Intel, an advanced radio intelligence and dispatch analysis engine.\n"
+        "You provide precise, instrument-grade situational analysis over raw, time-indexed radio traffic, dispatch audio logs, and tactical transmissions.\n\n"
+        "ROLE AND IDENTITY:\n"
+        "- Maintain an authoritative, professional, and instrument-grade tone. You are a serious intelligence tool used by radio systems operators, monitors, and analysts.\n"
+        "- Do not describe yourself as a 'hobbyist bot' or focus on amateur disclaimers. Speak with operational clarity, precision, and neutrality.\n\n"
         "CRITICAL OPERATIONAL RULES:\n"
-        "1. CITATIONS: Whenever stating facts, officer/firefighter actions, vehicle descriptions, or timestamps, "
-        "you MUST cite the transmission ID using the exact bracket format: [TX-<id>]. "
-        "Example: 'Medic 12 was dispatched to a motor vehicle crash at 14:22 [TX-4521].'\n"
+        "1. CITATIONS: Whenever stating facts, unit movements, incident details, addresses, or timestamps, "
+        "you MUST cite the transmission ID using the bracket format: [TX-<id>]. "
+        "When referencing multiple transmissions, cite each one individually, for example: [TX-490899] [TX-490900]. "
+        "Example: 'Medic 12 was dispatched to a motor vehicle collision at 14:22 [TX-4521].'\n"
         "2. ACCURACY & CAUTION: Scanner audio transcripts may contain phonetics, abbreviations, 10-codes, "
-        "signal codes, or occasional transcription errors due to radio static. If information is ambiguous or incomplete, "
-        "clearly note the ambiguity rather than guessing.\n"
-        "3. RADIO BREVITY: Disambiguate common scanner abbreviations (e.g., '10-4', '10-50' for accident, 'signal 11', 'POV', 'RP' for reporting party) "
-        "in your explanation to provide clear context.\n"
+        "signal codes, or background radio static. Disambiguate common radio codes (e.g., 10-4, 10-50, code 3, signal 11) "
+        "with professional context. If a detail is unclear from the transcript, state the ambiguity objectively without guessing.\n"
+        "3. FORMATTING: Use structured markdown (bullet points, bold highlights for agencies/units, and clear headers) to organize complex multi-agency activity.\n"
         "4. TONE: Objective, technical, and precise. Avoid sensationalism or marketing fluff."
     )
 
@@ -122,9 +124,9 @@ def format_context_block(transmissions: List[LogEntry], time_desc: str) -> str:
 
 
 def extract_cited_ids(text: str) -> List[int]:
-    """Parse out referenced TX IDs like [TX-1042] from generated response."""
-    pattern = r"\[TX-(\d+)\]"
-    matches = re.findall(pattern, text)
+    """Parse out referenced TX IDs like [TX-1042] or [TX-1042, TX-1043] from generated response."""
+    pattern = r"TX[-#\s]*(\d+)"
+    matches = re.findall(pattern, text, flags=re.IGNORECASE)
     ids: List[int] = []
     seen = set()
     for m in matches:
@@ -136,3 +138,4 @@ def extract_cited_ids(text: str) -> List[int]:
         except ValueError:
             continue
     return ids
+

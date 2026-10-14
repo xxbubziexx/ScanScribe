@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
 import type { ChatMessage, ChatStreamMeta } from '@/types/chat'
 
 interface ChatMessageListProps {
@@ -19,6 +20,15 @@ const STARTER_PROMPTS = [
   'Were there any calls or activity near Walmart?',
 ]
 
+function preprocessMarkdownCitations(content: string): string {
+  // Replaces [TX-490899, TX-490900] or [TX-490899] or [TX #490899] with markdown links [TX #490899](tx:490899)
+  return content.replace(/\[TX[-#\s]*([0-9,\sTX#\-]+)\]/gi, (match, inner) => {
+    const numbers = inner.match(/\d+/g)
+    if (!numbers || numbers.length === 0) return match
+    return numbers.map((n: string) => `[TX #${n}](tx:${n})`).join(' ')
+  })
+}
+
 export function ChatMessageList({
   messages,
   streamingToken,
@@ -28,35 +38,73 @@ export function ChatMessageList({
   onSelectTx,
   onPromptSuggestion,
 }: ChatMessageListProps) {
-
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length, streamingToken, isStreaming])
 
-  const renderContentWithCitations = (content: string) => {
-    const parts = content.split(/(\[TX-\d+\])/g)
-
-    return parts.map((part, idx) => {
-      const match = part.match(/\[TX-(\d+)\]/)
-      if (match) {
-        const txId = parseInt(match[1], 10)
-        return (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => onSelectTx(txId)}
-            className="inline-flex items-center gap-1 mx-1 px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 border border-indigo-700/60 hover:border-indigo-400 transition-colors cursor-pointer select-none"
-            title={`Listen to original radio transmission #${txId}`}
-          >
-            <span>TX #{txId}</span>
-            <span className="text-[10px]">🔊</span>
-          </button>
-        )
-      }
-      return <span key={idx}>{part}</span>
-    })
+  const renderMarkdown = (content: string) => {
+    return (
+      <div className="text-xs leading-relaxed text-gray-200 select-text">
+        <ReactMarkdown
+          components={{
+            a: ({ href, children }) => {
+              if (href?.startsWith('tx:')) {
+                const txId = parseInt(href.slice(3), 10)
+                return (
+                  <button
+                    type="button"
+                    onClick={() => onSelectTx(txId)}
+                    className="inline-flex items-center gap-1 mx-0.5 my-0.5 px-1.5 py-0.5 rounded font-mono text-[11px] font-semibold bg-indigo-950/90 hover:bg-indigo-800 text-indigo-300 border border-indigo-700/60 hover:border-indigo-400 transition-colors cursor-pointer select-none align-baseline shadow-xs"
+                    title={`Listen to original radio transmission #${txId}`}
+                  >
+                    <span>{children}</span>
+                    <span className="text-[10px]">🔊</span>
+                  </button>
+                )
+              }
+              return (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-indigo-400 hover:underline"
+                >
+                  {children}
+                </a>
+              )
+            },
+            p: ({ children }) => <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>,
+            ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1.5">{children}</ul>,
+            ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1.5">{children}</ol>,
+            li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+            strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+            h1: ({ children }) => (
+              <h1 className="text-sm font-bold text-white mb-2 mt-3 first:mt-0">{children}</h1>
+            ),
+            h2: ({ children }) => (
+              <h2 className="text-xs font-bold text-white mb-1.5 mt-2.5 first:mt-0">{children}</h2>
+            ),
+            h3: ({ children }) => (
+              <h3 className="text-xs font-semibold text-gray-200 mb-1 mt-2 first:mt-0">{children}</h3>
+            ),
+            blockquote: ({ children }) => (
+              <blockquote className="border-l-2 border-indigo-500 pl-3 my-2 text-gray-400 italic">
+                {children}
+              </blockquote>
+            ),
+            code: ({ children }) => (
+              <code className="px-1 py-0.5 bg-[#11131c] rounded font-mono text-[11px] text-indigo-300 border border-[#232738]">
+                {children}
+              </code>
+            ),
+          }}
+        >
+          {preprocessMarkdownCitations(content)}
+        </ReactMarkdown>
+      </div>
+    )
   }
 
   return (
@@ -114,13 +162,13 @@ export function ChatMessageList({
             </div>
 
             <div
-              className={`max-w-2xl px-4 py-3 rounded-lg text-xs leading-relaxed whitespace-pre-wrap select-text ${
+              className={`max-w-3xl px-4 py-3 rounded-lg text-xs leading-relaxed select-text ${
                 isUser
-                  ? 'bg-indigo-600 text-white rounded-br-none'
+                  ? 'bg-indigo-600 text-white rounded-br-none whitespace-pre-wrap'
                   : 'bg-[#181b26] border border-[#292e42] text-gray-200 rounded-bl-none shadow-sm'
               }`}
             >
-              {isUser ? msg.content : renderContentWithCitations(msg.content)}
+              {isUser ? msg.content : renderMarkdown(msg.content)}
             </div>
           </div>
         )
@@ -128,7 +176,7 @@ export function ChatMessageList({
 
       {/* Live Streaming Response Bubble */}
       {isStreaming && (
-        <div className="flex flex-col items-start max-w-2xl">
+        <div className="flex flex-col items-start max-w-3xl">
           <div className="flex items-center gap-2 mb-1 text-[11px] text-gray-500">
             <span className="font-semibold text-indigo-400">ScanScribe Intel</span>
             <span className="animate-pulse text-indigo-400">● Analyzing logs...</span>
@@ -145,9 +193,9 @@ export function ChatMessageList({
               </div>
             )}
 
-            <div className="whitespace-pre-wrap">
+            <div>
               {streamingToken ? (
-                renderContentWithCitations(streamingToken)
+                renderMarkdown(streamingToken)
               ) : (
                 <span className="text-gray-500 italic">Reading transmissions and assembling intelligence...</span>
               )}

@@ -295,6 +295,24 @@ This living document is the **shared memory** between different AI models, human
   - Compiled React production bundle: `dist/index.html` (built in 12.78s, 0 errors).
 - **Next Tasks / Unfinished Work:** Feature implementation complete; ready for live audio verification on the Ubuntu node.
 
+### 2026-10-14 17:35 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Resolved raw markdown rendering in chat assistant responses:
+    - Integrated `ReactMarkdown` into [`ChatMessageList.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatMessageList.tsx) to format bolding, bullet points, headers, paragraphs, and lists.
+    - Added citation preprocessor `preprocessMarkdownCitations` to normalize single and grouped/comma-separated citations (e.g. `[TX-490899, TX-490900]`) into interactive audio buttons.
+  - Re-calibrated system prompt tone in [`app/services/chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py):
+    - Removed amateur "hobbyist assistant" framing. Established an instrument-grade, authoritative radio intelligence analysis engine persona.
+    - Enhanced `extract_cited_ids` regex to reliably parse multi-citation bracket formats.
+  - Recompiled production frontend (`npm.cmd run build`), ran pytest suite (**96 passed**), and restarted daemon (PID 14200, HTTP 200).
+- **Live Ingestion Impact:** None.
+- **Gotchas / Warnings for Next Model:**
+  - ReactMarkdown parses all assistant messages and streaming chunks cleanly. Any citation syntax matching `TX[-#\s]*\d+` maps to playable audio chips.
+- **Verification Performed:**
+  - `npm.cmd run build`: 0 errors in 1.33s.
+  - Pytest: 96 passed in 11.40s.
+  - Web UI: Healthy on port 8000.
+- **Next Tasks / Unfinished Work:** None; ready for user interaction.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -304,6 +322,7 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+
 
 
 
