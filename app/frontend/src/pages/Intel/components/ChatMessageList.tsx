@@ -21,12 +21,19 @@ const STARTER_PROMPTS = [
 ]
 
 function preprocessMarkdownCitations(content: string): string {
-  // Replaces [TX-490899, TX-490900] or [TX-490899] or [TX #490899] with markdown links [TX #490899](tx:490899)
-  return content.replace(/\[TX[-#\s]*([0-9,\sTX#\-]+)\]/gi, (match, inner) => {
+  // 1. Bracketed citations like [TX-490899, TX-490900] or [TX #490899] or [TX-490899]
+  let text = content.replace(/\[TX[-#\s]*([0-9,\sTX#\-]+)\]/gi, (match, inner) => {
     const numbers = inner.match(/\d+/g)
     if (!numbers || numbers.length === 0) return match
     return numbers.map((n: string) => `[TX #${n}](tx:${n})`).join(' ')
   })
+
+  // 2. Bare unbracketed citations like TX #490899 or TX-490899 not already inside a link or bracket
+  text = text.replace(/(^|[^[/\w])TX[-#\s]+(\d+)(?![\])])/gi, (_match, prefix, id) => {
+    return `${prefix}[TX #${id}](tx:${id})`
+  })
+
+  return text
 }
 
 export function ChatMessageList({

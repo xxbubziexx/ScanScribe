@@ -86,7 +86,7 @@ def test_format_context_block():
     empty_block = format_context_block([], "Past 1 Hour")
     assert "NO RADIO TRANSMISSIONS RECORDED" in empty_block
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
     mock_log = LogEntry(
         id=999,
         filename="test.mp3",
@@ -94,6 +94,7 @@ def test_format_context_block():
         talkgroup="FIRE_DISP",
         transcript="Structure fire reported on 5th Street.",
     )
+
     block = format_context_block([mock_log], "Today")
     assert "[TX-999" in block
     assert "TG: FIRE_DISP" in block

@@ -313,6 +313,28 @@ This living document is the **shared memory** between different AI models, human
   - Web UI: Healthy on port 8000.
 - **Next Tasks / Unfinished Work:** None; ready for user interaction.
 
+---
+
+### 2026-10-14 17:45 | Gemini (Windows Dev Workstation)
+- **Work Performed:**
+  - Resolved temporal hallucinations in Scanner Intelligence chat queries:
+    - Fixed timezone skew in [`app/services/chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py): SQLite `LogEntry.timestamp` stores naive local time; replaced `datetime.now(timezone.utc)` with naive `datetime.now()` in `parse_time_scope()` so query windows align with real data.
+    - Added explicit context bounding headers: `CURRENT LOCAL TIME`, `TIME SCOPE`, `EARLIEST RECORDED TRANSMISSION`, and `LATEST RECORDED TRANSMISSION`.
+    - Enriched transmission log entries in LLM context with dual 12h AM/PM and 24h military formats (e.g., `2026-10-14 04:03:30 PM [16:03:30]`). This prevents LLMs from confusing `16:00` with 6:00 PM.
+    - Enforced strict Anti-Hallucination Protocol in the system prompt: zero tolerance for hour substitution; if a user asks for a time that has not occurred or has no recorded transmissions, the LLM must explicitly report that no traffic exists rather than fabricating or borrowing traffic from earlier hours.
+    - Updated `preprocessMarkdownCitations` in [`ChatMessageList.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatMessageList.tsx) to match both bracketed `[TX-1234]` / `[TX #1234, TX #1235]` citations and bare unbracketed citations `TX #1234` without breaking existing markdown links.
+    - Rebuilt frontend bundle (`npm.cmd run build`) and restarted daemon service (`PID 12676`, port 8000).
+- **Live Ingestion Impact:** None. Zero impact on live audio ingestion or database writes.
+- **Gotchas / Warnings for Next Model:**
+  - `LogEntry.timestamp` in SQLite is naive local wall time. Never compare `LogEntry.timestamp` against timezone-aware UTC datetimes (`datetime.now(timezone.utc)`).
+  - Background daemon must be restarted via `python -m app.cli restart` whenever backend routes or context prompts are updated, as Python does not hot-reload module memory.
+- **Verification Performed:**
+  - Direct async query test against OpenRouter with `what happened at 6pm today`: Correctly reported no recorded transmissions at 6:00 PM today with current time and latest log timestamp cited.
+  - `pytest tests/test_chat.py`: 6 passed in 11.38s.
+  - `npm.cmd run build`: 0 errors in 1.33s.
+  - Live server health check: HTTP 200 on port 8000.
+- **Next Tasks / Unfinished Work:** Feature verified and live. Ready for review.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
