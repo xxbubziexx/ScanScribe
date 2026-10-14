@@ -1,4 +1,7 @@
-# CPU: copy this file to `docker-compose.yml` and `requirements.cpu.example` to `requirements.txt`, then `docker compose up -d --build`. In config.yml: model.device: cpu
+# CPU Deployment:
+# 1. Copy this file to `docker-compose.yml`: cp docker/docker-compose.cpu.example docker-compose.yml
+# 2. Copy config: cp config.yml.example config.yml && cp .env.example .env
+# 3. Start stack: docker compose up -d --build
 
 services:
   scanscribe:
@@ -9,6 +12,8 @@ services:
         TORCH_VERSION: ${TORCH_VERSION:-2.5.1}
     container_name: scanscribe
     restart: unless-stopped
+    shm_size: '2gb'
+    stop_grace_period: 30s
 
     ports:
       - "0.0.0.0:8000:8000"
@@ -36,6 +41,13 @@ services:
       - DB_PATH=/app/data/scanscribe.db
       - CONFIG_PATH=/app/config.yml
 
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
     deploy:
       resources:
         limits:
@@ -46,7 +58,7 @@ services:
 
 volumes:
   scanscribe_audio_storage:
-    external: true
+    name: scanscribe_audio_storage
 
 networks:
   scanscribe_network:

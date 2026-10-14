@@ -17,10 +17,13 @@ NER_MODEL="${NER_MODEL:-xxbubziexx/incident_ner_v1}"
 OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}"
 BRANCH="${BRANCH:-main}"
 NON_INTERACTIVE="${NON_INTERACTIVE:-false}"
+DEPLOY_METHOD="${DEPLOY_METHOD:-native}"
 
 # Parse command line flags if passed
 while [[ $# -gt 0 ]]; do
   case $1 in
+    --docker) DEPLOY_METHOD="docker"; shift ;;
+    --native) DEPLOY_METHOD="native"; shift ;;
     --install-dir) INSTALL_DIR="$2"; shift 2 ;;
     --ingest-dir) INGEST_DIR="$2"; shift 2 ;;
     --mode) MODE="$2"; shift 2 ;;
@@ -83,8 +86,20 @@ if [ -t 0 ] && [ "$NON_INTERACTIVE" != "true" ]; then
   echo "  Tip: Press ENTER on any prompt to accept the recommended default."
   echo ""
 
-  # 1. Install Directory
-  INSTALL_DIR=$(prompt_user "1. Installation Directory" "$INSTALL_DIR")
+  # 1. Deployment Architecture
+  echo "1. Deployment Architecture:"
+  echo "   [1] Native Linux Station (Recommended: bare-metal Python venv, systemd service, native CLI)"
+  echo "   [2] Docker Compose Stack (Containerized: auto-managed containers, self-migrating, isolated volumes)"
+  DEPLOY_CHOICE=$(prompt_user "   Choose deployment method [1-2]" "1" "Native Linux Station")
+  if [ "$DEPLOY_CHOICE" = "2" ] || [ "$DEPLOY_CHOICE" = "docker" ]; then
+    DEPLOY_METHOD="docker"
+  else
+    DEPLOY_METHOD="native"
+  fi
+  echo ""
+
+  # 2. Install Directory
+  INSTALL_DIR=$(prompt_user "2. Installation Directory" "$INSTALL_DIR")
   echo ""
 
   # 2. Ingest Directory
@@ -198,6 +213,7 @@ if [ -t 0 ] && [ "$NON_INTERACTIVE" != "true" ]; then
   echo "============================================================"
   echo "              Installation Profile Confirmation            "
   echo "============================================================"
+  echo "  Deployment Target : $([ "$DEPLOY_METHOD" = "docker" ] && echo 'Docker Compose Stack' || echo 'Native Linux Station')"
   echo "  Install Directory : $INSTALL_DIR"
   echo "  Ingest Directory  : $INGEST_DIR"
   echo "  Compute Mode      : $MODE"
@@ -248,6 +264,96 @@ cd "$INSTALL_DIR"
 # 3. Directory Creation
 echo "[2/7] Creating directories..."
 mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/data" "$INSTALL_DIR/logs" "$INSTALL_DIR/models" "$INSTALL_DIR/audio_storage" "$INGEST_DIR"
+
+# Docker Deployment Route
+if [ "$DEPLOY_METHOD" = "docker" ]; then
+  echo ""
+  echo "============================================================"
+  echo "         Configuring Docker Compose Deployment              "
+  echo "============================================================"
+
+  # Verify Docker and Docker Compose
+  if ! command -v docker &>/dev/null; then
+    echo "[-] Error: Docker is not installed or not in PATH."
+    echo "    Please install Docker Engine (https://docs.docker.com/engine/install/) and retry."
+    exit 1
+  fi
+
+  DOCKER_COMPOSE_CMD="docker compose"
+  if ! docker compose version &>/dev/null; then
+    if command -v docker-compose &>/dev/null; then
+      DOCKER_COMPOSE_CMD="docker-compose"
+    else
+      echo "[-] Error: Docker Compose is not available."
+      echo "    Please install the Docker Compose plugin and retry."
+      exit 1
+    fi
+  fi
+
+  # Check if docker daemon is accessible
+  if ! docker info &>/dev/null; then
+    echo "[-] Error: Docker daemon is not accessible or not running."
+    echo "    Make sure the docker daemon is running and your user has permission (e.g. 'sudo usermod -aG docker \$USER')."
+    exit 1
+  fi
+
+  # Copy Docker compose template
+  if [ "$MODE" = "cuda" ]; then
+    echo "[*] Selecting NVIDIA CUDA GPU Docker Compose profile..."
+    cp "$INSTALL_DIR/docker/docker-compose.gpu.example" "$INSTALL_DIR/docker-compose.yml"
+  else
+    echo "[*] Selecting CPU-optimized Docker Compose profile..."
+    cp "$INSTALL_DIR/docker/docker-compose.cpu.example" "$INSTALL_DIR/docker-compose.yml"
+  fi
+
+  # Generate SECRET_KEY
+  SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || od -vN 32 -An -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || echo "scanscribe-secret-$(date +%s)")
+
+  # Create .env
+  cat <<EOF > "$INSTALL_DIR/.env"
+SECRET_KEY=$SECRET_KEY
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+OPENROUTER_API_KEY=$OPENROUTER_API_KEY
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=google/gemini-2.5-flash
+INGEST_DIR=/app/ingest
+OUTPUT_DIR=/app/audio_storage
+LOG_DIR=/app/logs
+DB_PATH=/app/data/scanscribe.db
+CONFIG_PATH=/app/config.yml
+EOF
+
+  # Prepare initial config.yml if not existing
+  if [ ! -f "$INSTALL_DIR/config.yml" ]; then
+    cp "$INSTALL_DIR/config.yml.example" "$INSTALL_DIR/config.yml"
+    sed -i "s/device: cuda/device: $MODE/g" "$INSTALL_DIR/config.yml" 2>/dev/null || true
+    sed -i "s/port: 8000/port: $PORT/g" "$INSTALL_DIR/config.yml" 2>/dev/null || true
+    sed -i "s/workers: [0-9]*/workers: $WORKERS/g" "$INSTALL_DIR/config.yml" 2>/dev/null || true
+    if [ -n "$OPENROUTER_API_KEY" ]; then
+      sed -i "s/api_key: \"\"/api_key: \"$OPENROUTER_API_KEY\"/g" "$INSTALL_DIR/config.yml" 2>/dev/null || true
+    fi
+  fi
+
+  # Build and start container stack
+  echo "[*] Building and starting ScanScribe Docker stack..."
+  $DOCKER_COMPOSE_CMD up -d --build
+
+  echo ""
+  echo "============================================================"
+  echo "      ScanScribe Docker Stack Deployed Successfully!        "
+  echo "============================================================"
+  echo "  Dashboard URL     : http://localhost:$PORT"
+  echo "  Container Name    : scanscribe"
+  echo "  Compose Directory : $INSTALL_DIR"
+  echo ""
+  echo "  Management Commands:"
+  echo "    View live logs  : cd $INSTALL_DIR && $DOCKER_COMPOSE_CMD logs -f"
+  echo "    Restart stack   : cd $INSTALL_DIR && $DOCKER_COMPOSE_CMD restart"
+  echo "    Stop stack      : cd $INSTALL_DIR && $DOCKER_COMPOSE_CMD down"
+  echo "    Pull updates    : cd $INSTALL_DIR && git pull && $DOCKER_COMPOSE_CMD up -d --build"
+  echo "============================================================"
+  exit 0
+fi
 
 # 4. Bootstrap UV
 echo "[3/7] Setting up isolated Python runtime with uv..."

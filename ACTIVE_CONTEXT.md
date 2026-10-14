@@ -197,6 +197,26 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - System fully verified and ready for live field validation on phone/tablet or staging deployment.
 
+---
+
+### 2026-10-13 21:50 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Modernized Docker container pipeline, build assets, and integration:
+    - **Self-Migrating Entrypoint ([`docker/entrypoint.sh`](file:///a:/Scanscribe_Projects/scanscribe/docker/entrypoint.sh)):** Automatically runs `alembic upgrade head` on container boot and restores pre-built React frontend assets if shadowed by host mounts (`- ./app:/app/app`). Preserves PID 1 signal propagation via `exec "$@"`.
+    - **Multi-Stage Dockerfiles ([`docker/Dockerfile.cpu`](file:///a:/Scanscribe_Projects/scanscribe/docker/Dockerfile.cpu) & [`docker/Dockerfile.gpu`](file:///a:/Scanscribe_Projects/scanscribe/docker/Dockerfile.gpu)):** Consolidated dependency installations directly from root [`requirements.txt`](file:///a:/Scanscribe_Projects/scanscribe/requirements.txt), added `alembic/` migrations and CLI registration (`pip install -e /app`), bundled `curl` healthcheck, and configured non-root `appuser`.
+    - **Compose Profiles ([`docker/docker-compose.cpu.example`](file:///a:/Scanscribe_Projects/scanscribe/docker/docker-compose.cpu.example) & [`docker/docker-compose.gpu.example`](file:///a:/Scanscribe_Projects/scanscribe/docker/docker-compose.gpu.example)):** Added `shm_size: 2gb` (`torch-cuda-memory-guard`), `stop_grace_period: 30s` for safe audio draining, standardized healthchecks, and auto-managed named volumes (`scanscribe_audio_storage`).
+    - **Installer Integration ([`install.sh`](file:///a:/Scanscribe_Projects/scanscribe/install.sh) & [`install.ps1`](file:///a:/Scanscribe_Projects/scanscribe/install.ps1)):** Added interactive Prompt 1 ("Deployment Architecture: [1] Native Station vs [2] Docker Compose") and CLI flags (`--docker`/`--native` on Linux, `-Docker`/`-Native` on Windows) with automated hardware auto-detection, `.env` secret generation, and `docker compose up -d --build`.
+    - **Documentation:** Updated [`README.md`](file:///a:/Scanscribe_Projects/scanscribe/README.md) and [`docker/README.md`](file:///a:/Scanscribe_Projects/scanscribe/docker/README.md) with Docker one-liners and self-migrating update procedures.
+- **Live Ingestion Impact:** None. Native installation pathway remains the default and completely untouched.
+- **Gotchas / Warnings for Next Model:**
+  - Docker updates are now fully hands-off (`git pull && docker compose up -d --build`). The entrypoint ensures Alembic schema migrations run on startup before Uvicorn binds the port.
+  - Development continues exclusively on `snapshot`.
+- **Verification Performed:**
+  - Full backend pytest suite: **89 passed in 12.43s** (0 failures).
+  - Validated PowerShell syntax in `install.ps1` via AST parser (exit code 0).
+  - Validated bash syntax in `install.sh` and `docker/entrypoint.sh` via `bash -n` (exit code 0).
+- **Next Tasks / Unfinished Work:** Staging beta testing.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)

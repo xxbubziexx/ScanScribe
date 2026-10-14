@@ -17,12 +17,14 @@ slowapi>=0.1.9
 
 # Database
 sqlalchemy==2.0.36
+alembic>=1.13.3
 
 # AI & Transcription (use CUDA PyTorch wheels — see file header, Dockerfile.gpu)
 torch==2.5.1
 torchaudio==2.5.1
 transformers==4.46.3
 accelerate==1.1.1
+huggingface-hub>=0.23.2,<1.0
 openai>=1.0.0
 httpx>=0.27.0
 

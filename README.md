@@ -107,14 +107,22 @@ ScanScribe runs natively on **Windows** and **Linux** with zero manual dependenc
 
 ### Option A: One-Line Automated Install
 
-**Windows (PowerShell as Administrator or Standard User):**
+**Windows (PowerShell):**
 ```powershell
+# Interactive (prompts for Native Station or Docker Compose):
 irm https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.ps1 | iex
+
+# Or non-interactive Docker Compose deployment:
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.ps1))) -Docker -NonInteractive
 ```
 
 **Linux / Ubuntu Server (Bash):**
 ```bash
+# Interactive (prompts for Native Station or Docker Compose):
 curl -fsSL https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.sh | bash
+
+# Or direct Docker Compose deployment:
+curl -fsSL https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.sh | bash -s -- --docker
 ```
 
 ### Option B: Clone & Run Interactively
@@ -122,12 +130,14 @@ curl -fsSL https://raw.githubusercontent.com/xxbubziexx/ScanScribe/main/install.
 git clone https://github.com/xxbubziexx/ScanScribe.git
 cd ScanScribe
 
-# On Windows:
+# On Windows (select Native Station or Docker):
 .\install.ps1
 
-# On Linux:
+# On Linux (select Native Station or Docker):
 ./install.sh
 ```
+
+*(For manual Docker homelab, Unraid, or TrueNAS configuration, see [`docker/README.md`](docker/README.md).)*
 
 ### What the Installer Automates:
 - [x] Bootstraps isolated Python 3.11 runtime using Astral `uv` (will never touch or conflict with your system Python).

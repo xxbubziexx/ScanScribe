@@ -2,9 +2,6 @@
 # Build (from repo root): docker build -f docker/Dockerfile.gpu -t scanscribe:gpu .
 # If wheels fail, try: --build-arg PYTORCH_WHL_SUBDIR=cu121
 # See: https://pytorch.org/get-started/locally/
-#
-# Build context must include `requirements.txt` (copy from requirements.cpu.example or .gpu.example).
-# Keep `TORCH_VERSION` in sync with that file (or compose build args).
 ARG PYTHON_VERSION=3.11
 
 # --- frontend build stage ---
@@ -15,6 +12,7 @@ RUN npm ci
 COPY app/frontend/ ./
 RUN npm run build
 
+# --- python builder stage ---
 FROM python:${PYTHON_VERSION}-slim AS builder
 ARG PYTORCH_WHL_SUBDIR=cu124
 ARG TORCH_VERSION=2.5.1
@@ -28,14 +26,14 @@ RUN apt-get update \
 RUN python -m venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && grep -vE '^(torch|torchaudio)==' requirements.txt > /tmp/req_no_torch.txt \
-    && pip install --no-cache-dir -r /tmp/req_no_torch.txt \
+COPY requirements.txt pyproject.toml README.md ./
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt \
     && pip install --no-cache-dir --force-reinstall \
         --index-url "https://download.pytorch.org/whl/${PYTORCH_WHL_SUBDIR}" \
         "torch==${TORCH_VERSION}" "torchaudio==${TORCH_VERSION}"
 
+# --- runtime ---
 ARG PYTHON_VERSION=3.11
 FROM python:${PYTHON_VERSION}-slim AS runtime
 
@@ -45,32 +43,42 @@ LABEL org.opencontainers.image.title="ScanScribe" \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg libsndfile1 \
+    && apt-get install -y --no-install-recommends ffmpeg libsndfile1 curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 --shell /usr/sbin/nologin appuser
 
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=frontend-builder /build/frontend/dist /opt/frontend_dist
+
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     CONFIG_PATH=/app/config.yml \
     MODEL_PATH=/app/models \
     INGEST_DIR=/app/ingest \
     OUTPUT_DIR=/app/audio_storage \
-    LOG_DIR=/app/logs
+    LOG_DIR=/app/logs \
+    DATA_DIR=/app/data \
+    DB_PATH=/app/data/scanscribe.db
 
-RUN mkdir -p /app/ingest /app/audio_storage /app/logs /app/models \
+RUN mkdir -p /app/ingest /app/audio_storage /app/logs /app/models /app/data /app/app/frontend/dist \
     && chown -R appuser:appuser /app
 
 COPY --chown=appuser:appuser app/ /app/app/
 COPY --from=frontend-builder --chown=appuser:appuser /build/frontend/dist /app/app/frontend/dist
+COPY --chown=appuser:appuser alembic/ /app/alembic/
+COPY --chown=appuser:appuser alembic.ini pyproject.toml README.md /app/
 COPY --chown=appuser:appuser config.yml.example /app/config.yml
+COPY --chown=appuser:appuser docker/entrypoint.sh /app/entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh \
+    && pip install --no-cache-dir --no-deps -e /app
 
 USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).read()"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://127.0.0.1:8000/health || exit 1
 
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

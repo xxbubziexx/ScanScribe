@@ -24,8 +24,14 @@ param(
     [string]$NerModel = "",
     [string]$OpenRouterApiKey = "",
     [string]$Branch = "main",
+    [string]$DeployMethod = "native",
+    [switch]$Docker,
+    [switch]$Native,
     [switch]$NonInteractive
 )
+
+if ($Docker) { $DeployMethod = "docker" }
+if ($Native) { $DeployMethod = "native" }
 
 $ErrorActionPreference = "Continue"
 $env:PYTHONIOENCODING = "utf-8"
@@ -115,8 +121,20 @@ if ($isInteractive) {
     Write-Host "  Tip: Press ENTER on any prompt to accept the recommended default." -ForegroundColor Yellow
     Write-Host ""
 
-    # 1. Install Directory
-    $rawInstall = Prompt-Setting -PromptText "1. Installation Directory" -DefaultVal $InstallDir
+    # 1. Deployment Architecture
+    Write-Host "1. Deployment Architecture:" -ForegroundColor White
+    Write-Host "   [1] Native Windows Station (Recommended: bare-metal Python venv, Task Scheduler service, native CLI)" -ForegroundColor Gray
+    Write-Host "   [2] Docker Compose Stack (Containerized: auto-managed containers, self-migrating, isolated volumes)" -ForegroundColor Gray
+    $deployChoice = Prompt-Setting -PromptText "   Choose deployment method [1-2]" -DefaultVal "1" -DefaultHint "Native Windows Station"
+    if ($deployChoice -eq "2" -or $deployChoice.ToLower() -eq "docker") {
+        $DeployMethod = "docker"
+    } else {
+        $DeployMethod = "native"
+    }
+    Write-Host ""
+
+    # 2. Install Directory
+    $rawInstall = Prompt-Setting -PromptText "2. Installation Directory" -DefaultVal $InstallDir
     $InstallDir = Validate-DirectoryPath -PathValue $rawInstall -DefaultPath $InstallDir
     Write-Host ""
 
@@ -248,6 +266,7 @@ if ($isInteractive) {
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host "              Installation Profile Confirmation            " -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "  Deployment Target : $(if ($DeployMethod -eq "docker") { "Docker Compose Stack" } else { "Native Windows Station" })"
     Write-Host "  Install Directory : $InstallDir"
     Write-Host "  Ingest Directory  : $IngestDir"
     Write-Host "  Compute Mode      : $($Mode.ToUpper())"
@@ -351,6 +370,93 @@ foreach ($dir in $directories) {
     if (-not (Test-Path $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
+}
+
+# Docker Deployment Route
+if ($DeployMethod -eq "docker") {
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "         Configuring Docker Compose Deployment              " -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+
+    # Verify Docker Desktop
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        Write-Host "[-] Error: Docker is not installed or not in PATH." -ForegroundColor Red
+        Write-Host "    Please install Docker Desktop (https://www.docker.com/products/docker-desktop/) and ensure Docker is running." -ForegroundColor Yellow
+        exit 1
+    }
+
+    try {
+        $dockerInfo = docker info 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[-] Error: Docker daemon is not responding." -ForegroundColor Red
+            Write-Host "    Please start Docker Desktop and ensure the Linux container engine is running." -ForegroundColor Yellow
+            exit 1
+        }
+    } catch {
+        Write-Host "[-] Error accessing Docker daemon: $_" -ForegroundColor Red
+        exit 1
+    }
+
+    # Copy Docker compose template
+    if ($Mode -eq "cuda") {
+        Write-Host "[*] Selecting NVIDIA CUDA GPU Docker Compose profile..." -ForegroundColor Green
+        Copy-Item (Join-Path $InstallDir "docker\docker-compose.gpu.example") (Join-Path $InstallDir "docker-compose.yml") -Force
+    } else {
+        Write-Host "[*] Selecting CPU-optimized Docker Compose profile..." -ForegroundColor Green
+        Copy-Item (Join-Path $InstallDir "docker\docker-compose.cpu.example") (Join-Path $InstallDir "docker-compose.yml") -Force
+    }
+
+    # Generate SECRET_KEY
+    $secretKey = -join ((1..32) | ForEach-Object { "{0:x2}" -f (Get-Random -Minimum 0 -Maximum 256) })
+
+    # Create .env
+    $envContent = @"
+SECRET_KEY=$secretKey
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+OPENROUTER_API_KEY=$OpenRouterApiKey
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=google/gemini-2.5-flash
+INGEST_DIR=/app/ingest
+OUTPUT_DIR=/app/audio_storage
+LOG_DIR=/app/logs
+DB_PATH=/app/data/scanscribe.db
+CONFIG_PATH=/app/config.yml
+"@
+    Set-Content -Path (Join-Path $InstallDir ".env") -Value $envContent -Encoding utf8
+
+    # Prepare initial config.yml if not existing
+    $configFile = Join-Path $InstallDir "config.yml"
+    if (-not (Test-Path $configFile)) {
+        Copy-Item (Join-Path $InstallDir "config.yml.example") $configFile -Force
+        (Get-Content $configFile) -replace 'device: cuda', "device: $Mode" `
+                                  -replace 'port: 8000', "port: $Port" `
+                                  -replace 'workers: \d+', "workers: $Workers" | Set-Content $configFile -Encoding utf8
+        if ($OpenRouterApiKey) {
+            (Get-Content $configFile) -replace 'api_key: ""', "api_key: `"$OpenRouterApiKey`"" | Set-Content $configFile -Encoding utf8
+        }
+    }
+
+    # Build and start container stack
+    Write-Host "[*] Building and starting ScanScribe Docker stack..." -ForegroundColor Green
+    Set-Location $InstallDir
+    docker compose up -d --build
+
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "      ScanScribe Docker Stack Deployed Successfully!        " -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "  Dashboard URL     : http://localhost:$Port" -ForegroundColor Green
+    Write-Host "  Container Name    : scanscribe" -ForegroundColor White
+    Write-Host "  Compose Directory : $InstallDir" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Management Commands:" -ForegroundColor Yellow
+    Write-Host "    View live logs  : cd `"$InstallDir`"; docker compose logs -f" -ForegroundColor White
+    Write-Host "    Restart stack   : cd `"$InstallDir`"; docker compose restart" -ForegroundColor White
+    Write-Host "    Stop stack      : cd `"$InstallDir`"; docker compose down" -ForegroundColor White
+    Write-Host "    Pull updates    : cd `"$InstallDir`"; git pull; docker compose up -d --build" -ForegroundColor White
+    Write-Host "============================================================" -ForegroundColor Cyan
+    exit 0
 }
 
 # 4. Bootstrap UV (Astral's fast Python runtime & package manager)
