@@ -676,6 +676,7 @@ function CommandCenterFeedComponent({
             <p className="text-sm font-semibold text-gray-400">No matching incidents</p>
             <p className="text-xs text-gray-600 mt-1">Try adjusting your filters or search query</p>
           </div>
+        ) : (
           events.map((ev) => (
             <CommandCenterFeedCard
               key={ev.eventId}

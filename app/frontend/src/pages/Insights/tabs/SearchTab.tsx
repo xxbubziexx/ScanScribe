@@ -11,14 +11,6 @@ function formatDateShort(ts: string) {
   return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function formatBytes(bytes: number) {
-  if (!bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-}
-
 function hourLabel(h: number) {
   const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
   return `${h12}:00 ${h < 12 ? 'AM' : 'PM'}`
@@ -54,7 +46,7 @@ export function SearchTab({
   filters,
   onFiltersChange,
   onTalkgroupFilter,
-  viewOnly = false,
+  viewOnly: _viewOnly = false,
 }: SearchTabProps) {
   const [results, setResults] = useState<LogEntry[]>([])
   const [total, setTotal] = useState(0)

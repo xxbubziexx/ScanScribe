@@ -6,7 +6,7 @@ interface TalkgroupTabProps {
   viewOnly?: boolean
 }
 
-export function TalkgroupTab({ talkgroups, onTalkgroupClick, viewOnly = false }: TalkgroupTabProps) {
+export function TalkgroupTab({ talkgroups, onTalkgroupClick, viewOnly: _viewOnly = false }: TalkgroupTabProps) {
   if (talkgroups.length === 0) {
     return <p className="ss-empty not-italic">No data for selected period.</p>
   }

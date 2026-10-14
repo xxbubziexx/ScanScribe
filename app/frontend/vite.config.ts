@@ -33,10 +33,16 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'leaflet-vendor': ['leaflet', 'react-leaflet'],
-          'charts-vendor': ['recharts'],
-          'monaco-vendor': ['@monaco-editor/react'],
+        manualChunks(id) {
+          if (id.includes('node_modules/leaflet') || id.includes('node_modules/react-leaflet')) {
+            return 'leaflet-vendor'
+          }
+          if (id.includes('node_modules/recharts')) {
+            return 'charts-vendor'
+          }
+          if (id.includes('node_modules/@monaco-editor') || id.includes('node_modules/monaco-editor')) {
+            return 'monaco-vendor'
+          }
         },
       },
     },

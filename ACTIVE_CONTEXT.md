@@ -253,6 +253,28 @@ This living document is the **shared memory** between different AI models, human
   - Verified server restart with PID 16932 and healthy HTTP 200 responses.
 - **Next Tasks / Unfinished Work:** Active beta testing on station.
 
+---
+
+### 2026-10-13 23:25 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Resolved stale frontend bundle rendering on station web server (`http://localhost:8000/app/insights`):
+    - **Root Cause:** FastAPI serves pre-built production static files from `app/frontend/dist` (`_FRONTEND_DIST`). Previous mobile UX edits in `src/pages/Insights/tabs/SearchTab.tsx`, `TalkgroupTab.tsx`, and `components/EventDetailContent.tsx` were saved in source code but `app/frontend/dist` had not been recompiled because Node was not present on the Windows station, leaving the old bundle (`index-DCmcYptv.js` from commit `7a1a0a6`) active.
+    - **TypeScript & Vite Build Fixes:**
+      - Resolved syntax error in [`CommandCenterFeed.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/CommandCenter/CommandCenterFeed.tsx) (missing `) : (` in feed empty state ternary).
+      - Converted `manualChunks` in [`vite.config.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/vite.config.ts) from legacy object format to function syntax (`manualChunks(id)`) for Vite 8 / Rolldown compatibility.
+      - Removed unused variables (`useRef` in [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx), `canAdmin` in [`Incidents/index.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/Incidents/index.tsx), `formatBytes`/`viewOnly` in [`SearchTab.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/tabs/SearchTab.tsx), `viewOnly` in [`TalkgroupTab.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/tabs/TalkgroupTab.tsx)).
+    - **Bundle Compiled & Verified:** Successfully compiled `dist/` with Vite 8 and TypeScript (`tsc -b`), generating clean new bundles (`index-fOesApP8.js`, `index-C_6tLegE.css`) with all mobile search controls and 2-tier card layouts baked in.
+    - **Restart:** Restarted live background server (PID: 5464).
+- **Live Ingestion Impact:** None. Frontend assets and build pipeline only.
+- **Gotchas / Warnings for Next Model:**
+  - FastAPI serves from `app/frontend/dist`. Whenever frontend TSX/CSS changes are made, `npm run build` must be executed so that `dist/` contains the updated assets.
+  - Development continues exclusively on `snapshot`.
+- **Verification Performed:**
+  - `tsc -b` and `vite build` completed cleanly (0 errors).
+  - Full backend pytest suite: **90 passed in 12.25s** (0 failures).
+  - Server restarted and healthy.
+- **Next Tasks / Unfinished Work:** User hard refresh and mobile UI testing.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -262,6 +284,7 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+
 
 
 
