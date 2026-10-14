@@ -492,4 +492,34 @@ def test_insights_search_attached_events(client, test_users):
         events_db.close()
 
 
+def test_admin_localhost_auth_me_serialization(client):
+    """Verify that bootstrap admin with admin@localhost email succeeds on /api/auth/me without ResponseValidationError."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == "admin@localhost").first()
+        if not user:
+            user = User(
+                username="admin_localhost_test",
+                email="admin@localhost",
+                hashed_password=get_password_hash("testpass123"),
+                is_active=True,
+                is_admin=True,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+
+        token = create_access_token(data={"sub": user.username})
+        headers = {"Authorization": f"Bearer {token}"}
+        resp = client.get("/api/auth/me", headers=headers)
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text}"
+        data = resp.json()
+        assert data["username"] == user.username
+        assert data["email"] == "admin@localhost"
+    finally:
+        db.close()
+
+
+
+
 

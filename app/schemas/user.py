@@ -1,12 +1,12 @@
 """Pydantic schemas for authentication and user management."""
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, ConfigDict
 
 
 class UserBase(BaseModel):
     username: str
-    email: EmailStr
+    email: str
 
 
 class UserCreate(UserBase):
@@ -14,7 +14,7 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None

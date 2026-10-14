@@ -236,6 +236,23 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Ready for live staging validation on mobile devices.
 
+---
+
+### 2026-10-13 23:15 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Resolved `ResponseValidationError` causing ASGI HTTP 500 exceptions on `/api/auth/me`:
+    - **Root Cause:** Station bootstrap initializes the default administrator with `admin@localhost` (`app/bootstrap_admin.py`). In [`app/schemas/user.py`](file:///a:/Scanscribe_Projects/scanscribe/app/schemas/user.py), `UserBase` had used strict `EmailStr`, which requires a public top-level domain (TLD with period). Whenever the browser requested current user credentials via `/api/auth/me`, FastAPI serialization failed validation, crashing with `fastapi.exceptions.ResponseValidationError: value is not a valid email address: The part after the @-sign is not valid. It should have a period.`.
+    - **Fix:** Switched `email` field to `str` in [`app/schemas/user.py`](file:///a:/Scanscribe_Projects/scanscribe/app/schemas/user.py) (`UserBase`, `UserUpdate`). Matching [`app/routes/users.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/users.py), this allows intranet hostnames, `.local`, `.lan`, and `localhost` station addresses without serialization failures.
+    - **Regression Test:** Added `test_admin_localhost_auth_me_serialization` in [`tests/test_security_patches.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_security_patches.py).
+- **Live Ingestion Impact:** None. Authentication serialization fix only.
+- **Gotchas / Warnings for Next Model:**
+  - On-premise public safety stations often use internal hostnames/domains. Never use strict external domain validation (`EmailStr`) in response models where existing DB rows could fail serialization.
+  - Development continues exclusively on `snapshot`.
+- **Verification Performed:**
+  - Full backend pytest suite: **90 passed in 12.27s** (0 failures).
+  - Verified server restart with PID 16932 and healthy HTTP 200 responses.
+- **Next Tasks / Unfinished Work:** Active beta testing on station.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -245,5 +262,6 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+
 
 
