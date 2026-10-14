@@ -124,9 +124,24 @@ class HourlySummariesApiConfig(BaseModel):
     max_output_tokens: int = 8192  # For summaries; increase if responses are cut off
 
 
+class ChatConfig(BaseModel):
+    """Scanner Intelligence natural-language chat configuration."""
+    enabled: bool = True
+    provider: Literal["openrouter", "gemini"] = "openrouter"
+    api_key: str = ""
+    # OpenRouter: e.g. "google/gemini-2.5-flash" or "anthropic/claude-3.5-haiku"
+    model: str = "google/gemini-2.5-flash"
+    base_url: str = ""
+    max_output_tokens: int = 4096
+    max_transmissions_context: int = 2500
+    temperature: float = 0.2
+    system_prompt_rules: Optional[str] = ""
+
+
 class SummariesConfig(BaseModel):
     """Hour summaries (Insights) auto-generation schedule."""
     auto_generate_enabled: bool = False
+
     # How often to check for missing summaries (seconds)
     auto_generate_interval_seconds: int = 300
     # How many days back from today to fill (1 = today only)
@@ -239,6 +254,26 @@ def hourly_summaries_base_url(cfg: HourlySummariesApiConfig) -> str:
     return "https://openrouter.ai/api"
 
 
+def chat_api_key(cfg: ChatConfig) -> str:
+    """Provider-specific env key wins over config.api_key for chat."""
+    if cfg.provider == "openrouter":
+        env = (os.getenv("CHAT_OPENROUTER_API_KEY") or os.getenv("OPENROUTER_API_KEY") or "").strip()
+    else:
+        env = (os.getenv("CHAT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
+    if env:
+        return env
+    return (cfg.api_key or "").strip()
+
+
+def chat_base_url(cfg: ChatConfig) -> str:
+    """Effective OpenRouter base URL for chat (ignored for Gemini)."""
+    raw = (cfg.base_url or "").strip().rstrip("/")
+    if raw:
+        return raw
+    return "https://openrouter.ai/api"
+
+
+
 def rate_limiter_config(cfg: Any = None) -> Any:
     """Return effective RateLimiterConfig from app settings or passed config."""
     if cfg is not None:
@@ -320,7 +355,9 @@ class Config(BaseModel):
     queue: QueueConfig = QueueConfig()
     hourly_summaries: HourlySummariesApiConfig = HourlySummariesApiConfig()
     summaries: SummariesConfig = SummariesConfig()
+    chat: ChatConfig = ChatConfig()
     events_pipeline: EventsPipelineConfig = EventsPipelineConfig()
+
     openrouter: OpenRouterConfig = OpenRouterConfig()
     incidents_ollama: Optional[OpenRouterConfig] = None
     rate_limiter: RateLimiterConfig = RateLimiterConfig()

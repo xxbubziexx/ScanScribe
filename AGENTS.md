@@ -1,7 +1,10 @@
 # ScanScribe Agent Guidelines & Operational Protocol
 
-Welcome to **ScanScribe** — an enterprise-grade public safety radio transcription and incident intelligence pipeline.
-ScanScribe ingests live audio transmissions from radio recorders (e.g. Trunk Recorder, SDR), transcribes via local Whisper models, performs Silero VAD gating and Named Entity Recognition (NER), classifies incidents via OpenRouter LLM routing, and powers an interactive React geospatial command center.
+Welcome to **ScanScribe** — a professional-grade radio transcription and incident intelligence pipeline built for serious scanner hobbyists, SDR systems operators, and the RadioReference / r/policescanner communities.
+ScanScribe ingests live audio transmissions from radio recorders (e.g. Trunk Recorder, SDR), transcribes via local Whisper models, performs Silero VAD gating and Named Entity Recognition (NER), classifies incidents via OpenRouter LLM routing, and powers an interactive React geospatial command center. You are responsible for keeping this file updated as you learn and discover new things about ScanScribe.
+
+> **PRODUCT IDENTITY & PROFESSIONAL STANDARD**:  
+> ScanScribe is engineered to professional standards for **serious radio hobbyists, SDR operators, and the RadioReference / r/policescanner communities**. While technically rigorous, it is **NOT** a certified 911 dispatch or public safety CAD suite. Keep all documentation, UI copy, and commit messages technically precise, clean, and free of bloated enterprise marketing jargon ("tactical field responders", "CAD compliance"). Maintain an instrument-grade, serious tool tone. Minimize emojis across all documentation, code comments, and UI elements.
 
 > **CRITICAL ENVIRONMENT CONTEXT**:  
 > ScanScribe runs live on an Ubuntu production/edge node ingesting real-world public safety radio traffic 24/7. Development is conducted across different machines (Windows/Ubuntu) by different AI models. All models and agents operating in this repository must adhere strictly to these rules to prevent code decay and protect live data capture.

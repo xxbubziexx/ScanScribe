@@ -7,7 +7,9 @@ import { RegisterPage } from '@/pages/Register/RegisterPage'
 import { CommandCenterPage } from '@/pages/CommandCenter/CommandCenterPage'
 import { DashboardPage } from '@/pages/Dashboard/DashboardPage'
 import { InsightsPage } from '@/pages/Insights/InsightsPage'
+import { IntelPage } from '@/pages/Intel/IntelPage'
 import { DatabasePage } from '@/pages/Database/DatabasePage'
+
 import { DatasetPage } from '@/pages/DataExplorer/DatasetPage'
 import { DataExplorerLayout } from '@/pages/DataExplorer/DataExplorerLayout'
 import { EventsTable } from '@/pages/DataExplorer/Tables/EventsTable'
@@ -47,7 +49,9 @@ export default function App() {
           <Route path="/" element={<CommandCenterPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/insights" element={<InsightsPage />} />
+          <Route path="/intel" element={<IntelPage />} />
           <Route path="/events" element={<EventsLayout />}>
+
             <Route index element={<EventsIncidentsPage />} />
             <Route element={<RequireAdmin />}>
               <Route path="monitors" element={<EventsMonitorsPage />} />

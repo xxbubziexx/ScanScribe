@@ -15,9 +15,10 @@ from .config import get_settings, init_directories
 from .database import init_db
 from .bootstrap_admin import ensure_default_admin
 from .utils.limiter import limiter
-from .routes import auth_router, settings_router, logs_router, maintenance_router, watcher_router, upload_router, users_router, transcriptions_router
+from .routes import auth_router, settings_router, logs_router, maintenance_router, watcher_router, upload_router, users_router, transcriptions_router, chat_router
 from .routes.insights import router as insights_router
 from .routes.events import router as events_router
+
 from .services.watcher import get_watcher_service
 from .services.queue_processor import get_processor
 from .services.summaries_auto import start_auto_summary_worker, stop_auto_summary_worker
@@ -201,7 +202,9 @@ app.include_router(upload_router)
 app.include_router(users_router)
 app.include_router(transcriptions_router)
 app.include_router(insights_router)
+app.include_router(chat_router)
 app.include_router(events_router)
+
 
 
 @app.get("/span-store", include_in_schema=False)

@@ -34,6 +34,16 @@ from .maintenance import (
     PurgeResponse,
     RedactSsnResponse,
 )
+from .chat import (
+    ChatTimeScope,
+    ChatThreadCreate,
+    ChatThreadUpdate,
+    ChatMessageOut,
+    ChatThreadOut,
+    ChatThreadDetailOut,
+    ChatPromptInput,
+    TransmissionLookupOut,
+)
 
 __all__ = [
     "UserBase",
@@ -59,7 +69,16 @@ __all__ = [
     "DatabaseStatsResponse",
     "PurgeResponse",
     "RedactSsnResponse",
+    "ChatTimeScope",
+    "ChatThreadCreate",
+    "ChatThreadUpdate",
+    "ChatMessageOut",
+    "ChatThreadOut",
+    "ChatThreadDetailOut",
+    "ChatPromptInput",
+    "TransmissionLookupOut",
 ]
+
 
 
 

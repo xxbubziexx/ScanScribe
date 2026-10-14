@@ -17,7 +17,9 @@ const NAV_ITEMS: readonly NavItemDef[] = [
   { to: '/', label: 'Command Center', icon: '🗺️', end: true },
   { to: '/dashboard', label: 'Audio Feed', icon: '📻' },
   { to: '/insights', label: 'Insights', icon: '📊' },
+  { to: '/intel', label: 'Intel', icon: '💬' },
   { to: '/events', label: 'Events', icon: '🚨' },
+
   { to: '/data', label: 'Database', icon: '💾', adminOnly: true },
   { to: '/users', label: 'Users', icon: '👥', adminOnly: true },
   { to: '/settings', label: 'Settings', icon: '⚙️', adminOnly: true },

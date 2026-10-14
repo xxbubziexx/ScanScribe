@@ -119,8 +119,27 @@ hourly_summaries:
   base_url: ""
   max_output_tokens: 8192
 
+# ==================== SCANNER INTELLIGENCE (CHAT) ====================
+chat:
+  # Natural language conversational query over radio transcripts
+  enabled: true
+  # openrouter | gemini
+  provider: openrouter
+  # OpenRouter: OPENROUTER_API_KEY env var (or set api_key here)
+  # Gemini: GEMINI_API_KEY env var (or set api_key here)
+  api_key: ""
+  # OpenRouter model: e.g. google/gemini-2.5-flash, anthropic/claude-3.5-haiku, or meta-llama/llama-3.3-70b-instruct
+  model: google/gemini-2.5-flash
+  base_url: ""
+  max_output_tokens: 4096
+  max_transmissions_context: 2500
+  temperature: 0.2
+  # Optional local/regional radio context or 10-code hints to append to system prompt
+  system_prompt_rules: ""
+
 # ==================== HOUR SUMMARIES SCHEDULE ====================
 summaries:
+
   # Automatically generate per-hour summaries in the background
   auto_generate_enabled: false
   # How often to scan for missing hours (seconds)

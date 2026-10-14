@@ -7,5 +7,7 @@ from .watcher import router as watcher_router
 from .upload import router as upload_router
 from .users import router as users_router
 from .transcriptions import router as transcriptions_router
+from .chat import router as chat_router
 
-__all__ = ["auth_router", "settings_router", "logs_router", "maintenance_router", "watcher_router", "upload_router", "users_router", "transcriptions_router"]
+__all__ = ["auth_router", "settings_router", "logs_router", "maintenance_router", "watcher_router", "upload_router", "users_router", "transcriptions_router", "chat_router"]
+

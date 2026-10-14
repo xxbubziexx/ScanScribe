@@ -5,7 +5,9 @@ function titleForPath(pathname: string): string {
   const map: Record<string, string> = {
     '/': 'Dashboard',
     '/insights': 'Insights',
+    '/intel': 'Intelligence',
     '/logs': 'Database',
+
     '/events': 'Events',
     '/events/monitors': 'Monitor config',
     '/events/debug': 'Pipeline debug',
