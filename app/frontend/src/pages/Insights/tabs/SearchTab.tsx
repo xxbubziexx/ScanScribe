@@ -187,120 +187,166 @@ export function SearchTab({
 
   return (
     <div>
-      {/* Filter row */}
-      {!viewOnly && (
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        {/* Keyword */}
-        <input
-          type="text"
-          value={filters.keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          placeholder="Search transcripts…"
-          className="ss-input-search"
-        />
-
-        {/* Talkgroup multi-select */}
-        <div ref={tgDropRef} className="relative">
-          <button
-            onClick={() => setTgOpen((o) => !o)}
-            className="ss-btn-bare"
-          >
-            Talkgroups {filters.talkgroups.length > 0 && `(${filters.talkgroups.length})`}
-          </button>
-          {tgOpen && (
-            <div className="ss-dd-panel">
-              {sortedTgs.length === 0 ? (
-                <p className="px-2 py-1 text-xs text-gray-500">No talkgroups</p>
-              ) : (
-                sortedTgs.map(({ talkgroup, count }) => (
-                  <label
-                    key={talkgroup}
-                    className="ss-dd-item"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={filters.talkgroups.includes(talkgroup)}
-                      onChange={() => toggleTg(talkgroup)}
-                      className="accent-indigo-500"
-                    />
-                    <span className="flex-1 truncate">{talkgroup}</span>
-                    <span className="text-gray-600">({count})</span>
-                  </label>
-                ))
-              )}
-            </div>
+      {/* Filter row - always available for all users */}
+      <div className="mb-3 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+        {/* Keyword Search Input - Full width on mobile */}
+        <div className="relative w-full sm:w-auto sm:flex-1 sm:max-w-md">
+          <input
+            type="text"
+            value={filters.keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="Search transcripts…"
+            className="ss-input-search w-full min-h-[44px] text-sm pl-9 pr-9"
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm pointer-events-none">
+            🔍
+          </span>
+          {filters.keyword && (
+            <button
+              type="button"
+              onClick={() => setKeyword('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-xs p-1 rounded min-h-[28px] min-w-[28px] flex items-center justify-center cursor-pointer"
+              aria-label="Clear keyword"
+            >
+              ✕
+            </button>
           )}
         </div>
 
-        {/* Limiter */}
-        <select
-          value={filters.limit ?? 50}
-          onChange={(e) => onFiltersChange({ ...filters, limit: Number(e.target.value) })}
-          className="ss-select"
-          title="Result limit"
-          aria-label="Result limit"
-        >
-          {[20, 50, 100, 500].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
+        {/* Filter controls row */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+          {/* Talkgroup multi-select */}
+          <div ref={tgDropRef} className="relative flex-1 sm:flex-initial">
+            <button
+              type="button"
+              onClick={() => setTgOpen((o) => !o)}
+              className="ss-btn-bare min-h-[40px] w-full sm:w-auto justify-center"
+            >
+              Talkgroups {filters.talkgroups.length > 0 && `(${filters.talkgroups.length})`}
+            </button>
+            {tgOpen && (
+              <div className="ss-dd-panel z-20 max-h-60 overflow-y-auto">
+                {sortedTgs.length === 0 ? (
+                  <p className="px-2 py-1 text-xs text-gray-500">No talkgroups</p>
+                ) : (
+                  sortedTgs.map(({ talkgroup, count }) => (
+                    <label
+                      key={talkgroup}
+                      className="ss-dd-item min-h-[36px]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filters.talkgroups.includes(talkgroup)}
+                        onChange={() => toggleTg(talkgroup)}
+                        className="accent-indigo-500 h-4 w-4"
+                      />
+                      <span className="flex-1 truncate">{talkgroup}</span>
+                      <span className="text-gray-600 text-xs">({count})</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
 
-        {/* Hour filter */}
-        <select
-          value={filters.hour}
-          onChange={(e) => onFiltersChange({ ...filters, hour: e.target.value })}
-          className="ss-select"
-        >
-          <option value="">All Hours</option>
-          {Array.from({ length: 24 }, (_, i) => (
-            <option key={i} value={i}>
-              {hourLabel(i)}
-            </option>
-          ))}
-        </select>
+          {/* Hour filter */}
+          <select
+            value={filters.hour}
+            onChange={(e) => onFiltersChange({ ...filters, hour: e.target.value })}
+            className="ss-select min-h-[40px] flex-1 sm:flex-initial"
+            aria-label="Filter by hour"
+          >
+            <option value="">All Hours</option>
+            {Array.from({ length: 24 }, (_, i) => (
+              <option key={i} value={i}>
+                {hourLabel(i)}
+              </option>
+            ))}
+          </select>
 
-        {/* Sort */}
-        <select
-          value={filters.sort}
-          onChange={(e) => onFiltersChange({ ...filters, sort: e.target.value })}
-          className="ss-select"
-        >
-          <option value="newest">Newest First</option>
-          <option value="oldest">Oldest First</option>
-          <option value="largest">Largest First</option>
-          <option value="smallest">Smallest First</option>
-          <option value="longest">Longest First</option>
-          <option value="shortest">Shortest First</option>
-        </select>
+          {/* Sort */}
+          <select
+            value={filters.sort}
+            onChange={(e) => onFiltersChange({ ...filters, sort: e.target.value })}
+            className="ss-select min-h-[40px] flex-1 sm:flex-initial"
+            aria-label="Sort order"
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="largest">Largest First</option>
+            <option value="smallest">Smallest First</option>
+            <option value="longest">Longest First</option>
+            <option value="shortest">Shortest First</option>
+          </select>
 
-        <button
-          onClick={clearFilters}
-          className="ss-btn-filter-clear"
-        >
-          Clear
-        </button>
+          {/* Limiter */}
+          <select
+            value={filters.limit ?? 50}
+            onChange={(e) => onFiltersChange({ ...filters, limit: Number(e.target.value) })}
+            className="ss-select min-h-[40px]"
+            title="Result limit"
+            aria-label="Result limit"
+          >
+            {[20, 50, 100, 500].map((n) => (
+              <option key={n} value={n}>
+                {n} / page
+              </option>
+            ))}
+          </select>
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ss-btn-filter-clear min-h-[40px] px-3 ml-auto sm:ml-0"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
-      )}
 
       {/* Active filter chips */}
-      {!viewOnly && hasFilters && (
+      {hasFilters && (
         <div className="mb-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-gray-500">Active:</span>
           {filters.keyword && (
-            <span className="ss-chip ss-chip-kw">
-              Keyword: &quot;{filters.keyword}&quot;
+            <span className="ss-chip ss-chip-kw inline-flex items-center gap-1">
+              <span>Keyword: &quot;{filters.keyword}&quot;</span>
+              <button
+                type="button"
+                onClick={() => setKeyword('')}
+                className="text-gray-400 hover:text-white text-xs ml-0.5"
+                title="Remove keyword filter"
+              >
+                ✕
+              </button>
             </span>
           )}
           {filters.talkgroups.length > 0 && (
-            <span className="ss-chip ss-chip-tg">
-              TG: {filters.talkgroups.join(', ')}
+            <span className="ss-chip ss-chip-tg inline-flex items-center gap-1">
+              <span>TG: {filters.talkgroups.join(', ')}</span>
+              <button
+                type="button"
+                onClick={() => onFiltersChange({ ...filters, talkgroups: [] })}
+                className="text-gray-400 hover:text-white text-xs ml-0.5"
+                title="Remove talkgroup filter"
+              >
+                ✕
+              </button>
             </span>
           )}
           {filters.hour !== '' && (
-            <span className="ss-chip ss-chip-hr">
-              Hour: {hourLabel(parseInt(filters.hour))}
+            <span className="ss-chip ss-chip-hr inline-flex items-center gap-1">
+              <span>Hour: {hourLabel(parseInt(filters.hour))}</span>
+              <button
+                type="button"
+                onClick={() => onFiltersChange({ ...filters, hour: '' })}
+                className="text-gray-400 hover:text-white text-xs ml-0.5"
+                title="Remove hour filter"
+              >
+                ✕
+              </button>
             </span>
           )}
         </div>
@@ -318,12 +364,10 @@ export function SearchTab({
       {/* Results list */}
       <div className="ss-search-scroll">
         {results.length === 0 && !loading && (
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 py-6 text-center">
             {hasFilters
-              ? 'No results found.'
-              : viewOnly
-                ? 'No transcriptions for this day.'
-                : 'Enter search criteria or click a chart bar to filter…'}
+              ? 'No results found matching your criteria.'
+              : 'Enter search keywords or select filters above…'}
           </p>
         )}
         {results.map((entry) => {
@@ -335,100 +379,103 @@ export function SearchTab({
               key={entry.id}
               className="ss-search-result"
             >
-              <div className="ss-search-result-main">
-                <button
-                  disabled={!hasAudio}
-                  onClick={() => toggleAudio(entry.id, entry.audio_path)}
-                  title={hasAudio ? (isPlaying ? 'Stop' : 'Play') : 'No audio saved'}
-                  className={`ss-play ${
+              {/* Card Header Row: Controls, Metadata, Badges, and Actions */}
+              <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                  {/* Play / Stop Button */}
+                  <button
+                    type="button"
+                    disabled={!hasAudio}
+                    onClick={() => toggleAudio(entry.id, entry.audio_path)}
+                    title={hasAudio ? (isPlaying ? 'Stop' : 'Play audio') : 'No audio saved'}
+                    className={`ss-play min-h-[36px] min-w-[36px] cursor-pointer ${
                       hasAudio
                         ? isPlaying
                           ? 'ss-play--on'
                           : 'ss-play--idle'
                         : 'ss-play--off'
                     }`}
-                >
-                  <span className="text-xs text-white">{isPlaying ? '■' : '▶'}</span>
-                </button>
+                  >
+                    <span className="text-xs text-white">{isPlaying ? '■' : '▶'}</span>
+                  </button>
 
-                <div className="min-w-[52px] flex-shrink-0 sm:min-w-[60px]">
-                  <p className="text-xs text-gray-500">{formatTime(entry.timestamp)}</p>
-                  <p className="text-xs text-gray-700">{formatDateShort(entry.timestamp)}</p>
-                </div>
+                  {/* Timestamp */}
+                  <div className="min-w-[52px] flex-shrink-0 text-left">
+                    <p className="text-xs font-medium text-gray-300">{formatTime(entry.timestamp)}</p>
+                    <p className="text-[10px] text-gray-500">{formatDateShort(entry.timestamp)}</p>
+                  </div>
 
-                {viewOnly ? (
-                  <span className="ss-tg-btn cursor-default opacity-90">
-                    {entry.talkgroup || 'N/A'}
-                  </span>
-                ) : (
+                  {/* Talkgroup Badge */}
                   <button
+                    type="button"
                     onClick={() => addTg(entry.talkgroup || 'N/A')}
-                    title="Add as filter"
-                    className="ss-tg-btn"
+                    title="Click to filter by talkgroup"
+                    className="ss-tg-btn text-xs py-1 px-2.5 max-w-[170px] truncate cursor-pointer"
                   >
                     {entry.talkgroup || 'N/A'}
                   </button>
-                )}
 
-                {entry.attached_events && entry.attached_events.length > 0 && (
-                  <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5">
-                    {entry.attached_events.map((ev) => {
-                      const isOpen = ev.status === 'open'
-                      return (
-                        <Link
-                          key={ev.id || ev.event_id}
-                          to={`/events?incident_id=${encodeURIComponent(ev.event_id)}${isOpen ? '' : '&status=all'}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`ss-attached-badge ${
-                            isOpen ? 'ss-attached-badge--open' : 'ss-attached-badge--closed'
-                          }`}
-                          title={`Attached to ${isOpen ? 'open' : 'closed'} event: ${ev.event_type || ev.event_id} (${ev.event_id})`}
-                        >
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              isOpen ? 'bg-amber-400 animate-pulse' : 'bg-gray-400'
+                  {/* Attached Event Badges */}
+                  {entry.attached_events && entry.attached_events.length > 0 && (
+                    <div className="flex flex-shrink-0 flex-wrap items-center gap-1.5">
+                      {entry.attached_events.map((ev) => {
+                        const isOpen = ev.status === 'open'
+                        return (
+                          <Link
+                            key={ev.id || ev.event_id}
+                            to={`/events?incident_id=${encodeURIComponent(ev.event_id)}${isOpen ? '' : '&status=all'}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className={`ss-attached-badge ${
+                              isOpen ? 'ss-attached-badge--open' : 'ss-attached-badge--closed'
                             }`}
-                          />
-                          <span className="whitespace-nowrap">attached to event</span>
-                          <span className="text-[10px] opacity-75 font-mono uppercase">
-                            ({ev.status || 'open'})
-                          </span>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
+                            title={`Attached to ${isOpen ? 'open' : 'closed'} event: ${ev.event_type || ev.event_id}`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                isOpen ? 'bg-amber-400 animate-pulse' : 'bg-gray-400'
+                              }`}
+                            />
+                            <span className="whitespace-nowrap">attached</span>
+                            <span className="text-[10px] opacity-75 font-mono uppercase">
+                              ({ev.status || 'open'})
+                            </span>
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
 
-                <p className="min-w-0 flex-1 leading-snug text-gray-300">
-                  {highlight(entry.transcript || '', filters.keyword)}
-                </p>
-              </div>
-
-              <div className="flex flex-shrink-0 items-center justify-between gap-2 sm:flex-col sm:items-end sm:gap-1 sm:text-right">
-                {!viewOnly && (
-                  <div className="flex gap-1">
+                {/* Right side actions and audio duration */}
+                <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => copyResult(entry.talkgroup || 'N/A', entry.transcript || '')}
+                    title="Copy transcript"
+                    className="ss-icon-btn p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded hover:bg-white/5 cursor-pointer"
+                  >
+                    📋
+                  </button>
+                  {hasAudio && (
                     <button
-                      onClick={() => copyResult(entry.talkgroup || 'N/A', entry.transcript || '')}
-                      title="Copy"
-                      className="ss-icon-btn"
-                    >
-                      📋
-                    </button>
-                    <button
-                      disabled={!hasAudio}
+                      type="button"
                       onClick={() => downloadAudio(entry.audio_path, entry.id)}
-                      title={hasAudio ? 'Download audio' : 'No audio'}
-                      className={hasAudio ? 'ss-icon-btn' : 'ss-icon-btn--off'}
+                      title="Download audio"
+                      className="ss-icon-btn p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded hover:bg-white/5 cursor-pointer"
                     >
                       💾
                     </button>
-                  </div>
-                )}
-                <div className="flex gap-2 text-xs text-gray-500 sm:flex-col sm:gap-1 sm:items-end">
-                  <span>{(entry.duration || 0).toFixed(1)}s</span>
-                  <span className="text-gray-600">{formatBytes(entry.file_size || 0)}</span>
+                  )}
+                  <span className="text-xs font-mono text-gray-400">
+                    {(entry.duration || 0).toFixed(1)}s
+                  </span>
                 </div>
               </div>
+
+              {/* Full-width transcript body */}
+              <p className="text-[13px] sm:text-sm text-gray-200 leading-relaxed break-words font-normal mt-1 pl-1">
+                {highlight(entry.transcript || '', filters.keyword)}
+              </p>
             </div>
           )
         })}

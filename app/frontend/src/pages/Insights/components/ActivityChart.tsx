@@ -96,6 +96,7 @@ export function ActivityChart({ data, view, onHourClick }: ActivityChartProps) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}
+            margin={{ top: 5, right: 6, left: -14, bottom: 0 }}
             onClick={
               canClick
                 ? (payload: { activeLabel?: string | number }) => {
@@ -110,28 +111,29 @@ export function ActivityChart({ data, view, onHourClick }: ActivityChartProps) {
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
             <XAxis
               dataKey="label"
-              tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+              tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
               axisLine={false}
               tickLine={false}
               interval="preserveStartEnd"
+              minTickGap={16}
             />
             <YAxis
               yAxisId="left"
               allowDecimals={false}
-              tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+              tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
               axisLine={false}
               tickLine={false}
-              width={28}
+              width={24}
             />
             <YAxis
               yAxisId="right"
               orientation="right"
               allowDecimals={false}
               domain={[0, (dataMax: number) => Math.max(5, Math.ceil(dataMax * 1.15))]}
-              tick={{ fill: 'rgba(249,115,22,0.85)', fontSize: 11 }}
+              tick={{ fill: 'rgba(249,115,22,0.85)', fontSize: 10 }}
               axisLine={false}
               tickLine={false}
-              width={28}
+              width={24}
             />
             <Tooltip
               content={(props) => <CustomTooltip {...props} canClick={canClick} />}

@@ -61,16 +61,16 @@
   }
 
   .ss-insights-tab {
-    @apply shrink-0 px-3 py-2.5 text-sm font-medium text-gray-500 transition-colors sm:px-4 sm:py-3;
-    @apply hover:text-gray-300;
+    @apply shrink-0 px-3 py-2.5 text-sm font-medium text-gray-400 transition-colors sm:px-4 sm:py-3 min-h-[44px] inline-flex items-center justify-center;
+    @apply hover:text-gray-200 cursor-pointer;
   }
 
   .ss-insights-tab--active {
-    @apply border-b-2 border-indigo-500 text-indigo-300;
+    @apply border-b-2 border-indigo-500 text-indigo-300 font-semibold;
   }
 
   .ss-insights-tabpanel {
-    @apply p-3 sm:p-4;
+    @apply p-2.5 sm:p-4;
   }
 
   .ss-chart {
@@ -78,11 +78,11 @@
   }
 
   .ss-rec-scroll {
-    @apply max-h-[460px] space-y-1.5 overflow-y-auto pr-1;
+    @apply max-h-[460px] space-y-2 overflow-y-auto pr-1;
   }
 
   .ss-search-scroll {
-    @apply max-h-[850px] min-h-[460px] space-y-1.5 overflow-y-auto pr-1;
+    @apply max-h-[850px] space-y-2.5 overflow-y-auto pr-1;
   }
 
   .ss-tg-row {
@@ -118,14 +118,13 @@
   }
 
   .ss-search-result {
-    @apply flex flex-col gap-2 rounded-xl border border-white/12 bg-[#141821] px-3 py-2.5;
+    @apply flex flex-col gap-2 rounded-xl border border-white/12 bg-[#141821] p-3 sm:p-3.5;
     @apply shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-colors;
     @apply hover:border-white/20 hover:bg-[#171c26];
-    @apply sm:flex-row sm:items-center sm:gap-3 sm:px-3.5;
   }
 
   .ss-search-result-main {
-    @apply flex min-w-0 flex-1 items-start gap-3 sm:items-center;
+    @apply flex min-w-0 flex-1 flex-col gap-2;
   }
 
   .ss-icon-btn {

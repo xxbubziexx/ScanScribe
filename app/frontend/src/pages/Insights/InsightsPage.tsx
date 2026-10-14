@@ -116,7 +116,7 @@ export function InsightsPage() {
         activeDates={activeDates}
         onViewChange={setView}
         onDateChange={setDate}
-        onHourClick={viewOnly ? undefined : onHourClick}
+        onHourClick={onHourClick}
       />
 
       <div className="ss-insights-tabs">

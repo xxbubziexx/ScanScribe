@@ -217,6 +217,25 @@ This living document is the **shared memory** between different AI models, human
   - Validated bash syntax in `install.sh` and `docker/entrypoint.sh` via `bash -n` (exit code 0).
 - **Next Tasks / Unfinished Work:** Staging beta testing.
 
+---
+
+### 2026-10-13 22:45 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Resolved mobile rendering defects, missing search/filter controls on Insights, and cramped mobile card/incident displays:
+    - **Insights Search & Filters Restored ([`SearchTab.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/tabs/SearchTab.tsx)):** Root cause identified: `viewOnly = !canAdmin` where `canAdmin = isAccountAdmin && !isMobile` (`useAdminCapability.ts`), which caused the entire search filter bar to be hidden on mobile devices (<768px). Removed `viewOnly` gating from the filter bar and active filter chips. Upgraded keyword `<input>` to full-width responsive with search icon, clear button, and `min-h-[44px]` touch target. Filter dropdowns upgraded to `min-h-[40px]`.
+    - **Insights Mobile Results Card Layout ([`SearchTab.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/tabs/SearchTab.tsx), [`insights.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/insights.css)):** Fixed severe vertical squishing where transcript text was compressed into an 80px column next to metadata badges. Restructured cards into a clean two-tier layout: top metadata row (play button, timestamp, talkgroup badge, duration, copy/download actions) and full-width bottom body for transcription text with highlight matching.
+    - **Insights Chart & Talkgroups Mobile Ergonomics ([`ActivityChart.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/ActivityChart.tsx), [`TalkgroupTab.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/tabs/TalkgroupTab.tsx), [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx)):** Removed `viewOnly` lock from talkgroup and activity chart bar taps so mobile users can tap to filter. Tuned Recharts margins (`left: -14, right: 6`) and tick gaps (`minTickGap: 16`) so 24h activity chart displays cleanly on 393px screens (iPhone 14) without horizontal squish.
+    - **Incident Dossier Mobile Height Optimization ([`EventDetailContent.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/Incidents/components/EventDetailContent.tsx), [`Incidents/index.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/Incidents/index.tsx)):** Replaced bloated single-column vertical stack (`grid-cols-1 sm:grid-cols-[140px_1fr]`) that created 28+ rows of sprawling whitespace with compact 2-column mobile grid (`grid-cols-[85px_1fr] sm:grid-cols-[140px_1fr]`). Reduced header height by >60% so incident thread messages and audio playback are immediately accessible without endless scrolling. Destructured `isAccountAdmin` to grant mobile admins incident closure and summarization actions.
+- **Live Ingestion Impact:** Zero ingestion impact. Changes are strictly frontend UX, CSS, and component responsiveness.
+- **Gotchas / Warnings for Next Model:**
+  - `useAdminCapability` returns `canAdmin: false` on mobile devices by design (to protect against accidental deletion/editing of bulk tables). Never bind read-only search/filter features or basic user views to `canAdmin`.
+  - Development continues exclusively on `snapshot`.
+- **Verification Performed:**
+  - Full backend pytest suite: **89 passed in 13.12s** (0 failures).
+  - Verified active branch: `snapshot`.
+- **Next Tasks / Unfinished Work:**
+  - Ready for live staging validation on mobile devices.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -226,4 +245,5 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+
 

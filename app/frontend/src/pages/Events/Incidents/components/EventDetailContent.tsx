@@ -82,114 +82,116 @@ export function EventDetailContent({
 
       {activeTab === 'event-thread' ? (
         <div className="ss-events-thread-wrap">
-          <h3 className="ss-events-section-title">HEADER</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr] gap-y-3 sm:gap-y-4 text-[13px] md:text-sm mb-8 mt-2">
-            <div className="font-semibold text-gray-200">Created</div>
-            <div className="text-gray-300 font-mono">{formatTimeOnly(selected.createdAt)}</div>
+          <div className="mb-4 sm:mb-6 rounded-xl border border-white/10 bg-white/[0.02] p-3 sm:p-4">
+            <h3 className="ss-events-section-title !mb-3">INCIDENT DETAILS</h3>
+            <div className="grid grid-cols-[85px_1fr] sm:grid-cols-[140px_1fr] gap-x-2.5 gap-y-2.5 sm:gap-y-3.5 text-xs sm:text-sm items-center">
+              <div className="font-semibold text-gray-400">Created</div>
+              <div className="text-gray-300 font-mono">{formatTimeOnly(selected.createdAt)}</div>
 
-            {selected.closedAt && (
-              <>
-                <div className="font-semibold text-gray-200">Closed</div>
-                <div className="text-gray-300 font-mono">{formatTimeOnly(selected.closedAt)}</div>
-              </>
-            )}
-
-            <div className="font-semibold text-gray-200">Event ID</div>
-            <div className="text-gray-300 font-mono break-all">{selected.eventId}</div>
-
-            <div className="font-semibold text-gray-200">Type</div>
-            <div className="flex">
-              <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-500/20 text-orange-100 border border-orange-500/30">
-                {typeDisplayFor(selected)}
-              </span>
-            </div>
-
-            <div className="font-semibold text-gray-200">Monitor</div>
-            <div className="text-gray-300">{selected.monitorName}</div>
-
-            <div className="font-semibold text-gray-200">Status</div>
-            <div className="flex items-center gap-2">
-              <span
-                className={`capitalize px-2 py-0.5 rounded text-xs font-semibold ${
-                  selected.status.toLowerCase() === 'open'
-                    ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                }`}
-              >
-                {selected.status}
-              </span>
-              {selected.statusDetail ? (
-                <span className="ss-events-low-badge !mt-0">{selected.statusDetail}</span>
-              ) : null}
-            </div>
-
-            <div className="font-semibold text-gray-200">Location</div>
-            <div className="flex flex-wrap gap-1.5">
-              {selected.location ? (
-                <span className="ss-events-kv-badge">{selected.location}</span>
-              ) : (
-                <span className="text-gray-500">—</span>
+              {selected.closedAt && (
+                <>
+                  <div className="font-semibold text-gray-400">Closed</div>
+                  <div className="text-gray-300 font-mono">{formatTimeOnly(selected.closedAt)}</div>
+                </>
               )}
-            </div>
 
-            <div className="font-semibold text-gray-200">Units</div>
-            <div className="flex flex-wrap gap-1.5">
-              {splitBadgeEntries(selected.units).length > 0 ? (
-                splitBadgeEntries(selected.units).map((unit) => (
-                  <span key={unit} className="ss-events-kv-badge">
-                    {unit}
-                  </span>
-                ))
-              ) : (
-                <span className="text-gray-500">—</span>
-              )}
-            </div>
+              <div className="font-semibold text-gray-400">Event ID</div>
+              <div className="text-gray-300 font-mono text-[11px] sm:text-xs break-all">{selected.eventId}</div>
 
-            <div className="font-semibold text-gray-200">Talkgroups</div>
-            <div className="flex flex-wrap gap-1.5">
-              {splitBadgeEntries(selected.talkgroup).length > 0 ? (
-                splitBadgeEntries(selected.talkgroup).map((tg) => (
-                  <span key={tg} className="ss-events-kv-badge">
-                    {tg}
-                  </span>
-                ))
-              ) : (
-                <span className="text-gray-500">—</span>
-              )}
-            </div>
-
-            <div className="font-semibold text-gray-200">Spans</div>
-            <div className="text-gray-300">{selected.spansAttached}</div>
-
-            <div className="flex flex-wrap items-center justify-between col-span-1 sm:col-span-2 pt-2 border-t border-white/10 gap-2">
-              <div className="font-semibold text-gray-200 flex items-center gap-2">
-                <span>Summary</span>
-              </div>
-              {canAdmin && (
-                <button
-                  type="button"
-                  onClick={() => summarizeMutation.mutate(selected.eventId)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded border border-white/10 min-h-[36px] cursor-pointer"
-                  disabled={summarizeMutation.isPending}
-                  title="Generate or update the summary using the router LLM based on all attached transcripts"
-                >
-                  <span>🔄</span>{' '}
-                  {summarizeMutation.isPending
-                    ? 'Generating…'
-                    : selected.summary
-                      ? 'Regenerate'
-                      : 'Generate Summary'}
-                </button>
-              )}
-            </div>
-            <div className="col-span-1 sm:col-span-2 text-gray-300 leading-relaxed max-w-3xl bg-black/20 p-2.5 rounded-lg border border-white/5 text-sm">
-              {selected.summary ? (
-                <p className="m-0">{selected.summary}</p>
-              ) : (
-                <span className="text-gray-500 italic">
-                  No summary generated yet. Click Generate Summary to synthesize all attachments.
+              <div className="font-semibold text-gray-400">Type</div>
+              <div className="flex">
+                <span className="px-2 py-0.5 rounded text-xs font-bold bg-orange-500/20 text-orange-100 border border-orange-500/30">
+                  {typeDisplayFor(selected)}
                 </span>
-              )}
+              </div>
+
+              <div className="font-semibold text-gray-400">Monitor</div>
+              <div className="text-gray-300 font-medium">{selected.monitorName}</div>
+
+              <div className="font-semibold text-gray-400">Status</div>
+              <div className="flex items-center gap-2">
+                <span
+                  className={`capitalize px-2 py-0.5 rounded text-xs font-semibold ${
+                    selected.status.toLowerCase() === 'open'
+                      ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  }`}
+                >
+                  {selected.status}
+                </span>
+                {selected.statusDetail ? (
+                  <span className="ss-events-low-badge !mt-0">{selected.statusDetail}</span>
+                ) : null}
+              </div>
+
+              <div className="font-semibold text-gray-400">Location</div>
+              <div className="flex flex-wrap gap-1.5">
+                {selected.location ? (
+                  <span className="ss-events-kv-badge text-xs">{selected.location}</span>
+                ) : (
+                  <span className="text-gray-500">—</span>
+                )}
+              </div>
+
+              <div className="font-semibold text-gray-400">Units</div>
+              <div className="flex flex-wrap gap-1.5">
+                {splitBadgeEntries(selected.units).length > 0 ? (
+                  splitBadgeEntries(selected.units).map((unit) => (
+                    <span key={unit} className="ss-events-kv-badge text-xs">
+                      {unit}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-gray-500">—</span>
+                )}
+              </div>
+
+              <div className="font-semibold text-gray-400">Talkgroups</div>
+              <div className="flex flex-wrap gap-1.5">
+                {splitBadgeEntries(selected.talkgroup).length > 0 ? (
+                  splitBadgeEntries(selected.talkgroup).map((tg) => (
+                    <span key={tg} className="ss-events-kv-badge text-xs">
+                      {tg}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-gray-500">—</span>
+                )}
+              </div>
+
+              <div className="font-semibold text-gray-400">Spans</div>
+              <div className="text-gray-300">{selected.spansAttached}</div>
+
+              <div className="flex flex-wrap items-center justify-between col-span-2 pt-2.5 border-t border-white/10 gap-2">
+                <div className="font-semibold text-gray-300 flex items-center gap-2">
+                  <span>Summary</span>
+                </div>
+                {canAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => summarizeMutation.mutate(selected.eventId)}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 transition flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded border border-white/10 min-h-[36px] cursor-pointer"
+                    disabled={summarizeMutation.isPending}
+                    title="Generate or update the summary using the router LLM based on all attached transcripts"
+                  >
+                    <span>🔄</span>{' '}
+                    {summarizeMutation.isPending
+                      ? 'Generating…'
+                      : selected.summary
+                        ? 'Regenerate'
+                        : 'Generate Summary'}
+                  </button>
+                )}
+              </div>
+              <div className="col-span-2 text-gray-300 leading-relaxed max-w-3xl bg-black/20 p-2.5 rounded-lg border border-white/5 text-xs sm:text-sm">
+                {selected.summary ? (
+                  <p className="m-0">{selected.summary}</p>
+                ) : (
+                  <span className="text-gray-500 italic">
+                    No summary generated yet. Click Generate Summary to synthesize all attachments.
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

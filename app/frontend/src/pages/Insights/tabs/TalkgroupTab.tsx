@@ -15,41 +15,26 @@ export function TalkgroupTab({ talkgroups, onTalkgroupClick, viewOnly = false }:
 
   return (
     <div className="space-y-3">
-      {talkgroups.slice(0, 10).map((tg) =>
-        viewOnly ? (
-          <div key={tg.talkgroup} className="ss-tg-row cursor-default text-left">
-            <span className="ss-tg-name" title={tg.talkgroup}>
-              {tg.talkgroup}
-            </span>
-            <div className="ss-tg-bar-track">
-              <div
-                className="ss-tg-bar"
-                style={{ width: `${(tg.count / max) * 100}%` }}
-              />
-            </div>
-            <span className="ss-tg-count">{tg.count}</span>
+      {talkgroups.slice(0, 10).map((tg) => (
+        <button
+          key={tg.talkgroup}
+          type="button"
+          onClick={() => onTalkgroupClick(tg.talkgroup)}
+          className="ss-tg-row min-h-[40px] cursor-pointer"
+          title="Click to filter by this talkgroup"
+        >
+          <span className="ss-tg-name" title={tg.talkgroup}>
+            {tg.talkgroup}
+          </span>
+          <div className="ss-tg-bar-track">
+            <div
+              className="ss-tg-bar"
+              style={{ width: `${(tg.count / max) * 100}%` }}
+            />
           </div>
-        ) : (
-          <button
-            key={tg.talkgroup}
-            type="button"
-            onClick={() => onTalkgroupClick(tg.talkgroup)}
-            className="ss-tg-row"
-            title="Click to filter by this talkgroup"
-          >
-            <span className="ss-tg-name" title={tg.talkgroup}>
-              {tg.talkgroup}
-            </span>
-            <div className="ss-tg-bar-track">
-              <div
-                className="ss-tg-bar"
-                style={{ width: `${(tg.count / max) * 100}%` }}
-              />
-            </div>
-            <span className="ss-tg-count">{tg.count}</span>
-          </button>
-        ),
-      )}
+          <span className="ss-tg-count">{tg.count}</span>
+        </button>
+      ))}
     </div>
   )
 }
