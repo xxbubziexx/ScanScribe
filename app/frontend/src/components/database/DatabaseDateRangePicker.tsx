@@ -1,25 +1,117 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import {
-  addMonths,
-  buildMonthCells,
-  CALENDAR_WEEKDAYS,
-  monthStart,
-  parseYmdLocal,
-  pickMax,
-  pickMin,
-} from './calendarUtils'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 
-function formatButtonLabel(from: string, to: string, picking: string | null) {
-  if (picking) return `Select end (from ${picking})…`
-  if (!from && !to) return 'All dates'
-  if (from && to) {
-    if (from === to) return from
-    return `${from} → ${to}`
-  }
-  return 'All dates'
+import { RangeCalendar } from '@/components/ui/RangeCalendar'
+import { localZoneAbbr } from '@/components/ui/timeRange'
+
+const pad = (n: number): string => String(n).padStart(2, '0')
+
+function toYmd(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-interface DatabaseDateRangePickerProps {
+function parseYmd(s: string): Date | null {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s.trim())) return null
+  const [y, m, d] = s.trim().split('-').map(Number)
+  const date = new Date(y, m - 1, d, 0, 0, 0, 0)
+  if (date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d) {
+    return date
+  }
+  return null
+}
+
+interface DatePreset {
+  id: string
+  label: string
+  getRange: (now: Date) => { from: string; to: string }
+}
+
+const DATE_PRESETS: DatePreset[] = [
+  {
+    id: 'today',
+    label: 'Today',
+    getRange: (now) => {
+      const todayStr = toYmd(now)
+      return { from: todayStr, to: todayStr }
+    },
+  },
+  {
+    id: 'yesterday',
+    label: 'Yesterday',
+    getRange: (now) => {
+      const y = new Date(now)
+      y.setDate(y.getDate() - 1)
+      const yStr = toYmd(y)
+      return { from: yStr, to: yStr }
+    },
+  },
+  {
+    id: 'last3d',
+    label: 'Last 3 days',
+    getRange: (now) => {
+      const past = new Date(now)
+      past.setDate(past.getDate() - 3)
+      return { from: toYmd(past), to: toYmd(now) }
+    },
+  },
+  {
+    id: 'last7d',
+    label: 'Last 7 days',
+    getRange: (now) => {
+      const past = new Date(now)
+      past.setDate(past.getDate() - 7)
+      return { from: toYmd(past), to: toYmd(now) }
+    },
+  },
+  {
+    id: 'last14d',
+    label: 'Last 2 weeks',
+    getRange: (now) => {
+      const past = new Date(now)
+      past.setDate(past.getDate() - 14)
+      return { from: toYmd(past), to: toYmd(now) }
+    },
+  },
+  {
+    id: 'last30d',
+    label: 'Last 30 days',
+    getRange: (now) => {
+      const past = new Date(now)
+      past.setDate(past.getDate() - 30)
+      return { from: toYmd(past), to: toYmd(now) }
+    },
+  },
+  {
+    id: 'all',
+    label: 'All dates',
+    getRange: () => ({ from: '', to: '' }),
+  },
+]
+
+function formatButtonLabel(from: string, to: string) {
+  if (!from && !to) return 'All dates'
+  if (from && !to) return `From ${from}`
+  if (!from && to) return `Until ${to}`
+  if (from === to) return from
+  return `${from} → ${to}`
+}
+
+function CalendarIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      aria-hidden="true"
+    >
+      <rect x="2" y="3" width="12" height="11" rx="1.5" />
+      <path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+export interface DatabaseDateRangePickerProps {
   from: string
   to: string
   onChange: (from: string, to: string) => void
@@ -27,9 +119,8 @@ interface DatabaseDateRangePickerProps {
   disabled?: boolean
 }
 
-/**
- * Date range: button uses `ss-select-sm` (shared trigger style) + the shared calendar popover.
- */
+type CalendarTarget = 'from' | 'to' | null
+
 export function DatabaseDateRangePicker({
   from,
   to,
@@ -39,40 +130,34 @@ export function DatabaseDateRangePicker({
 }: DatabaseDateRangePickerProps) {
   const uid = useId()
   const [open, setOpen] = useState(false)
-  const [viewMonth, setViewMonth] = useState(() => monthStart(new Date()))
-  const [picking, setPicking] = useState<string | null>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+  const zone = useMemo(() => localZoneAbbr(), [])
 
-  const activeSet = new Set(activeDates ?? [])
+  const [fromInput, setFromInput] = useState(from)
+  const [toInput, setToInput] = useState(to)
+  const [calendarTarget, setCalendarTarget] = useState<CalendarTarget>('from')
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (from) {
-      setViewMonth(monthStart(parseYmdLocal(from)))
-    }
-  }, [from])
+  const activeSet = useMemo(() => new Set(activeDates ?? []), [activeDates])
 
-  useEffect(() => {
-    if (from) return
-    if (!activeDates || activeDates.length === 0) return
-    const last = activeDates[activeDates.length - 1]
-    setViewMonth(monthStart(parseYmdLocal(last)))
-  }, [activeDates, from])
+  const syncInputsFromProps = useCallback(() => {
+    setFromInput(from)
+    setToInput(to)
+    setError(null)
+    setCalendarTarget('from')
+  }, [from, to])
 
   useEffect(() => {
     if (!open) return
-    function onDoc(e: MouseEvent) {
+    const onDoc = (e: MouseEvent) => {
       const t = e.target
       if (t instanceof Node && !popRef.current?.contains(t) && !btnRef.current?.contains(t)) {
         setOpen(false)
-        setPicking(null)
       }
     }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setOpen(false)
-        setPicking(null)
-      }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
     }
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
@@ -82,137 +167,264 @@ export function DatabaseDateRangePicker({
     }
   }, [open])
 
-  const cells = buildMonthCells(viewMonth)
-  const label = viewMonth.toLocaleString(undefined, { month: 'long', year: 'numeric' })
+  const draftFromDate = useMemo(() => parseYmd(fromInput), [fromInput])
+  const draftToDate = useMemo(() => parseYmd(toInput), [toInput])
 
-  const onPickDay = useCallback(
-    (ymd: string) => {
-      if (picking === null) {
-        setPicking(ymd)
-        return
-      }
-      onChange(pickMin(picking, ymd), pickMax(picking, ymd))
-      setPicking(null)
+  const onPickCalendarDay = (day: Date) => {
+    const ymd = toYmd(day)
+    setError(null)
+    if (calendarTarget === 'from') {
+      setFromInput(ymd)
+      setCalendarTarget('to')
+    } else if (calendarTarget === 'to') {
+      setToInput(ymd)
+      setCalendarTarget(null)
+    } else {
+      // Default behavior if neither specifically targeted: start a new range
+      setFromInput(ymd)
+      setCalendarTarget('to')
+    }
+  }
+
+  const handleApply = () => {
+    setError(null)
+    const trimmedFrom = fromInput.trim()
+    const trimmedTo = toInput.trim()
+
+    if (!trimmedFrom && !trimmedTo) {
+      onChange('', '')
       setOpen(false)
-    },
-    [picking, onChange],
-  )
+      return
+    }
 
-  const onClear = useCallback(() => {
-    onChange('', '')
-    setPicking(null)
+    if (trimmedFrom && !parseYmd(trimmedFrom)) {
+      setError('Invalid "From" date (format: YYYY-MM-DD)')
+      return
+    }
+    if (trimmedTo && !parseYmd(trimmedTo)) {
+      setError('Invalid "To" date (format: YYYY-MM-DD)')
+      return
+    }
+
+    if (trimmedFrom && trimmedTo && trimmedFrom > trimmedTo) {
+      setError('"From" date must be earlier than or equal to "To" date')
+      return
+    }
+
+    onChange(trimmedFrom, trimmedTo)
     setOpen(false)
-  }, [onChange])
+  }
+
+  const handlePresetSelect = (preset: DatePreset) => {
+    const range = preset.getRange(new Date())
+    setFromInput(range.from)
+    setToInput(range.to)
+    setError(null)
+    onChange(range.from, range.to)
+    setOpen(false)
+  }
+
+  const handleClear = () => {
+    setFromInput('')
+    setToInput('')
+    setError(null)
+    onChange('', '')
+    setOpen(false)
+  }
+
+  const activePresetId = useMemo(() => {
+    const now = new Date()
+    for (const p of DATE_PRESETS) {
+      const r = p.getRange(now)
+      if (r.from === from && r.to === to) return p.id
+    }
+    return null
+  }, [from, to])
+
+  const inputClass =
+    'w-full rounded-md border bg-[#0c0e14] px-2.5 py-1.5 font-mono text-xs text-gray-100 outline-none transition-colors focus:border-indigo-500'
 
   return (
-    <div className="relative">
-      <label className="ss-form-label" id={`${uid}-lbl`} htmlFor={`${uid}-btn`}>
+    <div className="relative inline-block">
+      <label className="ss-form-label mb-1 block" id={`${uid}-lbl`} htmlFor={`${uid}-btn`}>
         Date range
       </label>
+
+      {/* Trigger Button */}
       <button
         ref={btnRef}
         id={`${uid}-btn`}
         type="button"
-        className="ss-select-sm"
+        disabled={disabled}
         aria-expanded={open}
         aria-haspopup="dialog"
-        disabled={disabled}
         onClick={() => {
-          setOpen((prev) => {
-            if (!prev) {
-              setPicking(null)
-              return true
-            }
-            setPicking(null)
-            return false
-          })
+          if (disabled) return
+          if (!open) syncInputsFromProps()
+          setOpen((prev) => !prev)
         }}
+        className="flex items-center gap-2 rounded-md border border-[#2b2f42] bg-[#11131c] px-3 py-1.5 text-xs text-gray-200 transition-colors hover:border-indigo-500/60 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
       >
-        <span className="ss-db-daterange-btn-text">
-          {formatButtonLabel(from, to, open ? picking : null)}
+        <span className="font-medium truncate max-w-[160px] sm:max-w-none">
+          {formatButtonLabel(from, to)}
         </span>
-        <span className="ss-db-daterange-chev" aria-hidden>
-          {open ? '▲' : '▼'}
-        </span>
+        <span className="text-gray-500">({zone})</span>
+        <CalendarIcon className="h-3.5 w-3.5 text-gray-400" />
       </button>
 
+      {/* Popover */}
       {open && (
         <div
           ref={popRef}
-          className="ss-db-daterange-pop"
           role="dialog"
           aria-labelledby={`${uid}-lbl`}
+          className="absolute left-0 sm:left-auto right-auto sm:right-0 z-50 mt-2 flex max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-xl border border-[#2b2f42] bg-[#141722] shadow-2xl shadow-black/60 sm:flex-row"
         >
-          <div className="ss-db-daterange-nav">
-            <button
-              type="button"
-              className="ss-btn-bare"
-              onClick={() => setViewMonth((m) => addMonths(m, -1))}
-            >
-              ‹
-            </button>
-            <span className="shrink-0 text-sm font-medium text-gray-200">{label}</span>
-            <button
-              type="button"
-              className="ss-btn-bare"
-              onClick={() => setViewMonth((m) => addMonths(m, 1))}
-            >
-              ›
-            </button>
-          </div>
-
-          <div className="ss-db-daterange-dow" aria-hidden>
-            {CALENDAR_WEEKDAYS.map((w) => (
-              <div key={w} className="ss-db-daterange-dow-c">
-                {w}
-              </div>
-            ))}
-          </div>
-
-          <div className="ss-db-daterange-grid">
-            {cells.map((c, i) => {
-              if (c.kind === 'pad') {
-                return <div key={`pad-${i}`} className="ss-db-daterange-pad" />
-              }
-              const { ymd, day } = c
-              const hasDb = activeSet.size > 0 && activeSet.has(ymd)
-              const inRange = picking
-                ? false
-                : !!(from && to && ymd >= from && ymd <= to)
-              const edge = picking
-                ? ymd === picking
-                : (!!from && ymd === from) || (!!to && ymd === to)
-
+          {/* Left Column: Presets */}
+          <ul className="flex shrink-0 flex-row gap-0.5 overflow-x-auto border-b border-[#222533] p-2 sm:w-44 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r">
+            {DATE_PRESETS.map((p) => {
+              const selected = activePresetId === p.id
               return (
-                <button
-                  key={ymd}
-                  type="button"
-                  onClick={() => onPickDay(ymd)}
-                  className={[
-                    'ss-db-daterange-day',
-                    inRange ? 'ss-db-daterange-day--inrange' : '',
-                    edge ? 'ss-db-daterange-day--edge' : '',
-                    hasDb ? 'ss-db-daterange-day--hasdata' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                >
-                  {day}
-                </button>
+                <li key={p.id} className="shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handlePresetSelect(p)}
+                    className={`flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-xs transition-colors cursor-pointer ${
+                      selected
+                        ? 'bg-indigo-500/15 text-white font-medium'
+                        : 'text-gray-300 hover:bg-[#1e2333]'
+                    }`}
+                  >
+                    <span className="whitespace-nowrap">{p.label}</span>
+                    {selected && <span aria-hidden="true">&#10003;</span>}
+                  </button>
+                </li>
               )
             })}
+          </ul>
+
+          {/* Middle Column: Absolute Date Range */}
+          <div className="w-full p-3 sm:w-72 border-b border-[#222533] sm:border-b-0 sm:border-r">
+            <div className="mb-2 text-xs font-semibold text-gray-200">Absolute date range</div>
+
+            {/* From Input */}
+            <div className="mb-2.5">
+              <label
+                htmlFor={`${uid}-from`}
+                className="mb-1 block text-xs text-gray-400"
+              >
+                From
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id={`${uid}-from`}
+                  value={fromInput}
+                  onChange={(e) => {
+                    setError(null)
+                    setFromInput(e.target.value)
+                  }}
+                  placeholder="YYYY-MM-DD"
+                  spellCheck={false}
+                  className={`${inputClass} ${
+                    fromInput && !parseYmd(fromInput) ? 'border-red-500/70' : 'border-[#2b2f42]'
+                  }`}
+                />
+                <button
+                  type="button"
+                  aria-label="Pick from date"
+                  onClick={() =>
+                    setCalendarTarget((cur) => (cur === 'from' ? null : 'from'))
+                  }
+                  className={`flex h-[30px] w-9 shrink-0 items-center justify-center rounded-md border text-gray-300 transition-colors cursor-pointer ${
+                    calendarTarget === 'from'
+                      ? 'border-indigo-500 bg-indigo-500/15'
+                      : 'border-[#2b2f42] hover:bg-[#1e2333]'
+                  }`}
+                >
+                  <CalendarIcon />
+                </button>
+              </div>
+            </div>
+
+            {/* To Input */}
+            <div className="mb-2.5">
+              <label
+                htmlFor={`${uid}-to`}
+                className="mb-1 block text-xs text-gray-400"
+              >
+                To
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id={`${uid}-to`}
+                  value={toInput}
+                  onChange={(e) => {
+                    setError(null)
+                    setToInput(e.target.value)
+                  }}
+                  placeholder="YYYY-MM-DD"
+                  spellCheck={false}
+                  className={`${inputClass} ${
+                    toInput && !parseYmd(toInput) ? 'border-red-500/70' : 'border-[#2b2f42]'
+                  }`}
+                />
+                <button
+                  type="button"
+                  aria-label="Pick to date"
+                  onClick={() =>
+                    setCalendarTarget((cur) => (cur === 'to' ? null : 'to'))
+                  }
+                  className={`flex h-[30px] w-9 shrink-0 items-center justify-center rounded-md border text-gray-300 transition-colors cursor-pointer ${
+                    calendarTarget === 'to'
+                      ? 'border-indigo-500 bg-indigo-500/15'
+                      : 'border-[#2b2f42] hover:bg-[#1e2333]'
+                  }`}
+                >
+                  <CalendarIcon />
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div role="alert" className="mb-2 text-xs text-red-400">
+                {error}
+              </div>
+            )}
+
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={handleApply}
+                className="flex-1 rounded-md bg-indigo-600 py-1.5 text-xs font-medium text-white transition-colors hover:bg-indigo-500 cursor-pointer"
+              >
+                Apply
+              </button>
+              <button
+                type="button"
+                onClick={handleClear}
+                className="rounded-md border border-[#2b2f42] px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-[#1e2333] cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+
+            {/* Legend for active SQLite database entries */}
+            <div className="mt-4 flex items-center gap-1.5 border-t border-[#222533] pt-3 text-[11px] text-gray-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" aria-hidden />
+              <span>Day has recorded transmissions</span>
+            </div>
           </div>
 
-          <p className="ss-db-daterange-hint">Click two days to set the inclusive range.</p>
-
-          <div className="ss-db-daterange-foot">
-            <div className="ss-db-daterange-legend">
-              <span className="ss-db-daterange-dot" aria-hidden />
-              <span className="text-sm text-gray-500">Day has at least one log (from DB)</span>
-            </div>
-            <button type="button" className="ss-btn-ghost" onClick={onClear}>
-              Clear
-            </button>
+          {/* Right Column: Month Range Calendar */}
+          <div className="p-1">
+            <RangeCalendar
+              mode="range"
+              from={draftFromDate}
+              to={draftToDate}
+              maxDate={new Date()}
+              activeDateStrings={activeSet}
+              onPick={onPickCalendarDay}
+            />
           </div>
         </div>
       )}

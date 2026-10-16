@@ -21,7 +21,7 @@ import { EventDetailContent } from './components/EventDetailContent'
 export function EventsIncidentsPage() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  const { isAccountAdmin } = useAdminCapability()
+  const { canAdmin } = useAdminCapability()
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState('')
   const [monitor, setMonitor] = useState<number | 'all'>('all')
@@ -414,7 +414,7 @@ export function EventsIncidentsPage() {
                 summarizeMutation={summarizeMutation}
                 detailQuery={detailQuery}
                 spanLinks={spanLinks}
-                canAdmin={isAccountAdmin}
+                canAdmin={canAdmin}
               />
             </div>
           </div>
@@ -439,7 +439,7 @@ export function EventsIncidentsPage() {
               summarizeMutation={summarizeMutation}
               detailQuery={detailQuery}
               spanLinks={spanLinks}
-              canAdmin={isAccountAdmin}
+              canAdmin={canAdmin}
             />
           )}
         </section>

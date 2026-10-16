@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chatApi } from '@/lib/chat'
 import type {
+  ChatTimeScope,
   ChatThread,
   TransmissionLookup,
   ChatStreamMeta,
@@ -13,6 +14,13 @@ import { IntelHeader } from './components/IntelHeader'
 import { ChatMessageList } from './components/ChatMessageList'
 import { ChatInputBox } from './components/ChatInputBox'
 import { AudioControlPanel } from './components/AudioControlPanel'
+import { TimeScopeBar } from './components/TimeScopeBar'
+import {
+  DEFAULT_TIME_RANGE,
+  resolveTimeRange,
+  toNaiveIso,
+  type TimeRangeValue,
+} from '@/components/ui/timeRange'
 import { SHOW_THINKING_KEY, SHOW_TOOLS_KEY, usePersistedFlag } from './usePersistedFlag'
 
 function extractAllTxIds(messages: ChatMessage[]): number[] {
@@ -39,6 +47,14 @@ function extractAllTxIds(messages: ChatMessage[]): number[] {
   return Array.from(ids)
 }
 
+function buildTimeScope(value: TimeRangeValue): ChatTimeScope {
+  if (value.kind === 'preset' && value.presetId === 'today') {
+    return { preset: 'today' }
+  }
+  const { start, end } = resolveTimeRange(value)
+  return { preset: 'custom', start_time: toNaiveIso(start), end_time: toNaiveIso(end) }
+}
+
 export function IntelPage() {
   const queryClient = useQueryClient()
 
@@ -49,6 +65,9 @@ export function IntelPage() {
   const [showTools, setShowTools] = usePersistedFlag(SHOW_TOOLS_KEY, true)
   const [showThinking, setShowThinking] = usePersistedFlag(SHOW_THINKING_KEY, false)
   const [audioPanelOpen, setAudioPanelOpen] = usePersistedFlag('scanscribe_intel_audio_panel_open', true)
+
+  // Time scope applied to each query (rolling presets are resolved at send time)
+  const [timeRange, setTimeRange] = useState<TimeRangeValue>(DEFAULT_TIME_RANGE)
 
   // Audio Deck state
   const [activeTxId, setActiveTxId] = useState<number | null>(null)
@@ -164,6 +183,7 @@ export function IntelPage() {
       currentThreadId,
       {
         prompt: promptText,
+        time_scope: buildTimeScope(timeRange),
       },
       {
         onEvent: (event) => {
@@ -374,6 +394,8 @@ export function IntelPage() {
           isStreaming={isStreaming}
           onOpenSidebar={() => setSidebarOpen(true)}
         />
+
+        <TimeScopeBar value={timeRange} onChange={setTimeRange} disabled={isStreaming} />
 
         {/* Conversation Message List */}
         <ChatMessageList

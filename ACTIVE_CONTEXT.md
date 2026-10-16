@@ -443,6 +443,37 @@ This living document is the **shared memory** between different AI models, human
   - Background uvicorn service restarted and verified running.
 - **Next Tasks / Unfinished Work:** Ready for production use or user validation.
 
+### 2026-10-16 15:25 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - **App-Wide Date & Time Range Picker Overhaul**:
+    - Created reusable [`RangeCalendar.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/ui/RangeCalendar.tsx) adhering directly to the user's instrument styling:
+      - 42-day calendar grid with weekday labels (`Su Mo Tu We Th Fr Sa`) and month navigation (`<` and `>`).
+      - Continuous rectangular range highlight band across weeks connecting start and end dates.
+      - Start and end date pills (`bg-neutral-900` / `bg-indigo-600` with white text and drop shadows).
+      - Today's date highlighted in bright blue (`text-sky-400 font-bold`).
+      - Database log indicators (dot markers indicating days with transmissions recorded in SQLite).
+      - Supports both `'range'` and `'single'` selection modes.
+    - Upgraded [`TimeRangePicker.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/ui/TimeRangePicker.tsx) and [`TimeScopeBar.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/TimeScopeBar.tsx) for `/app/intel`:
+      - Shows local time zone badge `(CDT)`, calendar trigger icon, quick presets (`Last 30 minutes`, `Last 6 hours`, ..., `Last 30 days`, `Today`), absolute `From` and `To` inputs, and embedded `RangeCalendar`.
+    - Overhauled [`DatabaseDateRangePicker.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/database/DatabaseDateRangePicker.tsx):
+      - Replaced legacy clunky calendar in [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx) and [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx) with the new instrument card layout:
+      - Presets sidebar (`Today`, `Yesterday`, `Last 3 days`, `Last 7 days`, `Last 2 weeks`, `Last 30 days`, `All dates`).
+      - Absolute `From` / `To` manual and calendar input.
+      - Embedded `RangeCalendar` with database log active date dots.
+    - Overhauled [`DatabaseDateSinglePicker.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/database/DatabaseDateSinglePicker.tsx):
+      - Replaced legacy single-day picker in [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx) / [`StatsPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/StatsPanel.tsx) with single-mode `RangeCalendar`, local zone badge, and "Today" shortcut.
+    - Fixed `canAdmin` capability enforcement in [`Events/Incidents/index.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/Incidents/index.tsx).
+    - Added comprehensive automated test suite [`DatePickers.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatePickers.test.tsx).
+- **Live Ingestion Impact:** Zero impact. Pure frontend component overhaul; backend APIs and DB sessions remain isolated and non-blocking.
+- **Gotchas / Warnings for Next Model:**
+  - `DatabaseDateRangePicker` calls `onChange(from, to)` with `YYYY-MM-DD` strings (or empty strings for "All dates").
+  - `TimeRangePicker` works with `TimeRangeValue` objects and resolves rolling presets at query time to naive local ISO datetimes matching backend `LogEntry.timestamp`.
+- **Verification Performed:**
+  - Full backend pytest suite: **123 passed in 23.72s** (100% green).
+  - Full frontend vitest suite: **6 test files, 27 passed in 3.24s** (100% green).
+  - TypeScript compilation: `npm run typecheck` passed with 0 errors.
+- **Next Tasks / Unfinished Work:** Ready for deployment or user testing.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -452,3 +483,4 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+
