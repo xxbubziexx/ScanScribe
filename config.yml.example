@@ -136,6 +136,17 @@ chat:
   temperature: 0.2
   # Optional local/regional radio context or 10-code hints to append to system prompt
   system_prompt_rules: ""
+  # Agentic mode: the model searches the transcript database via read-only tools
+  # (keyword search, surrounding context, incidents, talkgroup activity) instead of
+  # receiving the whole time window up front. Requires a model with tool calling support.
+  # When false, the legacy full-window context injection is used.
+  agentic_enabled: true
+  # Max tool-calling rounds per question before the model must answer
+  max_tool_iterations: 6
+  # Ask the model for reasoning/thinking summaries when supported (shown via "Show Thinking" in /intel)
+  reasoning_enabled: true
+  # low | medium | high (higher is slower and costs more tokens)
+  reasoning_effort: low
 
 # ==================== HOUR SUMMARIES SCHEDULE ====================
 summaries:

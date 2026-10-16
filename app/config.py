@@ -136,6 +136,12 @@ class ChatConfig(BaseModel):
     max_transmissions_context: int = 2500
     temperature: float = 0.2
     system_prompt_rules: Optional[str] = ""
+    # Agentic mode: model queries the database through read-only tools instead of receiving the full log.
+    agentic_enabled: bool = True
+    max_tool_iterations: int = 6
+    # Request model reasoning/thinking summaries where the provider and model support them.
+    reasoning_enabled: bool = True
+    reasoning_effort: Literal["low", "medium", "high"] = "low"
 
 
 class SummariesConfig(BaseModel):

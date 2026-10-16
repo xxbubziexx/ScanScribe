@@ -3,11 +3,61 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 
 from ..models.log_entry import LogEntry
 from ..schemas.chat import ChatTimeScope
 from ..config import get_settings
+
+
+ASR_FALLIBILITY_RULES = (
+    "ASR TRANSCRIPT RELIABILITY (MANDATORY):\n"
+    "- Every transcript in this system was produced by an automatic speech recognition (Whisper) model running on noisy radio audio. "
+    "Transcripts are NOISY PHONETIC APPROXIMATIONS, not verbatim records. They routinely contain mis-heard words, "
+    "clipped or dropped syllables, hallucinated filler, wrong numbers, and garbled unit IDs, street names, and 10-codes "
+    "(for example 'Duval' heard as 'do all', 'Battalion 1' heard as 'Italian one', '10-50' heard as 'ten fifty' or 'tent 50').\n"
+    "- Never treat a single transcript as proof of an exact word, name, number, or address. When a phrase is implausible in context, "
+    "treat it as a probable mis-transcription, say so, and give the most likely intended meaning only if surrounding transmissions support it.\n"
+    "- When reporting unit IDs, addresses, plate numbers, or other precision details, qualify them as 'transcribed as' and "
+    "note when the same detail is not corroborated by another transmission.\n"
+    "- Flag low-confidence or conflicting details explicitly, and direct the operator to verify critical details by playing the cited [TX-<id>] audio.\n"
+    "- A failed keyword match does NOT prove an event did not occur: the word may have been transcribed differently. "
+    "Report absence of evidence as 'not found in transcripts', never as 'did not happen'."
+)
+
+AGENT_TOOL_RULES = (
+    "TOOL USE PROTOCOL:\n"
+    "You have read-only tools that query the radio transcript database. You do not have the full log in context; "
+    "the context block only gives you the current time, the active time scope, and summary statistics. "
+    "You MUST call tools to retrieve transmissions before making any factual claim about radio traffic.\n"
+    "- search_transcripts: keyword search over transcripts. Defaults to the active time scope; pass start_time/end_time to widen or move the window.\n"
+    "- get_surrounding_transmissions: pull the conversation before and after a specific [TX-<id>] to corroborate or disambiguate it.\n"
+    "- get_incident_records: query incidents already classified by the pipeline (type, location, units, status).\n"
+    "- get_talkgroup_activity: see which talkgroups were active and how busy they were.\n"
+    "Search strategy:\n"
+    "1. Because of ASR errors, a single keyword search is not sufficient. When a search returns nothing or little, retry with phonetic variants, "
+    "spelled-out versus numeric forms (e.g. '10-50' and 'ten fifty', 'forty five' and '45'), partial words, and synonyms before concluding anything is absent.\n"
+    "2. When a hit is ambiguous or garbled, call get_surrounding_transmissions on it and judge the exchange as a whole.\n"
+    "3. If the user asks about a period outside the active time scope, set start_time/end_time explicitly (local time, ISO 8601, e.g. 2026-10-14T18:00).\n"
+    "4. Keep tool calls purposeful: prefer a few targeted searches over many broad ones. Stop searching once you have enough evidence and write the answer.\n"
+    "5. Only cite [TX-<id>] values that actually appeared in tool results or the context block. Never invent transmission IDs."
+)
+
+
+def format_tx_line(tx: LogEntry) -> Optional[str]:
+    """Format one transmission as '[TX-id | date 12h [24h] | TG: name]: \"text\"'; None when it has no usable text."""
+    body = ((tx.corrected_transcript or tx.transcript) or "").strip()
+    if not body or body == "VAD_REJECTED":
+        return None
+    if tx.timestamp:
+        ts_12 = tx.timestamp.strftime("%I:%M:%S %p")
+        ts_24 = tx.timestamp.strftime("%H:%M:%S")
+        date_str = tx.timestamp.strftime("%Y-%m-%d")
+        ts_display = f"{date_str} {ts_12} [{ts_24}]"
+    else:
+        ts_display = "UNKNOWN TIME"
+    tg = (tx.talkgroup or "N/A").strip()
+    return f"[TX-{tx.id} | {ts_display} | TG: {tg}]: \"{body}\""
 
 
 def parse_time_scope(time_scope: Optional[ChatTimeScope]) -> Tuple[datetime, datetime, str]:
@@ -109,10 +159,64 @@ def build_system_prompt() -> str:
         "6. TONE: Objective, technical, and precise. Avoid sensationalism or marketing fluff."
     )
 
+    base_prompt += f"\n\n{ASR_FALLIBILITY_RULES}"
+
     if custom_rules:
         base_prompt += f"\n\nUSER REGIONAL CONTEXT & RULES:\n{custom_rules}"
 
     return base_prompt
+
+
+def build_agent_system_prompt() -> str:
+    """System prompt for agentic (tool calling) mode: base analysis rules plus tool use protocol."""
+    base = build_system_prompt()
+    marker = "\n\nUSER REGIONAL CONTEXT & RULES:"
+    if marker in base:
+        head, tail = base.split(marker, 1)
+        return f"{head}\n\n{AGENT_TOOL_RULES}{marker}{tail}"
+    return f"{base}\n\n{AGENT_TOOL_RULES}"
+
+
+def build_agent_context_block(
+    db: Session, start_time: datetime, end_time: datetime, time_desc: str
+) -> Tuple[str, int]:
+    """Compact scope header for agentic mode: current time, scope, volume statistics, top talkgroups.
+
+    Returns the context text and the number of transmissions in scope.
+    """
+    now_str = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p [%H:%M:%S]")
+    base_filters = [
+        LogEntry.is_deleted == False,
+        LogEntry.timestamp >= start_time,
+        LogEntry.timestamp <= end_time,
+    ]
+    total, first_ts, last_ts = (
+        db.query(func.count(LogEntry.id), func.min(LogEntry.timestamp), func.max(LogEntry.timestamp))
+        .filter(and_(*base_filters))
+        .one()
+    )
+    lines = [
+        f"CURRENT LOCAL TIME: {now_str}",
+        f"ACTIVE TIME SCOPE: {time_desc} ({start_time.strftime('%Y-%m-%d %H:%M')} to {end_time.strftime('%Y-%m-%d %H:%M')} local)",
+        f"TRANSMISSIONS IN SCOPE: {total}",
+    ]
+    if not total:
+        lines.append("NO RADIO TRANSMISSIONS RECORDED IN THIS TIME WINDOW.")
+        return "\n".join(lines), 0
+
+    lines.append(f"EARLIEST IN SCOPE: {first_ts.strftime('%I:%M:%S %p [%H:%M:%S]')}")
+    lines.append(f"LATEST IN SCOPE: {last_ts.strftime('%I:%M:%S %p [%H:%M:%S]')}")
+    top = (
+        db.query(LogEntry.talkgroup, func.count(LogEntry.id).label("n"))
+        .filter(and_(*base_filters))
+        .group_by(LogEntry.talkgroup)
+        .order_by(func.count(LogEntry.id).desc())
+        .limit(10)
+        .all()
+    )
+    if top:
+        lines.append("TOP TALKGROUPS IN SCOPE: " + ", ".join(f"{(tg or 'N/A').strip()} ({n})" for tg, n in top))
+    return "\n".join(lines), total
 
 
 def format_context_block(transmissions: List[LogEntry], time_desc: str) -> str:
@@ -139,18 +243,9 @@ def format_context_block(transmissions: List[LogEntry], time_desc: str) -> str:
         "--- TRANSMISSION LOG ENTRIES ---",
     ]
     for tx in transmissions:
-        if tx.timestamp:
-            ts_12 = tx.timestamp.strftime("%I:%M:%S %p")
-            ts_24 = tx.timestamp.strftime("%H:%M:%S")
-            date_str = tx.timestamp.strftime("%Y-%m-%d")
-            ts_display = f"{date_str} {ts_12} [{ts_24}]"
-        else:
-            ts_display = "UNKNOWN TIME"
-        tg = (tx.talkgroup or "N/A").strip()
-        body = (tx.transcript or "").strip()
-        if not body or body == "VAD_REJECTED":
-            continue
-        lines.append(f"[TX-{tx.id} | {ts_display} | TG: {tg}]: \"{body}\"")
+        line = format_tx_line(tx)
+        if line:
+            lines.append(line)
 
     lines.append("--- END OF LOG ENTRIES ---")
     return "\n".join(lines)

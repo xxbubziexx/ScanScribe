@@ -53,7 +53,6 @@ export const chatApi = {
     time_scope_preset?: string
     start_time?: string | null
     end_time?: string | null
-    talkgroups?: string[]
   }): Promise<ChatThread> {
     return authFetch<ChatThread>('/api/chat/threads', {
       method: 'POST',
@@ -72,7 +71,6 @@ export const chatApi = {
       time_scope_preset?: string
       start_time?: string | null
       end_time?: string | null
-      talkgroups?: string[]
     },
   ): Promise<ChatThread> {
     return authFetch<ChatThread>(`/api/chat/threads/${threadId}`, {
@@ -85,10 +83,6 @@ export const chatApi = {
     return authFetch<{ ok: boolean }>(`/api/chat/threads/${threadId}`, {
       method: 'DELETE',
     })
-  },
-
-  async listTalkgroups(): Promise<string[]> {
-    return authFetch<string[]>('/api/chat/talkgroups')
   },
 
   async getTransmission(logId: number): Promise<TransmissionLookup> {

@@ -34,6 +34,14 @@ DEFAULT_PORT = 8000
 DEFAULT_HOST = "0.0.0.0"
 
 
+def _resolve_python_executable() -> str:
+    """Resolve Python binary: prefer workspace .venv python if present, else sys.executable."""
+    venv_py = BASE_DIR / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    if venv_py.exists():
+        return str(venv_py)
+    return sys.executable
+
+
 def _is_pid_running(pid: int) -> bool:
     """Check if process with PID is running."""
     if pid <= 0:
@@ -42,11 +50,17 @@ def _is_pid_running(pid: int) -> bool:
         try:
             import ctypes
             kernel32 = ctypes.windll.kernel32
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
             SYNCHRONIZE = 0x00100000
-            process = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+            STILL_ACTIVE = 259
+            process = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE, False, pid)
             if process != 0:
+                exit_code = ctypes.c_ulong()
+                success = kernel32.GetExitCodeProcess(process, ctypes.byref(exit_code))
                 kernel32.CloseHandle(process)
-                return True
+                if success:
+                    return exit_code.value == STILL_ACTIVE
+                return False
             return False
         except Exception:
             # Fallback using tasklist
@@ -147,7 +161,7 @@ def cmd_start(args):
 
     # Background / Daemon spawn
     cmd = [
-        sys.executable,
+        _resolve_python_executable(),
         "-m", "uvicorn",
         "app.main:app",
         "--host", host,
@@ -194,9 +208,9 @@ def cmd_start(args):
 
     _save_pid(proc.pid, port)
 
-    # Wait for server to become healthy
+    # Wait for server to become healthy (give models up to 24s to load on CPU)
     started = False
-    for _ in range(25):
+    for _ in range(60):
         time.sleep(0.4)
         if _check_health(port, timeout=0.5):
             started = True

@@ -8,11 +8,13 @@ import type {
   TransmissionLookup,
   ChatStreamMeta,
   ChatMessage,
+  ToolCallRecord,
 } from '@/types/chat'
 import { TimeScopeBar } from './components/TimeScopeBar'
 import { ChatMessageList } from './components/ChatMessageList'
 import { ChatInputBox } from './components/ChatInputBox'
 import { TransmissionAudioModal } from './components/TransmissionAudioModal'
+import { SHOW_THINKING_KEY, SHOW_TOOLS_KEY, usePersistedFlag } from './usePersistedFlag'
 
 export function IntelPage() {
   const queryClient = useQueryClient()
@@ -20,11 +22,16 @@ export function IntelPage() {
   // Selected thread state
   const [activeThreadId, setActiveThreadId] = useState<number | null>(null)
   const [timeScope, setTimeScope] = useState<ChatTimeScope>({ preset: 'today' })
-  const [selectedTalkgroups, setSelectedTalkgroups] = useState<string[]>([])
+
+  // Response detail preferences (persisted)
+  const [showTools, setShowTools] = usePersistedFlag(SHOW_TOOLS_KEY, true)
+  const [showThinking, setShowThinking] = usePersistedFlag(SHOW_THINKING_KEY, false)
 
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingToken, setStreamingToken] = useState('')
+  const [streamThought, setStreamThought] = useState('')
+  const [streamToolCalls, setStreamToolCalls] = useState<ToolCallRecord[]>([])
   const [streamMeta, setStreamMeta] = useState<ChatStreamMeta | null>(null)
   const [streamError, setStreamError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -41,12 +48,6 @@ export function IntelPage() {
     queryFn: () => chatApi.listThreads(),
   })
 
-  // Fetch available talkgroups
-  const { data: availableTalkgroups = [] } = useQuery({
-    queryKey: ['chat-talkgroups'],
-    queryFn: () => chatApi.listTalkgroups(),
-  })
-
   // Auto-select latest thread or create initial
   useEffect(() => {
     if (!activeThreadId && threads.length > 0) {
@@ -56,7 +57,6 @@ export function IntelPage() {
         start_time: threads[0].start_time,
         end_time: threads[0].end_time,
       })
-      setSelectedTalkgroups(threads[0].talkgroups || [])
     }
   }, [threads, activeThreadId])
 
@@ -75,7 +75,6 @@ export function IntelPage() {
         time_scope_preset: timeScope.preset,
         start_time: timeScope.start_time,
         end_time: timeScope.end_time,
-        talkgroups: selectedTalkgroups,
       }),
     onSuccess: (newThread) => {
       queryClient.invalidateQueries({ queryKey: ['chat-threads'] })
@@ -104,7 +103,6 @@ export function IntelPage() {
       start_time: thread.start_time,
       end_time: thread.end_time,
     })
-    setSelectedTalkgroups(thread.talkgroups || [])
     setSidebarOpen(false)
   }
 
@@ -115,15 +113,6 @@ export function IntelPage() {
         time_scope_preset: newScope.preset,
         start_time: newScope.start_time,
         end_time: newScope.end_time,
-      })
-    }
-  }
-
-  const handleTalkgroupsChange = (newTgs: string[]) => {
-    setSelectedTalkgroups(newTgs)
-    if (activeThreadId) {
-      void chatApi.updateThread(activeThreadId, {
-        talkgroups: newTgs,
       })
     }
   }
@@ -144,6 +133,8 @@ export function IntelPage() {
 
     setIsStreaming(true)
     setStreamingToken('')
+    setStreamThought('')
+    setStreamToolCalls([])
     setStreamMeta(null)
     setStreamError(null)
 
@@ -172,7 +163,6 @@ export function IntelPage() {
       {
         prompt: promptText,
         time_scope: timeScope,
-        talkgroups: selectedTalkgroups,
       },
       {
         onEvent: (event) => {
@@ -180,6 +170,32 @@ export function IntelPage() {
             setStreamMeta(event)
           } else if (event.type === 'token') {
             setStreamingToken((prev) => prev + event.content)
+          } else if (event.type === 'thinking') {
+            setStreamThought((prev) => prev + event.content)
+          } else if (event.type === 'tool_call') {
+            setStreamToolCalls((prev) => [
+              ...prev,
+              {
+                call_id: event.call_id,
+                tool: event.tool,
+                arguments: event.arguments,
+                status: 'running',
+              },
+            ])
+          } else if (event.type === 'tool_result') {
+            setStreamToolCalls((prev) =>
+              prev.map((call) =>
+                call.call_id === event.call_id
+                  ? {
+                      ...call,
+                      status: event.status,
+                      summary: event.summary,
+                      count: event.count,
+                      duration_ms: event.duration_ms,
+                    }
+                  : call,
+              ),
+            )
           } else if (event.type === 'error') {
             setStreamError(event.error)
           } else if (event.type === 'done') {
@@ -193,6 +209,8 @@ export function IntelPage() {
         onDone: () => {
           setIsStreaming(false)
           setStreamingToken('')
+          setStreamThought('')
+          setStreamToolCalls([])
           queryClient.invalidateQueries({ queryKey: ['chat-thread', currentThreadId] })
           queryClient.invalidateQueries({ queryKey: ['chat-threads'] })
         },
@@ -208,6 +226,8 @@ export function IntelPage() {
     }
     setIsStreaming(false)
     setStreamingToken('')
+    setStreamThought('')
+    setStreamToolCalls([])
   }
 
   const handleSelectTx = async (txId: number) => {
@@ -326,9 +346,10 @@ export function IntelPage() {
         <TimeScopeBar
           timeScope={timeScope}
           onChangeTimeScope={handleTimeScopeChange}
-          availableTalkgroups={availableTalkgroups}
-          selectedTalkgroups={selectedTalkgroups}
-          onChangeTalkgroups={handleTalkgroupsChange}
+          showTools={showTools}
+          onChangeShowTools={setShowTools}
+          showThinking={showThinking}
+          onChangeShowThinking={setShowThinking}
           disabled={isStreaming}
         />
 
@@ -336,9 +357,13 @@ export function IntelPage() {
         <ChatMessageList
           messages={messages}
           streamingToken={streamingToken}
+          streamThought={streamThought}
+          streamToolCalls={streamToolCalls}
           streamMeta={streamMeta}
           isStreaming={isStreaming}
           streamError={streamError}
+          showTools={showTools}
+          showThinking={showThinking}
           onSelectTx={handleSelectTx}
           onPromptSuggestion={handleSendPrompt}
         />

@@ -1,13 +1,19 @@
 import { useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
-import type { ChatMessage, ChatStreamMeta } from '@/types/chat'
+import type { ChatMessage, ChatStreamMeta, ToolCallRecord } from '@/types/chat'
+import { ThinkingAccordion } from './ThinkingAccordion'
+import { ToolCallCard } from './ToolCallCard'
 
 interface ChatMessageListProps {
   messages: ChatMessage[]
   streamingToken: string
+  streamThought: string
+  streamToolCalls: ToolCallRecord[]
   streamMeta: ChatStreamMeta | null
   isStreaming: boolean
   streamError: string | null
+  showTools: boolean
+  showThinking: boolean
   onSelectTx: (txId: number) => void
   onPromptSuggestion: (prompt: string) => void
 }
@@ -39,9 +45,13 @@ function preprocessMarkdownCitations(content: string): string {
 export function ChatMessageList({
   messages,
   streamingToken,
+  streamThought,
+  streamToolCalls,
   streamMeta,
   isStreaming,
   streamError,
+  showTools,
+  showThinking,
   onSelectTx,
   onPromptSuggestion,
 }: ChatMessageListProps) {
@@ -49,7 +59,14 @@ export function ChatMessageList({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, streamingToken, isStreaming])
+  }, [messages.length, streamingToken, streamThought, streamToolCalls.length, isStreaming])
+
+  const runningCall = streamToolCalls.find((c) => c.status === 'running')
+  const liveStatus = runningCall
+    ? `Running ${runningCall.tool.replace(/_/g, ' ')}...`
+    : streamThought && !streamingToken
+      ? 'Thinking...'
+      : 'Analyzing logs...'
 
   const renderMarkdown = (content: string) => {
     return (
@@ -175,7 +192,17 @@ export function ChatMessageList({
                   : 'bg-[#181b26] border border-[#292e42] text-gray-200 rounded-bl-none shadow-sm'
               }`}
             >
-              {isUser ? msg.content : renderMarkdown(msg.content)}
+              {isUser ? (
+                msg.content
+              ) : (
+                <>
+                  {showThinking && msg.thought && <ThinkingAccordion thought={msg.thought} />}
+                  {showTools && msg.tool_calls && msg.tool_calls.length > 0 && (
+                    <ToolCallCard calls={msg.tool_calls} />
+                  )}
+                  {renderMarkdown(msg.content)}
+                </>
+              )}
             </div>
           </div>
         )
@@ -186,7 +213,7 @@ export function ChatMessageList({
         <div className="flex flex-col items-start max-w-3xl">
           <div className="flex items-center gap-2 mb-1 text-[11px] text-gray-500">
             <span className="font-semibold text-indigo-400">ScanScribe Intel</span>
-            <span className="animate-pulse text-indigo-400">● Analyzing logs...</span>
+            <span className="animate-pulse text-indigo-400">● {liveStatus}</span>
           </div>
 
           <div className="w-full bg-[#181b26] border border-[#2e344a] rounded-lg rounded-bl-none px-4 py-3 text-xs leading-relaxed text-gray-200 shadow-md">
@@ -194,17 +221,25 @@ export function ChatMessageList({
             {streamMeta && (
               <div className="mb-2.5 pb-2 border-b border-[#262c3f] flex items-center justify-between text-[11px] text-gray-400 font-mono">
                 <span>
-                  Scanned: <strong className="text-indigo-300">{streamMeta.transmissions_count}</strong> transmissions
+                  {streamMeta.agentic ? 'In scope' : 'Scanned'}:{' '}
+                  <strong className="text-indigo-300">{streamMeta.transmissions_count}</strong> transmissions
                 </span>
                 <span>{streamMeta.time_desc}</span>
               </div>
             )}
 
+            {showThinking && streamThought && <ThinkingAccordion thought={streamThought} isLive />}
+            {showTools && <ToolCallCard calls={streamToolCalls} />}
+
             <div>
               {streamingToken ? (
                 renderMarkdown(streamingToken)
               ) : (
-                <span className="text-gray-500 italic">Reading transmissions and assembling intelligence...</span>
+                <span className="text-gray-500 italic">
+                  {streamMeta?.agentic
+                    ? 'Querying the transmission database and assembling intelligence...'
+                    : 'Reading transmissions and assembling intelligence...'}
+                </span>
               )}
             </div>
           </div>

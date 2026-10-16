@@ -1,7 +1,9 @@
 """FastAPI routes for Scanner Intelligence conversational queries."""
+import asyncio
 import json
 import logging
-from typing import List, Optional
+from datetime import datetime
+from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -18,22 +20,45 @@ from ..schemas.chat import (
     ChatThreadDetailOut,
     ChatMessageOut,
     ChatPromptInput,
+    ChatTimeScope,
     TransmissionLookupOut,
+    ToolCallRecord,
 )
 from .auth import get_current_active_user
 from ..services.chat_context import (
     parse_time_scope,
     query_transmissions,
     build_system_prompt,
+    build_agent_system_prompt,
+    build_agent_context_block,
     format_context_block,
     extract_cited_ids,
 )
-from ..services.chat_streamer import stream_chat_completion
+from ..services.agent_tools import ToolContext
+from ..services.chat_streamer import AssistantTrace, stream_chat_completion
 from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["scanner-intelligence"])
+
+
+def _parse_tool_calls(raw: Optional[str], message_id: int) -> Optional[List[ToolCallRecord]]:
+    """Deserialize persisted tool call records; malformed rows are logged and dropped."""
+    if not raw:
+        return None
+    try:
+        items = json.loads(raw)
+        return [ToolCallRecord(**item) for item in items]
+    except (json.JSONDecodeError, TypeError, ValueError) as ex:
+        logger.warning("Malformed tool_calls JSON on chat message %s: %s", message_id, ex)
+        return None
+
+
+def _load_agent_context(start_time: datetime, end_time: datetime, time_desc: str) -> Tuple[str, int]:
+    """Build the compact agent context header in a worker thread with its own session."""
+    with SessionLocal() as ctx_db:
+        return build_agent_context_block(ctx_db, start_time, end_time, time_desc)
 
 
 @router.get("/threads", response_model=List[ChatThreadOut])
@@ -129,6 +154,8 @@ def get_thread(
                 role=m.role,
                 content=m.content,
                 cited_log_ids=cited,
+                thought=m.thought,
+                tool_calls=_parse_tool_calls(m.tool_calls, m.id),
                 created_at=m.created_at,
             )
         )
@@ -286,12 +313,12 @@ async def stream_query(
 
     settings = get_settings()
     cfg = settings.config.chat
+    agentic = bool(cfg.agentic_enabled)
 
     # Resolve time scope
     active_scope = payload.time_scope
     if not active_scope:
         # Fall back to thread preset
-        from ..schemas.chat import ChatTimeScope
         active_scope = ChatTimeScope(
             preset=thread.time_scope_preset or "today",
             start_time=thread.start_time,
@@ -300,13 +327,17 @@ async def stream_query(
 
     start_time, end_time, time_desc = parse_time_scope(active_scope)
 
-    # Resolve talkgroups
-    talkgroups = payload.talkgroups
-    if talkgroups is None and thread.talkgroups:
-        try:
-            talkgroups = json.loads(thread.talkgroups)
-        except Exception:
-            talkgroups = None
+    # Legacy talkgroup filter: honored only in non-agentic mode. In agentic mode the model
+    # targets talkgroups itself through tool arguments.
+    talkgroups = None
+    if not agentic:
+        talkgroups = payload.talkgroups
+        if talkgroups is None and thread.talkgroups:
+            try:
+                talkgroups = json.loads(thread.talkgroups)
+            except json.JSONDecodeError:
+                logger.warning("Thread %s has malformed talkgroups JSON; ignoring filter", thread.id)
+                talkgroups = None
 
     # Update thread auto-title if it's currently default
     if thread.title in ("New Query", "New Intel Query") and len(payload.prompt) > 0:
@@ -330,19 +361,26 @@ async def stream_query(
     db.add(user_msg)
     db.commit()
 
-    # Query transmissions
-    limit = getattr(cfg, "max_transmissions_context", 2500) or 2500
-    transmissions = query_transmissions(
-        db=db,
-        start_time=start_time,
-        end_time=end_time,
-        talkgroups=talkgroups,
-        limit=limit,
-    )
-
-    # Format context and system prompt
-    system_prompt = build_system_prompt()
-    context_text = format_context_block(transmissions, time_desc)
+    tool_ctx: Optional[ToolContext] = None
+    if agentic:
+        # Compact scope header only; the model pulls transmissions through tools.
+        system_prompt = build_agent_system_prompt()
+        context_text, transmissions_count = await asyncio.to_thread(
+            _load_agent_context, start_time, end_time, time_desc
+        )
+        tool_ctx = ToolContext(scope_start=start_time, scope_end=end_time, scope_desc=time_desc)
+    else:
+        limit = getattr(cfg, "max_transmissions_context", 2500) or 2500
+        transmissions = query_transmissions(
+            db=db,
+            start_time=start_time,
+            end_time=end_time,
+            talkgroups=talkgroups,
+            limit=limit,
+        )
+        system_prompt = build_system_prompt()
+        context_text = format_context_block(transmissions, time_desc)
+        transmissions_count = len(transmissions)
 
     # Prepare message history (last 10 messages)
     history_messages = (
@@ -356,18 +394,18 @@ async def stream_query(
     formatted_history = [{"role": m.role, "content": m.content} for m in history_messages]
 
     meta_info = {
-        "transmissions_count": len(transmissions),
+        "transmissions_count": transmissions_count,
         "time_desc": time_desc,
         "start_time": start_time.isoformat(),
         "end_time": end_time.isoformat(),
         "talkgroups": talkgroups or [],
         "model": cfg.model,
+        "agentic": agentic,
     }
 
-    # Asynchronous generator to stream tokens and persist assistant message on completion
+    # Asynchronous generator to stream events and persist the assistant turn on completion
     async def response_wrapper():
-        accumulated_text = ""
-        cited_ids = []
+        trace = AssistantTrace()
         try:
             async for chunk in stream_chat_completion(
                 system_prompt=system_prompt,
@@ -375,28 +413,28 @@ async def stream_query(
                 conversation_history=formatted_history,
                 user_prompt=payload.prompt,
                 meta_info=meta_info,
+                tool_ctx=tool_ctx,
             ):
                 if chunk.startswith("data: "):
                     try:
-                        parsed = json.loads(chunk[6:].strip())
-                        if parsed.get("type") == "token":
-                            accumulated_text += parsed.get("content", "")
-                        elif parsed.get("type") == "done":
-                            cited_ids = parsed.get("cited_log_ids") or []
-                    except Exception:
-                        pass
+                        trace.consume(json.loads(chunk[6:].strip()))
+                    except json.JSONDecodeError:
+                        logger.warning("Skipping unparseable SSE chunk while tracing assistant turn")
                 yield chunk
 
         finally:
             # Commit assistant message to database in isolated session
-            if accumulated_text.strip():
+            if trace.text.strip():
+                cited_ids = trace.cited_ids or extract_cited_ids(trace.text)
                 try:
                     with SessionLocal() as save_db:
                         asst_msg = ChatMessage(
                             thread_id=thread_id,
                             role="assistant",
-                            content=accumulated_text,
+                            content=trace.text,
                             cited_log_ids=json.dumps(cited_ids) if cited_ids else None,
+                            thought=trace.thought or None,
+                            tool_calls=json.dumps(trace.tool_calls) if trace.tool_calls else None,
                         )
                         save_db.add(asst_msg)
                         # update thread timestamp

@@ -5,9 +5,10 @@ import type { ChatTimeScope } from '@/types/chat'
 interface TimeScopeBarProps {
   timeScope: ChatTimeScope
   onChangeTimeScope: (scope: ChatTimeScope) => void
-  availableTalkgroups: string[]
-  selectedTalkgroups: string[]
-  onChangeTalkgroups: (tgs: string[]) => void
+  showTools: boolean
+  onChangeShowTools: (value: boolean) => void
+  showThinking: boolean
+  onChangeShowThinking: (value: boolean) => void
   disabled?: boolean
 }
 
@@ -20,16 +21,48 @@ const PRESETS: { id: ChatTimeScope['preset']; label: string }[] = [
   { id: 'custom', label: 'Custom' },
 ]
 
+interface ViewToggleProps {
+  id: string
+  label: string
+  checked: boolean
+  onChange: (value: boolean) => void
+}
+
+function ViewToggle({ id, label, checked, onChange }: ViewToggleProps) {
+  return (
+    <button
+      id={id}
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex items-center gap-2 px-2 py-1 rounded text-gray-300 hover:bg-[#1e2230] transition-colors cursor-pointer"
+    >
+      <span
+        className={`relative inline-block w-7 h-4 rounded-full transition-colors ${
+          checked ? 'bg-indigo-600' : 'bg-[#2b3045]'
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${
+            checked ? 'translate-x-3' : 'translate-x-0'
+          }`}
+        />
+      </span>
+      <span className="font-medium">{label}</span>
+    </button>
+  )
+}
+
 export function TimeScopeBar({
   timeScope,
   onChangeTimeScope,
-  availableTalkgroups,
-  selectedTalkgroups,
-  onChangeTalkgroups,
+  showTools,
+  onChangeShowTools,
+  showThinking,
+  onChangeShowThinking,
   disabled = false,
 }: TimeScopeBarProps) {
-
-  const [showTgDropdown, setShowTgDropdown] = useState(false)
   const [customStart, setCustomStart] = useState(timeScope.start_time || '')
   const [customEnd, setCustomEnd] = useState(timeScope.end_time || '')
 
@@ -53,15 +86,6 @@ export function TimeScopeBar({
       start_time: customStart,
       end_time: customEnd || null,
     })
-  }
-
-  const toggleTalkgroup = (tg: string) => {
-    if (disabled) return
-    if (selectedTalkgroups.includes(tg)) {
-      onChangeTalkgroups(selectedTalkgroups.filter((item) => item !== tg))
-    } else {
-      onChangeTalkgroups([...selectedTalkgroups, tg])
-    }
   }
 
   return (
@@ -120,62 +144,15 @@ export function TimeScopeBar({
         )}
       </div>
 
-      {/* Talkgroups Dropdown */}
-      <div className="relative">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => setShowTgDropdown(!showTgDropdown)}
-          className="flex items-center gap-1.5 px-3 py-1 bg-[#1e2230] hover:bg-[#282d3f] text-gray-200 rounded border border-[#2e3347] transition-colors"
-        >
-          <span className="text-gray-400">Talkgroups:</span>
-          <span className="font-semibold text-indigo-400">
-            {selectedTalkgroups.length === 0
-              ? 'All Channels'
-              : `${selectedTalkgroups.length} Selected`}
-          </span>
-          <span className="text-[10px] text-gray-500">▼</span>
-        </button>
-
-        {showTgDropdown && (
-          <div className="absolute right-0 mt-1 w-64 max-h-64 overflow-y-auto bg-[#181b26] border border-[#2e3347] rounded-md shadow-xl z-30 p-2 text-xs">
-            <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-[#252836]">
-              <span className="text-gray-400 font-medium">Filter Channels</span>
-              {selectedTalkgroups.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onChangeTalkgroups([])}
-                  className="text-[11px] text-indigo-400 hover:underline"
-                >
-                  Clear All
-                </button>
-              )}
-            </div>
-            {availableTalkgroups.length === 0 ? (
-              <p className="text-gray-500 text-center py-2">No talkgroups found</p>
-            ) : (
-              <div className="space-y-1">
-                {availableTalkgroups.map((tg) => {
-                  const checked = selectedTalkgroups.includes(tg)
-                  return (
-                    <label
-                      key={tg}
-                      className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-[#222636] cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleTalkgroup(tg)}
-                        className="rounded border-gray-600 text-indigo-600 focus:ring-0"
-                      />
-                      <span className="text-gray-200 truncate">{tg}</span>
-                    </label>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
+      {/* Response detail toggles */}
+      <div className="flex items-center gap-1" role="group" aria-label="Response detail options">
+        <ViewToggle id="intel-toggle-tools" label="Show tool calls" checked={showTools} onChange={onChangeShowTools} />
+        <ViewToggle
+          id="intel-toggle-thinking"
+          label="Show thinking"
+          checked={showThinking}
+          onChange={onChangeShowThinking}
+        />
       </div>
     </div>
   )

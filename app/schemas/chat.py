@@ -1,6 +1,6 @@
 """Pydantic v2 schemas for Scanner Intelligence chat."""
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -29,6 +29,17 @@ class ChatThreadUpdate(BaseModel):
     talkgroups: Optional[List[str]] = None
 
 
+class ToolCallRecord(BaseModel):
+    """Persisted record of one agent tool execution."""
+    call_id: str
+    tool: str
+    arguments: Dict[str, Any] = Field(default_factory=dict)
+    status: Literal["running", "ok", "error"] = "ok"
+    summary: Optional[str] = None
+    count: Optional[int] = None
+    duration_ms: Optional[int] = None
+
+
 class ChatMessageOut(BaseModel):
     """Output schema for a chat message."""
     model_config = ConfigDict(from_attributes=True)
@@ -38,6 +49,8 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     cited_log_ids: Optional[List[int]] = None
+    thought: Optional[str] = None
+    tool_calls: Optional[List[ToolCallRecord]] = None
     created_at: datetime
 
 

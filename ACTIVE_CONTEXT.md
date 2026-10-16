@@ -335,15 +335,33 @@ This living document is the **shared memory** between different AI models, human
   - Live server health check: HTTP 200 on port 8000.
 - **Next Tasks / Unfinished Work:** Feature verified and live. Ready for review.
 
-<!-- 
-### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
-### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
-- **Work Performed:** <Summary of changes made>
-- **Live Ingestion Impact:** <Any changes to ingest/, workers, or ports?>
-- **Gotchas / Warnings for Next Model:** <Gotchas, quirks, or pitfalls discovered>
-- **Verification Performed:** <pytest / typecheck / live testing results>
-- **Next Tasks / Unfinished Work:** <What should the next agent work on?>
--->
+
+---
+
+### 2026-10-15 20:20 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Implemented Agentic Tool Calling on `/intel` per [`Plan/agentic_intel_tool_calling_plan.md`](file:///a:/Scanscribe_Projects/scanscribe/Plan/agentic_intel_tool_calling_plan.md):
+    - **Database & Schemas:** Alembic migration [`b7d41c9e2a15`](file:///a:/Scanscribe_Projects/scanscribe/alembic/versions/b7d41c9e2a15_add_thought_and_tool_calls_to_chat_messages.py) adding nullable `thought` (TEXT) and `tool_calls` (JSON) to `chat_messages`. Updated [`app/models/chat.py`](file:///a:/Scanscribe_Projects/scanscribe/app/models/chat.py) and Pydantic schemas in [`app/schemas/chat.py`](file:///a:/Scanscribe_Projects/scanscribe/app/schemas/chat.py).
+    - **Agent Tools Engine:** Built [`app/services/agent_tools.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/agent_tools.py) with 4 indexed, read-only tools: `search_transcripts`, `get_surrounding_transmissions`, `get_incident_records`, and `get_talkgroup_activity`.
+    - **ASR Fallibility & Rules:** Enhanced [`app/services/chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py) with strict Whisper ASR phonetic approximation protocols (`ASR_FALLIBILITY_RULES`), tool guidelines, and unified `format_tx_line`.
+    - **Streaming Orchestrator:** Updated [`app/services/chat_streamer.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_streamer.py) supporting Gemini 2.0/2.5 function calling, OpenRouter tools, thought capturing, tool execution loops with iteration caps, and streaming SSE trace events (`thought`, `tool_call`, `tool_result`, `error`).
+    - **Frontend UI:**
+      - Added localStorage-persisted visibility toggles (`scanscribe_intel_show_tools`, `scanscribe_intel_show_thinking`) via [`usePersistedFlag.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/usePersistedFlag.ts).
+      - Built collapsable [`ThinkingAccordion.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ThinkingAccordion.tsx) and visual execution cards [`ToolCallCard.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ToolCallCard.tsx).
+      - Removed the legacy talkgroup channel dropdown from [`TimeScopeBar.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/TimeScopeBar.tsx) to delegate talkgroup filtering to natural language and tools.
+      - Integrated into [`ChatMessageList.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatMessageList.tsx) and [`IntelPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/IntelPage.tsx).
+      - Compiled fresh frontend bundle (`npm run build`).
+    - **Server Control & Windows Daemon:** Fixed stale PID detection in [`app/server_control.py`](file:///a:/Scanscribe_Projects/scanscribe/app/server_control.py) using Win32 `GetExitCodeProcess(STILL_ACTIVE)` and added `.venv` Python executable resolution.
+- **Live Ingestion Impact:** Zero impact on live audio ingestion loop. Database migration `b7d41c9e2a15` is purely additive on `chat_messages`.
+- **Gotchas / Warnings for Next Model:**
+  - All agent tools in `agent_tools.py` run against SQLite synchronously inside `asyncio.to_thread` to prevent event loop blocking.
+  - LLM models may emit `thought` blocks either natively (Gemini `thought=True`) or via `<thought>` / `<thinking>` tags; `chat_streamer.py` and the frontend handle both formats.
+- **Verification Performed:**
+  - `pytest tests/`: **115 passed** in 22.78s (100% green).
+  - Frontend typecheck: `tsc -b --noEmit` passed with 0 errors.
+  - Live server health check: HTTP 200 on port 8000.
+- **Next Tasks / Unfinished Work:** All phases of `agentic_intel_tool_calling_plan.md` complete and operational. Ready for user testing on `/intel`.
+
 
 
 

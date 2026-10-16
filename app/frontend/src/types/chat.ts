@@ -21,12 +21,26 @@ export interface ChatThread {
   message_count?: number
 }
 
+export type ToolCallStatus = 'running' | 'ok' | 'error'
+
+export interface ToolCallRecord {
+  call_id: string
+  tool: string
+  arguments: Record<string, unknown>
+  status: ToolCallStatus
+  summary?: string | null
+  count?: number | null
+  duration_ms?: number | null
+}
+
 export interface ChatMessage {
   id: number
   thread_id: number
   role: 'user' | 'assistant' | 'system'
   content: string
   cited_log_ids?: number[] | null
+  thought?: string | null
+  tool_calls?: ToolCallRecord[] | null
   created_at: string
 }
 
@@ -37,7 +51,6 @@ export interface ChatThreadDetail extends ChatThread {
 export interface ChatPromptInput {
   prompt: string
   time_scope?: ChatTimeScope
-  talkgroups?: string[]
 }
 
 export interface TransmissionLookup {
@@ -60,11 +73,34 @@ export interface ChatStreamMeta {
   end_time: string
   talkgroups: string[]
   model: string
+  agentic?: boolean
 }
 
 export interface ChatStreamToken {
   type: 'token'
   content: string
+}
+
+export interface ChatStreamThinking {
+  type: 'thinking'
+  content: string
+}
+
+export interface ChatStreamToolCall {
+  type: 'tool_call'
+  call_id: string
+  tool: string
+  arguments: Record<string, unknown>
+}
+
+export interface ChatStreamToolResult {
+  type: 'tool_result'
+  call_id: string
+  tool: string
+  status: 'ok' | 'error'
+  summary?: string | null
+  count?: number | null
+  duration_ms?: number | null
 }
 
 export interface ChatStreamDone {
@@ -81,5 +117,8 @@ export interface ChatStreamError {
 export type ChatStreamEvent =
   | ChatStreamMeta
   | ChatStreamToken
+  | ChatStreamThinking
+  | ChatStreamToolCall
+  | ChatStreamToolResult
   | ChatStreamDone
   | ChatStreamError

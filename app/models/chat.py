@@ -42,6 +42,8 @@ class ChatMessage(Base):
     role = Column(String(20), nullable=False)  # 'user', 'assistant', 'system'
     content = Column(Text, nullable=False)
     cited_log_ids = Column(Text, nullable=True)  # JSON-encoded list of LogEntry IDs
+    thought = Column(Text, nullable=True)  # Model reasoning trace (assistant messages only)
+    tool_calls = Column(Text, nullable=True)  # JSON-encoded list of agent tool execution records
     created_at = Column(DateTime(timezone=True), default=utcnow, index=True)
 
     thread = relationship("ChatThread", back_populates="messages")
