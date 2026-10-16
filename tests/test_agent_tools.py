@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.database import SessionLocal, init_db
-from app.models.event import Event, EventTranscriptLink, Monitor
+from app.models.event import EntityObservation, Event, EventTranscriptLink, Monitor, SpanStore
 from app.models.log_entry import LogEntry
 from app.services.agent_tools import (
     ToolContext,
@@ -72,9 +72,17 @@ def seeded():
         db.add(event)
         db.flush()
         db.add(EventTranscriptLink(event_id=event.id, log_entry_id=ids["a"]))
+
+        span = SpanStore(monitor_id=monitor.id, talkgroup=TG, transcript=f"Unit 112 en route to 1155 Walton Dr {MARK}", log_entry_id=ids["a"])
+        db.add(span)
+        db.flush()
+        db.add(EntityObservation(span_store_id=span.id, monitor_id=monitor.id, talkgroup=TG, log_entry_id=ids["a"], ts=now - timedelta(seconds=90), label="UNIT", canonical="UNIT 112", raw="unit 112"))
+        db.add(EntityObservation(span_store_id=span.id, monitor_id=monitor.id, talkgroup=TG, log_entry_id=ids["a"], ts=now - timedelta(seconds=90), label="ADDRESS", canonical="1155 WALTON DR", raw="1155 walton dr"))
         db.commit()
+
         ids["monitor"] = monitor.id
         ids["event"] = event.id
+        ids["span"] = span.id
     finally:
         db.close()
 
@@ -82,6 +90,8 @@ def seeded():
 
     db = SessionLocal()
     try:
+        db.query(EntityObservation).filter(EntityObservation.monitor_id == ids["monitor"]).delete()
+        db.query(SpanStore).filter(SpanStore.monitor_id == ids["monitor"]).delete()
         db.query(EventTranscriptLink).filter(EventTranscriptLink.event_id == ids["event"]).delete()
         db.query(Event).filter(Event.id == ids["event"]).delete()
         db.query(Monitor).filter(Monitor.id == ids["monitor"]).delete()
@@ -168,6 +178,37 @@ def test_talkgroup_activity(seeded):
     assert not res.is_error
     assert res.count == 1
     assert f"{TG}: 3 transmission(s)" in res.content
+
+
+def test_lookup_ner_entities_query_unit(seeded):
+    res = _run("lookup_ner_entities", {"query": "112", "label": "UNIT"})
+    assert not res.is_error
+    assert res.count >= 1
+    assert "UNIT: 'UNIT 112'" in res.content
+    assert f"[TX-{seeded['a']}" in res.content
+    assert seeded["a"] in res.cited_ids
+
+
+def test_lookup_ner_entities_query_address(seeded):
+    res = _run("lookup_ner_entities", {"query": "walton", "label": "ADDRESS"})
+    assert not res.is_error
+    assert res.count >= 1
+    assert "ADDRESS: '1155 WALTON DR'" in res.content
+    assert f"[TX-{seeded['a']}" in res.content
+
+
+def test_lookup_ner_entities_aggregation(seeded):
+    res = _run("lookup_ner_entities", {"label": "UNIT"})
+    assert not res.is_error
+    assert res.count >= 1
+    assert "'UNIT 112'" in res.content
+
+
+def test_lookup_ner_entities_empty(seeded):
+    res = _run("lookup_ner_entities", {"query": "nonexistent_unit_9999"})
+    assert not res.is_error
+    assert res.count == 0
+    assert "No NER entity observations found" in res.content
 
 
 def test_unknown_tool_is_reported_not_raised():

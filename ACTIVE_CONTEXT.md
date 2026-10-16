@@ -338,7 +338,7 @@ This living document is the **shared memory** between different AI models, human
 
 ---
 
-### 2026-10-15 20:20 | Gemini 3.8 Flash (Windows Dev Workstation)
+### 2026-10-15 20:20 | Gemini 3.8 Flash & Claude Sonnet 5.5 (Windows Dev Workstation)
 - **Work Performed:**
   - Implemented Agentic Tool Calling on `/intel` per [`Plan/agentic_intel_tool_calling_plan.md`](file:///a:/Scanscribe_Projects/scanscribe/Plan/agentic_intel_tool_calling_plan.md):
     - **Database & Schemas:** Alembic migration [`b7d41c9e2a15`](file:///a:/Scanscribe_Projects/scanscribe/alembic/versions/b7d41c9e2a15_add_thought_and_tool_calls_to_chat_messages.py) adding nullable `thought` (TEXT) and `tool_calls` (JSON) to `chat_messages`. Updated [`app/models/chat.py`](file:///a:/Scanscribe_Projects/scanscribe/app/models/chat.py) and Pydantic schemas in [`app/schemas/chat.py`](file:///a:/Scanscribe_Projects/scanscribe/app/schemas/chat.py).
@@ -365,6 +365,41 @@ This living document is the **shared memory** between different AI models, human
 
 
 
+---
 
+### 2026-10-15 21:15 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Implemented all phases of [`Plan/intel_audio_panel_and_chatgpt_layout_plan.md`](file:///a:/Scanscribe_Projects/scanscribe/Plan/intel_audio_panel_and_chatgpt_layout_plan.md):
+    - **NER Lookup Tool (`lookup_ner_entities`)**: Added new tool to [`app/services/agent_tools.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/agent_tools.py) querying `EntityObservation` and `SpanStore`. Supports unit activity timelines (e.g. *"What did unit 112 do today?"*), street/location history (e.g. *"What happened at 1155 walton dr?"*), and top entity frequency aggregations. Joins underlying `LogEntry` transcripts and returns direct `[TX-<id>]` links. Registered across Gemini and OpenAI schemas. Added 4 unit tests in [`tests/test_agent_tools.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_agent_tools.py).
+    - **Citation Interception & System Prompt Hardening**:
+      - Updated `AGENT_TOOL_RULES` in [`app/services/chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py) with negative constraints preventing the model from outputting markdown URLs like `[TX-...](http://...)`.
+      - Updated `preprocessMarkdownCitations` and ReactMarkdown `components.a` in [`ChatMessageList.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatMessageList.tsx) to intercept any citation whether pre-wrapped in markdown links, bracketed, or bare, transforming them into audio triggers.
+    - **Dedicated Right-Side Audio Control Panel**:
+      - Created [`AudioControlPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/AudioControlPanel.tsx) with custom scrubber slider, play/pause, skip -5s/+5s, speed toggle (`1x`, `1.25x`, `1.5x`, `2x`), volume/mute, auto-advance toggle (continuous sequential playback across cited clips), and visual equalizer animation on active card.
+      - Integrated into [`IntelPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/IntelPage.tsx) with automatic transmission pre-fetching, active clip tracking, and toggle in [`TimeScopeBar.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/TimeScopeBar.tsx).
+    - **ChatGPT-Style Layout Migration**:
+      - Rebuilt [`ChatMessageList.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatMessageList.tsx) into a centered document layout (`max-w-3xl`) with distinct Operator avatar vs ScanScribe Intel badge, removing the SMS rounded bubble style.
+      - Added response action utilities (copy text, open cited audio).
+      - Rebuilt [`ChatInputBox.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatInputBox.tsx) into a floating rounded card with auto-expanding textarea and integrated controls.
+- **Live Ingestion Impact:** Zero impact on live audio ingestion loop.
+- **Gotchas / Warnings for Next Model:**
+  - `EntityObservation.ts` stores timestamps matching `LogEntry.timestamp` (naive local wall-clock time).
+  - Audio instances in `AudioControlPanel.tsx` are safely torn down on unmount and track changes per `audio-web-apis` guidelines.
+- **Verification Performed:**
+  - `pytest tests/`: **119 passed** in 38.88s (100% green).
+  - Frontend typecheck: `tsc -b --noEmit` passed with 0 errors.
+  - Frontend production build: `npm run build` compiled cleanly into `app/frontend/dist/`.
+  - Server health: HTTP 200 on `http://localhost:8000/health` and `/app/intel`.
+- **Next Tasks / Unfinished Work:** Ready for end-user interaction and verification on `/app/intel`.
+
+<!-- 
+### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
+### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
+- **Work Performed:** <Summary of changes made>
+- **Live Ingestion Impact:** <Any changes to ingest/, workers, or ports?>
+- **Gotchas / Warnings for Next Model:** <Gotchas, quirks, or pitfalls discovered>
+- **Verification Performed:** <pytest / typecheck / live testing results>
+- **Next Tasks / Unfinished Work:** <What should the next agent work on?>
+-->
 
 

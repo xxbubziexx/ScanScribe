@@ -13,8 +13,32 @@ import type {
 import { TimeScopeBar } from './components/TimeScopeBar'
 import { ChatMessageList } from './components/ChatMessageList'
 import { ChatInputBox } from './components/ChatInputBox'
-import { TransmissionAudioModal } from './components/TransmissionAudioModal'
+import { AudioControlPanel } from './components/AudioControlPanel'
 import { SHOW_THINKING_KEY, SHOW_TOOLS_KEY, usePersistedFlag } from './usePersistedFlag'
+
+function extractAllTxIds(messages: ChatMessage[]): number[] {
+  const ids = new Set<number>()
+  for (const m of messages) {
+    if (m.cited_log_ids) {
+      for (const id of m.cited_log_ids) ids.add(id)
+    }
+    const matches = m.content.matchAll(/TX[-#\s]*(\d+)/gi)
+    for (const match of matches) {
+      const parsed = parseInt(match[1], 10)
+      if (!isNaN(parsed)) ids.add(parsed)
+    }
+    if (m.tool_calls) {
+      for (const call of m.tool_calls) {
+        if (call.arguments && typeof call.arguments === 'object') {
+          if ('tx_id' in call.arguments && typeof call.arguments.tx_id === 'number') {
+            ids.add(call.arguments.tx_id)
+          }
+        }
+      }
+    }
+  }
+  return Array.from(ids)
+}
 
 export function IntelPage() {
   const queryClient = useQueryClient()
@@ -26,6 +50,11 @@ export function IntelPage() {
   // Response detail preferences (persisted)
   const [showTools, setShowTools] = usePersistedFlag(SHOW_TOOLS_KEY, true)
   const [showThinking, setShowThinking] = usePersistedFlag(SHOW_THINKING_KEY, false)
+  const [audioPanelOpen, setAudioPanelOpen] = usePersistedFlag('scanscribe_intel_audio_panel_open', true)
+
+  // Audio Deck state
+  const [activeTxId, setActiveTxId] = useState<number | null>(null)
+  const [transmissionsMap, setTransmissionsMap] = useState<Record<number, TransmissionLookup>>({})
 
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false)
@@ -36,8 +65,6 @@ export function IntelPage() {
   const [streamError, setStreamError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Audio modal state
-  const [selectedTx, setSelectedTx] = useState<TransmissionLookup | null>(null)
 
   // Mobile sidebar toggle
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -231,15 +258,51 @@ export function IntelPage() {
   }
 
   const handleSelectTx = async (txId: number) => {
-    try {
-      const tx = await chatApi.getTransmission(txId)
-      setSelectedTx(tx)
-    } catch (err) {
-      setStreamError(`Failed to load transmission #${txId} details.`)
+    setActiveTxId(txId)
+    setAudioPanelOpen(true)
+    if (!transmissionsMap[txId]) {
+      try {
+        const tx = await chatApi.getTransmission(txId)
+        if (tx) {
+          setTransmissionsMap((prev) => ({ ...prev, [txId]: tx }))
+        }
+      } catch {
+        setStreamError(`Failed to load transmission #${txId} details.`)
+      }
     }
   }
 
   const messages: ChatMessage[] = activeThreadDetail?.messages || []
+  const allCitedIds = extractAllTxIds(messages)
+
+  // Pre-fetch transmission details for any newly cited IDs in the thread
+  useEffect(() => {
+    const missing = allCitedIds.filter((id) => !transmissionsMap[id])
+    if (missing.length === 0) return
+
+    let cancelled = false
+    const fetchMissing = async () => {
+      for (const id of missing) {
+        if (cancelled) break
+        try {
+          const tx = await chatApi.getTransmission(id)
+          if (!cancelled && tx) {
+            setTransmissionsMap((prev) => ({ ...prev, [id]: tx }))
+          }
+        } catch {
+          // Ignore lookup failure for non-existent IDs
+        }
+      }
+    }
+    void fetchMissing()
+    return () => {
+      cancelled = true
+    }
+  }, [allCitedIds.join(',')])
+
+  const citedTransmissionsList: TransmissionLookup[] = allCitedIds
+    .map((id) => transmissionsMap[id])
+    .filter((t): t is TransmissionLookup => Boolean(t))
 
   return (
     <div className="flex h-[calc(100dvh-56px)] bg-[#0c0e14] text-gray-100 overflow-hidden select-none">
@@ -322,7 +385,7 @@ export function IntelPage() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[#0f1118]">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#0c0e14]">
         {/* Top Header / Scope Bar */}
         <div className="flex items-center justify-between px-4 py-2 bg-[#141721] border-b border-[#222533]">
           <div className="flex items-center gap-2">
@@ -351,6 +414,9 @@ export function IntelPage() {
           showThinking={showThinking}
           onChangeShowThinking={setShowThinking}
           disabled={isStreaming}
+          audioCount={citedTransmissionsList.length}
+          audioPanelOpen={audioPanelOpen}
+          onToggleAudioPanel={() => setAudioPanelOpen(!audioPanelOpen)}
         />
 
         {/* Conversation Message List */}
@@ -366,6 +432,7 @@ export function IntelPage() {
           showThinking={showThinking}
           onSelectTx={handleSelectTx}
           onPromptSuggestion={handleSendPrompt}
+          onOpenAudioPanel={() => setAudioPanelOpen(true)}
         />
 
         {/* Bottom Input Area */}
@@ -376,13 +443,14 @@ export function IntelPage() {
         />
       </div>
 
-      {/* Ground-truth Audio Playback Modal */}
-      {selectedTx && (
-        <TransmissionAudioModal
-          transmission={selectedTx}
-          onClose={() => setSelectedTx(null)}
-        />
-      )}
+      {/* Right-Side Audio Control Panel */}
+      <AudioControlPanel
+        transmissions={citedTransmissionsList}
+        activeTxId={activeTxId}
+        isOpen={audioPanelOpen}
+        onClose={() => setAudioPanelOpen(false)}
+        onSelectTx={handleSelectTx}
+      />
     </div>
   )
 }

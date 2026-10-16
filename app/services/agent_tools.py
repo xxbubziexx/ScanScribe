@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..database import SessionLocal
-from ..models.event import Event, EventTranscriptLink
+from ..models.event import EntityObservation, Event, EventTranscriptLink
 from ..models.log_entry import LogEntry
 from .chat_context import format_tx_line
 
@@ -87,6 +87,22 @@ class TalkgroupActivityArgs(BaseModel):
     hours: int = Field(default=24, ge=1, le=720)
 
 
+class LookupNerEntitiesArgs(BaseModel):
+    query: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description="Optional entity name or substring to match against canonical/raw text, e.g. '112', 'walton', 'Engine 4', '10-50'.",
+    )
+    label: Optional[Literal["UNIT", "LOC", "ADDRESS", "EVT_TYPE", "STATUS", "TIME"]] = Field(
+        default=None,
+        description="Optional filter by NER entity label: UNIT (units/responders), LOC/ADDRESS (locations/streets), EVT_TYPE (call type), STATUS (tactical status).",
+    )
+    talkgroup: Optional[str] = Field(default=None, max_length=50, description="Optional talkgroup substring filter.")
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    limit: int = Field(default=30, ge=1, le=60, description="Max matching entity observations or top entities to return (default 30).")
+
+
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -117,6 +133,13 @@ def _utc_naive_to_local(dt: Optional[datetime]) -> Optional[datetime]:
         return None
     aware = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
     return aware.astimezone().replace(tzinfo=None)
+
+
+def _local_to_utc_naive(dt: datetime) -> datetime:
+    """Convert naive local datetime to naive UTC datetime for querying UTC timestamp columns."""
+    local_tz = datetime.now().astimezone().tzinfo
+    aware = dt.replace(tzinfo=local_tz) if dt.tzinfo is None else dt
+    return aware.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _terms(query: str) -> List[str]:
@@ -360,6 +383,143 @@ def execute_get_talkgroup_activity(db: Session, ctx: ToolContext, args: Talkgrou
     return ToolResult(content=_join_capped(header, lines), summary=f"{len(lines)} talkgroup(s)", count=len(lines))
 
 
+def execute_lookup_ner_entities(db: Session, ctx: ToolContext, args: LookupNerEntitiesArgs) -> ToolResult:
+    start_dt = _parse_local_dt(args.start_time, "start_time") or ctx.scope_start
+    end_dt = _parse_local_dt(args.end_time, "end_time") or ctx.scope_end
+    if start_dt > end_dt:
+        raise ToolArgumentError(f"start_time ({start_dt}) cannot be after end_time ({end_dt}).")
+
+    filters = [
+        EntityObservation.ts >= start_dt,
+        EntityObservation.ts <= end_dt,
+    ]
+    if args.label:
+        filters.append(EntityObservation.label == args.label.strip().upper())
+    if args.talkgroup and args.talkgroup.strip():
+        filters.append(EntityObservation.talkgroup.ilike(f"%{_escape_like(args.talkgroup.strip())}%", escape="\\"))
+
+    # Case 1: Specific query (e.g. Unit 112 timeline or 1155 Walton Dr history)
+    if args.query and args.query.strip():
+        terms = _terms(args.query)
+        q_clauses = []
+        for t in terms:
+            pat = f"%{_escape_like(t)}%"
+            q_clauses.append(
+                or_(
+                    EntityObservation.canonical.ilike(pat, escape="\\"),
+                    EntityObservation.raw.ilike(pat, escape="\\"),
+                )
+            )
+        filters.append(or_(*q_clauses))
+
+        results = (
+            db.query(EntityObservation, LogEntry)
+            .outerjoin(LogEntry, EntityObservation.log_entry_id == LogEntry.id)
+            .filter(and_(*filters))
+            .order_by(EntityObservation.ts.asc(), EntityObservation.id.asc())
+            .limit(args.limit)
+            .all()
+        )
+
+        header = [
+            f"lookup_ner_entities query='{args.query}'"
+            + (f" label={args.label}" if args.label else "")
+            + (f" talkgroup={args.talkgroup}" if args.talkgroup else ""),
+            f"TIME WINDOW: {start_dt.strftime('%Y-%m-%d %I:%M %p')} to {end_dt.strftime('%Y-%m-%d %I:%M %p')}",
+            f"RETURNED: {len(results)} observation(s)",
+        ]
+
+        if not results:
+            lines = [
+                f"No NER entity observations found matching '{args.query}' in this time window.",
+                "Note: Automatic NER extraction depends on speech recognition clarity. If an entity was mentioned "
+                "with non-standard phrasing or RF noise, try search_transcripts with phonetic variations.",
+            ]
+            return ToolResult(
+                content=_join_capped(header, lines),
+                summary=f"0 entities matching '{args.query}'",
+                count=0,
+            )
+
+        lines: List[str] = []
+        cited_ids: List[int] = []
+        for obs, log in results:
+            local_ts = _utc_naive_to_local(obs.ts) or obs.ts
+            ts_12 = local_ts.strftime("%I:%M:%S %p")
+            ts_24 = local_ts.strftime("%H:%M:%S")
+            date_str = local_ts.strftime("%Y-%m-%d")
+            ts_display = f"{date_str} {ts_12} [{ts_24}]"
+            tg = obs.talkgroup or (log.talkgroup if log else "N/A") or "N/A"
+            tx_id_str = f"TX-{obs.log_entry_id}" if obs.log_entry_id else "NO-TX"
+            if obs.log_entry_id:
+                cited_ids.append(obs.log_entry_id)
+
+            transcript_snippet = ""
+            if log:
+                tx_text = ((log.corrected_transcript or log.transcript) or "").strip()
+                if tx_text and tx_text != "VAD_REJECTED":
+                    transcript_snippet = f' - "{tx_text}"'
+
+            lines.append(
+                f"[{tx_id_str} | {ts_display} | TG: {tg}] {obs.label}: '{obs.canonical}' (raw: '{obs.raw}'){transcript_snippet}"
+            )
+
+        summary = f"{len(results)} entity observation(s) for '{args.query}'"
+        return ToolResult(
+            content=_join_capped(header, lines),
+            summary=summary,
+            count=len(results),
+            cited_ids=cited_ids,
+        )
+
+    # Case 2: General entity frequency aggregation
+    agg_query = (
+        db.query(
+            EntityObservation.canonical,
+            EntityObservation.label,
+            func.count(EntityObservation.id).label("freq"),
+            func.min(EntityObservation.ts).label("first_seen"),
+            func.max(EntityObservation.ts).label("last_seen"),
+            func.max(EntityObservation.log_entry_id).label("sample_tx_id"),
+        )
+        .filter(and_(*filters))
+        .group_by(EntityObservation.canonical, EntityObservation.label)
+        .order_by(func.count(EntityObservation.id).desc())
+        .limit(args.limit)
+        .all()
+    )
+
+    header = [
+        f"lookup_ner_entities aggregation"
+        + (f" label={args.label}" if args.label else " all labels")
+        + (f" talkgroup={args.talkgroup}" if args.talkgroup else ""),
+        f"TIME WINDOW: {start_dt.strftime('%Y-%m-%d %I:%M %p')} to {end_dt.strftime('%Y-%m-%d %I:%M %p')}",
+        f"RETURNED: {len(agg_query)} distinct entity group(s)",
+    ]
+
+    lines = []
+    cited_ids = []
+    for canonical, label, freq, first_seen, last_seen, sample_tx in agg_query:
+        first_local = _utc_naive_to_local(first_seen)
+        last_local = _utc_naive_to_local(last_seen)
+        first_str = first_local.strftime("%I:%M %p") if first_local else "N/A"
+        last_str = last_local.strftime("%I:%M %p") if last_local else "N/A"
+        tx_cite = f" [TX-{sample_tx}]" if sample_tx else ""
+        if sample_tx:
+            cited_ids.append(sample_tx)
+        lines.append(
+            f"- [{label}] '{canonical}': {freq} mention(s) between {first_str} and {last_str}{tx_cite}"
+        )
+
+    summary = f"{len(agg_query)} entity group(s)"
+    return ToolResult(
+        content=_join_capped(header, lines),
+        summary=summary,
+        count=len(agg_query),
+        cited_ids=cited_ids,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Registry and provider declarations
 # --------------------------------------------------------------------------- #
@@ -454,6 +614,35 @@ TOOL_REGISTRY: Dict[str, ToolSpec] = {
             },
         },
         executor=execute_get_talkgroup_activity,
+    ),
+    "lookup_ner_entities": ToolSpec(
+        name="lookup_ner_entities",
+        description=(
+            "Query extracted named entities (UNIT, LOC, ADDRESS, EVT_TYPE, STATUS, TIME) from the incident NER pipeline. "
+            "Use this as the PRIMARY tool when asked about specific emergency units (e.g. 'What did unit 112 do?'), "
+            "street addresses or locations (e.g. 'What happened at 1155 walton dr?'), or to see an aggregated summary "
+            "of active units or incident types in a time window."
+        ),
+        args_model=LookupNerEntitiesArgs,
+        parameters={
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Optional unit name, address, or incident term to search (e.g. '112', 'walton', 'Engine 4').",
+                },
+                "label": {
+                    "type": "string",
+                    "enum": ["UNIT", "LOC", "ADDRESS", "EVT_TYPE", "STATUS", "TIME"],
+                    "description": "Optional filter by NER entity label.",
+                },
+                "talkgroup": {"type": "string", "description": "Optional talkgroup substring filter."},
+                "start_time": _TIME_PARAM,
+                "end_time": _TIME_PARAM,
+                "limit": {"type": "integer", "description": "Max rows to return, 1-60 (default 30)."},
+            },
+        },
+        executor=execute_lookup_ner_entities,
     ),
 }
 

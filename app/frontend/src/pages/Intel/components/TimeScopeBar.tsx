@@ -10,6 +10,9 @@ interface TimeScopeBarProps {
   showThinking: boolean
   onChangeShowThinking: (value: boolean) => void
   disabled?: boolean
+  audioCount?: number
+  audioPanelOpen?: boolean
+  onToggleAudioPanel?: () => void
 }
 
 const PRESETS: { id: ChatTimeScope['preset']; label: string }[] = [
@@ -62,6 +65,9 @@ export function TimeScopeBar({
   showThinking,
   onChangeShowThinking,
   disabled = false,
+  audioCount = 0,
+  audioPanelOpen = false,
+  onToggleAudioPanel,
 }: TimeScopeBarProps) {
   const [customStart, setCustomStart] = useState(timeScope.start_time || '')
   const [customEnd, setCustomEnd] = useState(timeScope.end_time || '')
@@ -89,7 +95,7 @@ export function TimeScopeBar({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-[#141721] border-b border-[#252836] text-xs">
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 bg-[#141721] border-b border-[#252836] text-xs shrink-0">
       {/* Time Range Presets */}
       <div className="flex items-center gap-1.5 flex-wrap">
         <span className="text-gray-400 font-medium mr-1 uppercase tracking-wider text-[11px]">
@@ -144,8 +150,8 @@ export function TimeScopeBar({
         )}
       </div>
 
-      {/* Response detail toggles */}
-      <div className="flex items-center gap-1" role="group" aria-label="Response detail options">
+      {/* Response detail toggles & Audio Panel Toggle */}
+      <div className="flex items-center gap-2" role="group" aria-label="Response detail options">
         <ViewToggle id="intel-toggle-tools" label="Show tool calls" checked={showTools} onChange={onChangeShowTools} />
         <ViewToggle
           id="intel-toggle-thinking"
@@ -153,6 +159,31 @@ export function TimeScopeBar({
           checked={showThinking}
           onChange={onChangeShowThinking}
         />
+
+        {onToggleAudioPanel && (
+          <button
+            type="button"
+            onClick={onToggleAudioPanel}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-medium transition-colors cursor-pointer ${
+              audioPanelOpen
+                ? 'bg-indigo-600 border-indigo-500 text-white shadow-xs'
+                : 'bg-[#1e2230] hover:bg-[#282d3f] border-[#2b3045] text-gray-300'
+            }`}
+            title="Toggle Right-Side Audio Control Panel"
+          >
+            <span>📻</span>
+            <span>Audio Deck</span>
+            {audioCount > 0 && (
+              <span
+                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                  audioPanelOpen ? 'bg-indigo-800 text-white' : 'bg-[#2a3045] text-indigo-300'
+                }`}
+              >
+                {audioCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
     </div>
   )
