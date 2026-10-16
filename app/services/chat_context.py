@@ -27,23 +27,39 @@ ASR_FALLIBILITY_RULES = (
 
 AGENT_TOOL_RULES = (
     "TOOL USE PROTOCOL:\n"
-    "You have read-only tools that query the radio transcript database. You do not have the full log in context; "
-    "the context block only gives you the current time, the active time scope, and summary statistics. "
-    "You MUST call tools to retrieve transmissions before making any factual claim about radio traffic.\n"
-    "- lookup_ner_entities: PRIMARY tool when asked about specific emergency units (e.g. 'What did unit 112 do?'), "
-    "street addresses or locations (e.g. 'What happened at 1155 walton dr?'), or incident call types. Queries the NER pipeline extractions "
+    "You have read-only tools that query the radio transcript database. You do not have the full log in context. "
+    "You MUST call tools to retrieve transmissions before making any factual claim about radio traffic.\n\n"
+    "CRITICAL REQUIREMENT - MANDATORY TIME SCOPING & REFUSAL PROTOCOL:\n"
+    "1. TIME IS STRICTLY REQUIRED: To protect database performance and avoid pulling thousands of unrelated "
+    "transcriptions, every query over radio traffic MUST have an explicit or relative temporal scope in the operator prompt "
+    "(e.g. 'today around 3pm', 'past 2 hours', 'yesterday 14:00-16:00', 'on October 15th').\n"
+    "2. REFUSAL PROTOCOL (MANDATORY): If the operator's prompt leaves out a time, date, or relative window (for example, simply asking "
+    "'What did unit 112 do?', 'Show me all vehicle accidents', 'Did anything happen on Main St?'):\n"
+    "   - YOU MUST REFUSE TO ANSWER OR QUERY TRANSCRIPTION LOGS.\n"
+    "   - DO NOT call search_transcripts, lookup_ner_entities, scope_time_range, or any other transcript retrieval tool.\n"
+    "   - Immediately reply with a professional refusal explaining that a time scope or date is required to search the radio logs, "
+    "and prompt the operator to provide the specific time window (e.g. 'Please specify a time range or date for your query "
+    "(for example: today around 2 PM, in the past 2 hours, or yesterday between 14:00 and 16:00) so I can search the relevant transmissions.').\n"
+    "3. MANDATORY FIRST STEP (scope_time_range): When a time reference IS provided in the user prompt:\n"
+    "   - You MUST FIRST call the tool `scope_time_range` before calling any other search tool.\n"
+    "   - Pass the calculated start_time and end_time (in ISO 8601 format, based on CURRENT LOCAL TIME), or pass preset/hours/time_expression.\n"
+    "   - Once `scope_time_range` returns the verified time window and transmission counts, proceed with targeted searches.\n\n"
+    "TOOL DESCRIPTIONS:\n"
+    "- scope_time_range: MANDATORY FIRST STEP. Sets and locks the active time window and verifies log counts in that window.\n"
+    "- lookup_ner_entities: PRIMARY tool when asked about specific emergency units (e.g. 'What did unit 112 do at 3pm?'), "
+    "street addresses or locations (e.g. 'What happened at 1155 walton dr yesterday?'), or incident call types. Queries the NER pipeline extractions "
     "and returns a chronological event timeline with linked [TX-<id>] transmissions.\n"
-    "- search_transcripts: keyword search over transcripts. Defaults to the active time scope; pass start_time/end_time to widen or move the window.\n"
+    "- search_transcripts: keyword search over transcripts within the established time scope.\n"
     "- get_surrounding_transmissions: pull the conversation before and after a specific [TX-<id>] to corroborate or disambiguate it.\n"
     "- get_incident_records: query incidents already classified by the pipeline (type, location, units, status).\n"
-    "- get_talkgroup_activity: see which talkgroups were active and how busy they were.\n"
+    "- get_talkgroup_activity: see which talkgroups were active in the scoped window.\n\n"
     "Search strategy:\n"
-    "1. When asked about a specific unit (e.g. Unit 112, Medic 4) or address (e.g. 1155 Walton Dr), FIRST call lookup_ner_entities. "
+    "1. When time is present in prompt, FIRST call scope_time_range to lock the requested time frame.\n"
+    "2. When asked about a specific unit (e.g. Unit 112, Medic 4) or address (e.g. 1155 Walton Dr), call lookup_ner_entities. "
     "If NER returns few or no hits, follow up with search_transcripts.\n"
-    "2. Because of ASR errors, a single keyword search is not sufficient. When a search returns nothing or little, retry with phonetic variants, "
+    "3. Because of ASR errors, a single keyword search is not sufficient. When a search returns nothing or little, retry with phonetic variants, "
     "spelled-out versus numeric forms (e.g. '10-50' and 'ten fifty', 'forty five' and '45'), partial words, and synonyms before concluding anything is absent.\n"
-    "3. When a hit is ambiguous or garbled, call get_surrounding_transmissions on it and judge the exchange as a whole.\n"
-    "4. If the user asks about a period outside the active time scope, set start_time/end_time explicitly (local time, ISO 8601, e.g. 2026-10-14T18:00).\n"
+    "4. When a hit is ambiguous or garbled, call get_surrounding_transmissions on it and judge the exchange as a whole.\n"
     "5. Keep tool calls purposeful: prefer targeted searches over many broad ones. Stop searching once you have enough evidence and write the answer.\n"
     "6. CITATION SYNTAX (MANDATORY): Always cite transmissions using the exact token [TX-<id>] (e.g. [TX-492983]). "
     "NEVER create markdown hyperlinks like [TX-492983](http://...) or [TX-492983](/app/intel). Simply write [TX-<id>]. "
@@ -185,13 +201,33 @@ def build_agent_system_prompt() -> str:
 
 
 def build_agent_context_block(
-    db: Session, start_time: datetime, end_time: datetime, time_desc: str
+    db: Session,
+    start_time: Optional[datetime] = None,
+    end_time: Optional[datetime] = None,
+    time_desc: Optional[str] = None,
 ) -> Tuple[str, int]:
     """Compact scope header for agentic mode: current time, scope, volume statistics, top talkgroups.
 
     Returns the context text and the number of transmissions in scope.
     """
     now_str = datetime.now().strftime("%Y-%m-%d %I:%M:%S %p [%H:%M:%S]")
+
+    if start_time is None or end_time is None:
+        total, first_ts, last_ts = (
+            db.query(func.count(LogEntry.id), func.min(LogEntry.timestamp), func.max(LogEntry.timestamp))
+            .filter(LogEntry.is_deleted == False)
+            .one()
+        )
+        earliest_str = first_ts.strftime("%Y-%m-%d %I:%M:%S %p [%H:%M:%S]") if first_ts else "NONE"
+        latest_str = last_ts.strftime("%Y-%m-%d %I:%M:%S %p [%H:%M:%S]") if last_ts else "NONE"
+        lines = [
+            f"CURRENT LOCAL TIME: {now_str}",
+            "ACTIVE TIME SCOPE: NONE (Pending operator time specification)",
+            f"DATABASE ARCHIVE BOUNDS: Total {total or 0} transmissions stored (Earliest: {earliest_str} | Latest: {latest_str})",
+            "MANDATORY PROTOCOL: No time scope is active. If the operator prompt specified a time or date, call 'scope_time_range' first. If the operator prompt left out a time or date, YOU MUST REFUSE TO ANSWER and ask the operator for a time window.",
+        ]
+        return "\n".join(lines), 0
+
     base_filters = [
         LogEntry.is_deleted == False,
         LogEntry.timestamp >= start_time,

@@ -20,11 +20,11 @@ interface ChatMessageListProps {
 }
 
 const STARTER_PROMPTS = [
-  'Summarize scanner activity over the selected time scope.',
+  'Summarize active radio traffic from the past 2 hours.',
   'What did unit 112 do today?',
-  'What calls or incidents did the fire department respond to?',
-  'What happened at 1155 walton dr?',
-  'List all traffic stops, pursuit calls, or vehicle collisions.',
+  'What incidents did the fire department respond to yesterday?',
+  'What happened around 1155 Walton Dr this morning?',
+  'List all pursuit calls or vehicle collisions from today.',
 ]
 
 function preprocessMarkdownCitations(content: string): string {
@@ -136,6 +136,17 @@ export function ChatMessageList({
                     <span>TX #{finalId}</span>
                     <span className="text-[10px]">🔊</span>
                   </button>
+                )
+              }
+
+              if (!href || href.startsWith('file:') || href.startsWith('javascript:')) {
+                return (
+                  <span
+                    className="font-mono text-xs text-gray-300 bg-[#161925] px-1.5 py-0.5 rounded border border-[#262c3e]"
+                    title={href || undefined}
+                  >
+                    {children}
+                  </span>
                 )
               }
 

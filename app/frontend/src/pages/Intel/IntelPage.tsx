@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { chatApi } from '@/lib/chat'
 import type {
   ChatThread,
-  ChatTimeScope,
   TransmissionLookup,
   ChatStreamMeta,
   ChatMessage,
@@ -45,7 +44,6 @@ export function IntelPage() {
 
   // Selected thread state
   const [activeThreadId, setActiveThreadId] = useState<number | null>(null)
-  const [timeScope, setTimeScope] = useState<ChatTimeScope>({ preset: 'today' })
 
   // Response detail preferences (persisted)
   const [showTools, setShowTools] = usePersistedFlag(SHOW_TOOLS_KEY, true)
@@ -79,11 +77,6 @@ export function IntelPage() {
   useEffect(() => {
     if (!activeThreadId && threads.length > 0) {
       setActiveThreadId(threads[0].id)
-      setTimeScope({
-        preset: (threads[0].time_scope_preset as ChatTimeScope['preset']) || 'today',
-        start_time: threads[0].start_time,
-        end_time: threads[0].end_time,
-      })
     }
   }, [threads, activeThreadId])
 
@@ -99,9 +92,7 @@ export function IntelPage() {
     mutationFn: () =>
       chatApi.createThread({
         title: 'New Query',
-        time_scope_preset: timeScope.preset,
-        start_time: timeScope.start_time,
-        end_time: timeScope.end_time,
+        time_scope_preset: 'auto',
       }),
     onSuccess: (newThread) => {
       queryClient.invalidateQueries({ queryKey: ['chat-threads'] })
@@ -125,23 +116,7 @@ export function IntelPage() {
   const handleSelectThread = (thread: ChatThread) => {
     if (isStreaming) handleStopStream()
     setActiveThreadId(thread.id)
-    setTimeScope({
-      preset: (thread.time_scope_preset as ChatTimeScope['preset']) || 'today',
-      start_time: thread.start_time,
-      end_time: thread.end_time,
-    })
     setSidebarOpen(false)
-  }
-
-  const handleTimeScopeChange = (newScope: ChatTimeScope) => {
-    setTimeScope(newScope)
-    if (activeThreadId) {
-      void chatApi.updateThread(activeThreadId, {
-        time_scope_preset: newScope.preset,
-        start_time: newScope.start_time,
-        end_time: newScope.end_time,
-      })
-    }
   }
 
   const handleSendPrompt = async (promptText: string) => {
@@ -189,7 +164,6 @@ export function IntelPage() {
       currentThreadId,
       {
         prompt: promptText,
-        time_scope: timeScope,
       },
       {
         onEvent: (event) => {
@@ -361,7 +335,7 @@ export function IntelPage() {
                 <div className="flex-1 min-w-0 pr-2">
                   <div className="font-medium truncate text-gray-200">{t.title}</div>
                   <div className="text-[10px] text-gray-500 flex items-center gap-2">
-                    <span>{t.time_scope_preset}</span>
+                    <span>{t.message_count ? `${t.message_count} msgs` : 'Query'}</span>
                     <span>•</span>
                     <span>{dateStr}</span>
                   </div>
@@ -407,8 +381,6 @@ export function IntelPage() {
 
         {/* Time Scope & Filter Controls */}
         <TimeScopeBar
-          timeScope={timeScope}
-          onChangeTimeScope={handleTimeScopeChange}
           showTools={showTools}
           onChangeShowTools={setShowTools}
           showThinking={showThinking}

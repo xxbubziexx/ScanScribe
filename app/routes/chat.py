@@ -2,7 +2,9 @@
 import asyncio
 import json
 import logging
+import urllib.parse
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -55,7 +57,9 @@ def _parse_tool_calls(raw: Optional[str], message_id: int) -> Optional[List[Tool
         return None
 
 
-def _load_agent_context(start_time: datetime, end_time: datetime, time_desc: str) -> Tuple[str, int]:
+def _load_agent_context(
+    start_time: Optional[datetime], end_time: Optional[datetime], time_desc: Optional[str]
+) -> Tuple[str, int]:
     """Build the compact agent context header in a worker thread with its own session."""
     with SessionLocal() as ctx_db:
         return build_agent_context_block(ctx_db, start_time, end_time, time_desc)
@@ -277,10 +281,15 @@ def get_transmission_detail(
     if not log:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transmission not found")
 
+    settings = get_settings()
     audio_url = ""
+    audio_available = False
     if log.audio_path and log.audio_path != "file not saved":
         clean_path = log.audio_path.lstrip("/\\")
-        audio_url = f"/{clean_path}"
+        fname = Path(clean_path).name
+        target_file = Path(settings.output_dir) / fname
+        audio_available = target_file.is_file()
+        audio_url = f"/audio_storage/{urllib.parse.quote(fname)}"
 
     return TransmissionLookupOut(
         id=log.id,
@@ -292,6 +301,7 @@ def get_transmission_detail(
         transcript=log.transcript,
         talkgroup=log.talkgroup,
         audio_url=audio_url,
+        audio_available=audio_available,
     )
 
 
@@ -315,17 +325,24 @@ async def stream_query(
     cfg = settings.config.chat
     agentic = bool(cfg.agentic_enabled)
 
-    # Resolve time scope
+    # Resolve time scope: in agentic mode without manual presets, begin in dynamic mode
     active_scope = payload.time_scope
-    if not active_scope:
-        # Fall back to thread preset
-        active_scope = ChatTimeScope(
-            preset=thread.time_scope_preset or "today",
-            start_time=thread.start_time,
-            end_time=thread.end_time,
-        )
+    is_explicit_scope = bool(
+        active_scope and active_scope.preset and active_scope.preset not in ("auto", "none")
+    )
 
-    start_time, end_time, time_desc = parse_time_scope(active_scope)
+    if is_explicit_scope and active_scope:
+        start_time, end_time, time_desc = parse_time_scope(active_scope)
+    elif not agentic:
+        start_time, end_time, time_desc = parse_time_scope(
+            ChatTimeScope(
+                preset=thread.time_scope_preset or "today",
+                start_time=thread.start_time,
+                end_time=thread.end_time,
+            )
+        )
+    else:
+        start_time, end_time, time_desc = None, None, "Dynamic (Unscoped)"
 
     # Legacy talkgroup filter: honored only in non-agentic mode. In agentic mode the model
     # targets talkgroups itself through tool arguments.
@@ -345,7 +362,7 @@ async def stream_query(
         if len(payload.prompt.strip()) > 60:
             clean_title += "..."
         thread.title = clean_title
-        thread.time_scope_preset = active_scope.preset
+        thread.time_scope_preset = active_scope.preset if active_scope else "auto"
         thread.start_time = start_time
         thread.end_time = end_time
         if talkgroups:
@@ -368,7 +385,12 @@ async def stream_query(
         context_text, transmissions_count = await asyncio.to_thread(
             _load_agent_context, start_time, end_time, time_desc
         )
-        tool_ctx = ToolContext(scope_start=start_time, scope_end=end_time, scope_desc=time_desc)
+        tool_ctx = ToolContext(
+            scope_start=start_time,
+            scope_end=end_time,
+            scope_desc=time_desc,
+            is_scoped=bool(is_explicit_scope and start_time and end_time),
+        )
     else:
         limit = getattr(cfg, "max_transmissions_context", 2500) or 2500
         transmissions = query_transmissions(
@@ -396,8 +418,8 @@ async def stream_query(
     meta_info = {
         "transmissions_count": transmissions_count,
         "time_desc": time_desc,
-        "start_time": start_time.isoformat(),
-        "end_time": end_time.isoformat(),
+        "start_time": start_time.isoformat() if start_time else None,
+        "end_time": end_time.isoformat() if end_time else None,
         "talkgroups": talkgroups or [],
         "model": cfg.model,
         "agentic": agentic,

@@ -226,3 +226,49 @@ def test_provider_declarations_are_schema_safe():
         # Gemini rejects these JSON-schema keywords
         for banned in ("anyOf", "additionalProperties", '"default"', '"title"'):
             assert banned not in blob
+
+
+def test_scope_time_range_preset(seeded):
+    ctx = ToolContext()
+    assert not ctx.is_scoped
+    res, _ = asyncio.run(execute_tool("scope_time_range", {"preset": "today"}, ctx))
+    assert not res.is_error
+    assert ctx.is_scoped
+    assert ctx.scope_start is not None
+    assert "TIME SCOPE ESTABLISHED" in res.content
+    assert res.count >= 3
+
+
+def test_scope_time_range_explicit_iso(seeded):
+    ctx = ToolContext()
+    now = datetime.now()
+    start_iso = (now - timedelta(hours=2)).isoformat()
+    end_iso = (now + timedelta(minutes=5)).isoformat()
+    res, _ = asyncio.run(execute_tool("scope_time_range", {"start_time": start_iso, "end_time": end_iso}, ctx))
+    assert not res.is_error
+    assert ctx.is_scoped
+    assert "TIME SCOPE ESTABLISHED" in res.content
+
+
+def test_unscoped_query_is_refused(seeded):
+    ctx = ToolContext()
+    assert not ctx.is_scoped
+    # search_transcripts without scope must refuse
+    res, _ = asyncio.run(execute_tool("search_transcripts", {"query": "Engine"}, ctx))
+    assert res.is_error
+    assert "REFUSED: No active time scope" in res.content
+
+    # lookup_ner_entities without scope must refuse
+    res_ner, _ = asyncio.run(execute_tool("lookup_ner_entities", {"query": "112"}, ctx))
+    assert res_ner.is_error
+    assert "REFUSED: No active time scope" in res_ner.content
+
+    # Scope the context first
+    scope_res, _ = asyncio.run(execute_tool("scope_time_range", {"preset": "today"}, ctx))
+    assert not scope_res.is_error
+
+    # Now search succeeds
+    res_after, _ = asyncio.run(execute_tool("search_transcripts", {"query": "Engine"}, ctx))
+    assert not res_after.is_error
+    assert res_after.count >= 1
+

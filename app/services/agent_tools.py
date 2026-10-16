@@ -7,6 +7,7 @@ are always dispatched through ``asyncio.to_thread`` with a dedicated session.
 """
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -39,9 +40,14 @@ class ToolArgumentError(ValueError):
 class ToolContext:
     """Per-request context shared with every tool execution (naive local datetimes)."""
 
-    scope_start: datetime
-    scope_end: datetime
-    scope_desc: str
+    scope_start: Optional[datetime] = None
+    scope_end: Optional[datetime] = None
+    scope_desc: str = "Unscoped"
+    is_scoped: bool = False
+
+    def __post_init__(self):
+        if self.scope_start is not None and self.scope_end is not None and not self.is_scoped:
+            self.is_scoped = True
 
 
 @dataclass
@@ -58,6 +64,32 @@ class ToolResult:
 # --------------------------------------------------------------------------- #
 # Argument models
 # --------------------------------------------------------------------------- #
+
+
+class ScopeTimeRangeArgs(BaseModel):
+    start_time: Optional[str] = Field(
+        default=None,
+        description="Explicit start datetime in ISO 8601 format (e.g. '2026-10-16T14:00:00') based on CURRENT LOCAL TIME.",
+    )
+    end_time: Optional[str] = Field(
+        default=None,
+        description="Explicit end datetime in ISO 8601 format (e.g. '2026-10-16T16:00:00') based on CURRENT LOCAL TIME.",
+    )
+    time_expression: Optional[str] = Field(
+        default=None,
+        max_length=200,
+        description="Natural language time description from user prompt, e.g. 'today around 3pm', 'past 2 hours', 'yesterday between 2pm and 4pm'.",
+    )
+    preset: Optional[Literal["1h", "2h", "4h", "8h", "12h", "today", "yesterday"]] = Field(
+        default=None,
+        description="Standard time window preset matching the user prompt.",
+    )
+    hours: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=168,
+        description="Look back this many hours from CURRENT LOCAL TIME.",
+    )
 
 
 class SearchTranscriptsArgs(BaseModel):
@@ -179,9 +211,138 @@ def _tx_filters(start: datetime, end: datetime) -> list:
 # --------------------------------------------------------------------------- #
 
 
+def execute_scope_time_range(db: Session, ctx: ToolContext, args: ScopeTimeRangeArgs) -> ToolResult:
+    now = datetime.now()
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
+    desc: str = ""
+
+    if args.start_time:
+        start = _parse_local_dt(args.start_time, "start_time")
+        end = _parse_local_dt(args.end_time, "end_time") or now
+        desc = args.time_expression or f"{start.strftime('%Y-%m-%d %I:%M %p')} to {end.strftime('%I:%M %p')}"
+    elif args.preset:
+        p = args.preset.lower().strip()
+        if p == "1h":
+            start, end, desc = now - timedelta(hours=1), now, "Past 1 Hour"
+        elif p == "2h":
+            start, end, desc = now - timedelta(hours=2), now, "Past 2 Hours"
+        elif p == "4h":
+            start, end, desc = now - timedelta(hours=4), now, "Past 4 Hours"
+        elif p == "8h":
+            start, end, desc = now - timedelta(hours=8), now, "Past 8 Hours"
+        elif p == "12h":
+            start, end, desc = now - timedelta(hours=12), now, "Past 12 Hours"
+        elif p == "yesterday":
+            yesterday = now - timedelta(days=1)
+            start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
+            desc = f"Yesterday ({start.strftime('%Y-%m-%d')})"
+        else:  # today
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = now
+            desc = f"Today ({start.strftime('%Y-%m-%d')})"
+    elif args.hours:
+        start = now - timedelta(hours=args.hours)
+        end = now
+        desc = f"Past {args.hours} Hours"
+    elif args.time_expression:
+        expr = args.time_expression.lower().strip()
+        if "yesterday" in expr:
+            yesterday = now - timedelta(days=1)
+            start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
+            desc = f"Yesterday ({start.strftime('%Y-%m-%d')})"
+        elif "today" in expr:
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = now
+            desc = f"Today ({start.strftime('%Y-%m-%d')})"
+        else:
+            m = re.search(r'(?:past|last)\s+(\d+)\s*hour', expr)
+            if m:
+                h = int(m.group(1))
+                start = now - timedelta(hours=min(h, 168))
+                end = now
+                desc = f"Past {h} Hours"
+
+    if start is None or end is None:
+        raise ToolArgumentError(
+            "Could not determine time scope. Please provide start_time/end_time in ISO 8601 (e.g. 2026-10-16T14:00:00), "
+            "preset ('today', 'yesterday', '1h', '4h'), or hours."
+        )
+
+    if start > end:
+        start, end = end, start
+
+    max_delta = timedelta(days=7)
+    if (end - start) > max_delta:
+        raise ToolArgumentError("Requested time window exceeds maximum limit of 7 days. Please narrow the time window.")
+
+    # Update context
+    ctx.scope_start = start
+    ctx.scope_end = end
+    ctx.scope_desc = desc
+    ctx.is_scoped = True
+
+    # Query stats in this window
+    filters = [
+        LogEntry.is_deleted == False,
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+    ]
+    total, first_ts, last_ts = (
+        db.query(func.count(LogEntry.id), func.min(LogEntry.timestamp), func.max(LogEntry.timestamp))
+        .filter(and_(*filters))
+        .one()
+    )
+
+    out = [
+        f"TIME SCOPE ESTABLISHED: {desc}",
+        f"Window: {start.strftime('%Y-%m-%d %I:%M:%S %p')} to {end.strftime('%Y-%m-%d %I:%M:%S %p')} local [{start.strftime('%H:%M:%S')} to {end.strftime('%H:%M:%S')}]",
+        f"Transmissions recorded in scope: {total}",
+    ]
+
+    if total == 0:
+        out.append("NOTE: Zero transmissions were recorded during this exact time window in local storage.")
+        earliest_db, latest_db = (
+            db.query(func.min(LogEntry.timestamp), func.max(LogEntry.timestamp))
+            .filter(LogEntry.is_deleted == False)
+            .one()
+        )
+        if earliest_db and latest_db:
+            out.append(f"Available database logs exist between {earliest_db.strftime('%Y-%m-%d %I:%M %p')} and {latest_db.strftime('%Y-%m-%d %I:%M %p')}.")
+    else:
+        out.append(f"Earliest in scope: {first_ts.strftime('%I:%M:%S %p [%H:%M:%S]') if first_ts else 'N/A'}")
+        out.append(f"Latest in scope: {last_ts.strftime('%I:%M:%S %p [%H:%M:%S]') if last_ts else 'N/A'}")
+        top = (
+            db.query(LogEntry.talkgroup, func.count(LogEntry.id).label("n"))
+            .filter(and_(*filters))
+            .group_by(LogEntry.talkgroup)
+            .order_by(func.count(LogEntry.id).desc())
+            .limit(5)
+            .all()
+        )
+        if top:
+            out.append("Active talkgroups: " + ", ".join(f"{(tg or 'N/A').strip()} ({n})" for tg, n in top))
+
+    out.append("Scope is locked. Proceed with targeted search_transcripts or lookup_ner_entities within this window.")
+
+    summary = f"Scoped {desc}: {total} TXs"
+    return ToolResult(content="\n".join(out), summary=summary, count=total)
+
+
 def execute_search_transcripts(db: Session, ctx: ToolContext, args: SearchTranscriptsArgs) -> ToolResult:
     start = _parse_local_dt(args.start_time, "start_time") or ctx.scope_start
     end = _parse_local_dt(args.end_time, "end_time") or ctx.scope_end
+    if start is None or end is None or (not ctx.is_scoped and not args.start_time):
+        return ToolResult(
+            content=(
+                "REFUSED: No active time scope. You must call 'scope_time_range' first to establish a time window "
+                "or provide explicit start_time/end_time before searching transcripts."
+            ),
+            summary="Refused: Unscoped query",
+            is_error=True,
+        )
     if end < start:
         raise ToolArgumentError("end_time is earlier than start_time.")
 
@@ -350,8 +511,12 @@ def execute_get_incident_records(db: Session, ctx: ToolContext, args: IncidentAr
 
 
 def execute_get_talkgroup_activity(db: Session, ctx: ToolContext, args: TalkgroupActivityArgs) -> ToolResult:
-    end = datetime.now()
-    start = end - timedelta(hours=args.hours)
+    if ctx.is_scoped and ctx.scope_start and ctx.scope_end:
+        start = ctx.scope_start
+        end = ctx.scope_end
+    else:
+        end = datetime.now()
+        start = end - timedelta(hours=args.hours)
     filters = _tx_filters(start, end)
     if args.query and args.query.strip():
         filters.append(LogEntry.talkgroup.ilike(f"%{_escape_like(args.query.strip())}%", escape="\\"))
@@ -375,7 +540,7 @@ def execute_get_talkgroup_activity(db: Session, ctx: ToolContext, args: Talkgrou
         if first and last
     ]
     header = [
-        f"get_talkgroup_activity query='{args.query or ''}' last {args.hours}h ({_window_label(start, end)})",
+        f"get_talkgroup_activity query='{args.query or ''}' window={_window_label(start, end)}",
         f"TALKGROUPS: {len(lines)} (busiest first)",
     ]
     if not lines:
@@ -386,6 +551,15 @@ def execute_get_talkgroup_activity(db: Session, ctx: ToolContext, args: Talkgrou
 def execute_lookup_ner_entities(db: Session, ctx: ToolContext, args: LookupNerEntitiesArgs) -> ToolResult:
     start_dt = _parse_local_dt(args.start_time, "start_time") or ctx.scope_start
     end_dt = _parse_local_dt(args.end_time, "end_time") or ctx.scope_end
+    if start_dt is None or end_dt is None or (not ctx.is_scoped and not args.start_time):
+        return ToolResult(
+            content=(
+                "REFUSED: No active time scope. You must call 'scope_time_range' first to establish a time window "
+                "or provide explicit start_time/end_time before querying named entities."
+            ),
+            summary="Refused: Unscoped query",
+            is_error=True,
+        )
     if start_dt > end_dt:
         raise ToolArgumentError(f"start_time ({start_dt}) cannot be after end_time ({end_dt}).")
 
@@ -540,6 +714,38 @@ _TIME_PARAM = {
 }
 
 TOOL_REGISTRY: Dict[str, ToolSpec] = {
+    "scope_time_range": ToolSpec(
+        name="scope_time_range",
+        description=(
+            "MANDATORY FIRST STEP when the operator provides a time, date, or relative window. "
+            "Resolves and locks the active time scope for the conversation, verifies how many radio transmissions "
+            "exist in that window, and identifies active talkgroups. "
+            "You MUST call this tool before calling search_transcripts or lookup_ner_entities. "
+            "If the operator prompt did NOT specify any time or date, DO NOT call this tool; instead refuse output."
+        ),
+        args_model=ScopeTimeRangeArgs,
+        parameters={
+            "type": "object",
+            "properties": {
+                "start_time": _TIME_PARAM,
+                "end_time": _TIME_PARAM,
+                "time_expression": {
+                    "type": "string",
+                    "description": "Natural language time expression from user prompt, e.g. 'today around 3pm', 'yesterday between 2pm and 4pm', 'past 2 hours'.",
+                },
+                "preset": {
+                    "type": "string",
+                    "enum": ["1h", "2h", "4h", "8h", "12h", "today", "yesterday"],
+                    "description": "Optional preset time window matching the prompt.",
+                },
+                "hours": {
+                    "type": "integer",
+                    "description": "Optional hours lookback from current time (1 to 168).",
+                },
+            },
+        },
+        executor=execute_scope_time_range,
+    ),
     "search_transcripts": ToolSpec(
         name="search_transcripts",
         description=(

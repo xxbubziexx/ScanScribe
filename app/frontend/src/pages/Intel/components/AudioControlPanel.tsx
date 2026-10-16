@@ -33,13 +33,15 @@ export function AudioControlPanel({
   const [volume, setVolume] = useState(0.85)
   const [isMuted, setIsMuted] = useState(false)
   const [autoAdvance, setAutoAdvance] = useState(true)
+  const [playbackError, setPlaybackError] = useState<string | null>(null)
 
   const activeTx = transmissions.find((t) => t.id === activeTxId) || null
   const activeIndex = activeTx ? transmissions.findIndex((t) => t.id === activeTx.id) : -1
 
   // Handle track changing & audio lifecycle safely per audio-web-apis guidelines
   useEffect(() => {
-    if (!activeTx?.audio_url) {
+    setPlaybackError(null)
+    if (!activeTx?.audio_url || activeTx.audio_available === false) {
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current.removeAttribute('src')
@@ -48,6 +50,9 @@ export function AudioControlPanel({
       setIsPlaying(false)
       setCurrentTime(0)
       setDuration(activeTx?.duration || 0)
+      if (activeTx) {
+        setPlaybackError('Original audio recording file is not retained in local storage for this transmission.')
+      }
       return
     }
 
@@ -65,8 +70,16 @@ export function AudioControlPanel({
       setCurrentTime(audio.currentTime || 0)
     }
 
-    const onPlay = () => setIsPlaying(true)
+    const onPlay = () => {
+      setIsPlaying(true)
+      setPlaybackError(null)
+    }
     const onPause = () => setIsPlaying(false)
+
+    const onError = () => {
+      setIsPlaying(false)
+      setPlaybackError('Audio recording is missing from disk or could not be decoded.')
+    }
 
     const onEnded = () => {
       setIsPlaying(false)
@@ -84,6 +97,7 @@ export function AudioControlPanel({
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onPause)
+    audio.addEventListener('error', onError)
     audio.addEventListener('ended', onEnded)
 
     // Attempt playback
@@ -91,7 +105,7 @@ export function AudioControlPanel({
     if (playPromise !== undefined) {
       playPromise.catch((err) => {
         if (err.name !== 'AbortError') {
-          console.warn('Audio auto-play prevented or failed:', err)
+          setPlaybackError('Playback prevented: audio resource not available or blocked by browser.')
         }
         setIsPlaying(false)
       })
@@ -102,6 +116,7 @@ export function AudioControlPanel({
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
+      audio.removeEventListener('error', onError)
       audio.removeEventListener('ended', onEnded)
       audio.pause()
       audio.removeAttribute('src')
@@ -122,13 +137,17 @@ export function AudioControlPanel({
   // Play / Pause toggle
   const handleTogglePlay = () => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio || !activeTx?.audio_url || activeTx.audio_available === false) return
 
     if (audio.paused) {
+      setPlaybackError(null)
       const p = audio.play()
       if (p !== undefined) {
         p.catch((err) => {
-          if (err.name !== 'AbortError') console.error('Play error:', err)
+          if (err.name !== 'AbortError') {
+            setPlaybackError('Playback failed: audio resource missing or invalid.')
+          }
+          setIsPlaying(false)
         })
       }
     } else {
@@ -244,6 +263,14 @@ export function AudioControlPanel({
               </span>
             </div>
 
+            {/* Error Notification Banner */}
+            {playbackError && (
+              <div className="px-2.5 py-1.5 rounded bg-amber-950/60 border border-amber-600/40 text-amber-300 text-[11px] flex items-center gap-1.5">
+                <span className="shrink-0 text-xs">⚠️</span>
+                <span>{playbackError}</span>
+              </div>
+            )}
+
             {/* Custom Tactical Scrubber Bar */}
             <div className="space-y-1">
               <div className="relative w-full flex items-center">
@@ -274,7 +301,7 @@ export function AudioControlPanel({
               <button
                 type="button"
                 onClick={() => handleSkip(-5)}
-                disabled={!activeTx?.audio_url}
+                disabled={!activeTx?.audio_url || activeTx.audio_available === false}
                 className="p-1.5 text-gray-400 hover:text-gray-100 hover:bg-[#202438] rounded font-mono text-[11px] transition-colors cursor-pointer disabled:opacity-40"
                 title="Rewind 5 seconds"
               >
@@ -285,7 +312,7 @@ export function AudioControlPanel({
               <button
                 type="button"
                 onClick={handleTogglePlay}
-                disabled={!activeTx?.audio_url}
+                disabled={!activeTx?.audio_url || activeTx.audio_available === false}
                 className="w-10 h-10 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white flex items-center justify-center shadow-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 title={isPlaying ? 'Pause' : 'Play'}
               >

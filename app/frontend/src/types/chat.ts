@@ -63,14 +63,15 @@ export interface TransmissionLookup {
   transcript: string
   talkgroup: string | null
   audio_url: string
+  audio_available?: boolean
 }
 
 export interface ChatStreamMeta {
   type: 'meta'
   transmissions_count: number
   time_desc: string
-  start_time: string
-  end_time: string
+  start_time?: string | null
+  end_time?: string | null
   talkgroups: string[]
   model: string
   agentic?: boolean

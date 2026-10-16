@@ -95,3 +95,4 @@ class TransmissionLookupOut(BaseModel):
     transcript: str
     talkgroup: Optional[str] = None
     audio_url: str
+    audio_available: bool = True

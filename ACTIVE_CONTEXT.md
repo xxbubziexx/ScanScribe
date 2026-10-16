@@ -392,6 +392,26 @@ This living document is the **shared memory** between different AI models, human
   - Server health: HTTP 200 on `http://localhost:8000/health` and `/app/intel`.
 - **Next Tasks / Unfinished Work:** Ready for end-user interaction and verification on `/app/intel`.
 
+### 2026-10-16 11:45 | Antigravity (Windows Dev Workstation)
+- **Work Performed:**
+  - **Removed Manual Time Scope Controls**: Removed manual presets ('1h', '4h', '12h', 'today', 'yesterday', 'custom') and datetime inputs from [`TimeScopeBar.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/TimeScopeBar.tsx) and [`IntelPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/IntelPage.tsx). The top bar now features a clean "Agentic Time Scoping Active" indicator alongside view toggles (tools, thinking) and the Audio Deck launcher.
+  - **Implemented `scope_time_range` Tool**: Created and registered [`scope_time_range`](file:///a:/Scanscribe_Projects/scanscribe/app/services/agent_tools.py) as the primary tool in `TOOL_REGISTRY`. It accepts natural language expressions, ISO 8601 start/end timestamps, presets, or relative hours lookbacks, sets the active `ToolContext`, queries summary stats (transmission count, earliest/latest times, active talkgroups), and locks the window for subsequent searches.
+  - **Enforced Strict Time Scoping & Refusal Protocol**:
+    - Updated agent system prompts in [`chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py) instructing the LLM to strictly refuse output without querying any transcription logs if a time or date reference is omitted from the user prompt.
+    - Updated `search_transcripts`, `lookup_ner_entities`, and `get_talkgroup_activity` in [`agent_tools.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/agent_tools.py) to reject un-scoped searches (`is_scoped=False` guard) to prevent unbounded full-archive queries across SQLite.
+  - **Audio Deck Resilience & Safe Links**:
+    - Added `audio_available` boolean and disk check in [`app/routes/chat.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/chat.py) and graceful error banners in [`AudioControlPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/AudioControlPanel.tsx).
+    - Intercepted `file:` URI protocol schemes in [`ChatMessageList.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatMessageList.tsx) to render safe inline badges, preventing browser security exceptions.
+- **Live Ingestion Impact:** Zero impact. Read-only tool enhancements with isolated DB sessions; live ingest loop unhindered.
+- **Gotchas / Warnings for Next Model:**
+  - `ToolContext.is_scoped` defaults to `False` in agentic mode until `scope_time_range` is called or an explicit time window is supplied in tool arguments.
+  - If a user omits the time frame (e.g., "What did unit 112 do?"), the LLM will output a polite refusal asking for the time frame before pulling logs.
+- **Verification Performed:**
+  - Full pytest suite: **122 passed in 25.06s** (100% green).
+  - Frontend production build: `npm run build` compiled cleanly into `app/frontend/dist/` in 13.28s.
+  - Uvicorn daemon running cleanly on `http://0.0.0.0:8000`.
+- **Next Tasks / Unfinished Work:** Verify user interactions on `/app/intel`.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -401,5 +421,6 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+
 
 

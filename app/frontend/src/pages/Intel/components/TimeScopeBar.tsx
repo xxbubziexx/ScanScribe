@@ -1,10 +1,4 @@
-import { useState } from 'react'
-
-import type { ChatTimeScope } from '@/types/chat'
-
 interface TimeScopeBarProps {
-  timeScope: ChatTimeScope
-  onChangeTimeScope: (scope: ChatTimeScope) => void
   showTools: boolean
   onChangeShowTools: (value: boolean) => void
   showThinking: boolean
@@ -14,15 +8,6 @@ interface TimeScopeBarProps {
   audioPanelOpen?: boolean
   onToggleAudioPanel?: () => void
 }
-
-const PRESETS: { id: ChatTimeScope['preset']; label: string }[] = [
-  { id: '1h', label: 'Past 1h' },
-  { id: '4h', label: 'Past 4h' },
-  { id: '12h', label: 'Past 12h' },
-  { id: 'today', label: 'Today' },
-  { id: 'yesterday', label: 'Yesterday' },
-  { id: 'custom', label: 'Custom' },
-]
 
 interface ViewToggleProps {
   id: string
@@ -52,102 +37,34 @@ function ViewToggle({ id, label, checked, onChange }: ViewToggleProps) {
           }`}
         />
       </span>
-      <span className="font-medium">{label}</span>
+      <span className="font-medium text-[11px]">{label}</span>
     </button>
   )
 }
 
 export function TimeScopeBar({
-  timeScope,
-  onChangeTimeScope,
   showTools,
   onChangeShowTools,
   showThinking,
   onChangeShowThinking,
-  disabled = false,
   audioCount = 0,
   audioPanelOpen = false,
   onToggleAudioPanel,
 }: TimeScopeBarProps) {
-  const [customStart, setCustomStart] = useState(timeScope.start_time || '')
-  const [customEnd, setCustomEnd] = useState(timeScope.end_time || '')
-
-  const handlePresetClick = (preset: ChatTimeScope['preset']) => {
-    if (disabled) return
-    if (preset === 'custom') {
-      onChangeTimeScope({
-        preset: 'custom',
-        start_time: customStart || new Date(Date.now() - 3600000 * 2).toISOString().slice(0, 16),
-        end_time: customEnd || new Date().toISOString().slice(0, 16),
-      })
-    } else {
-      onChangeTimeScope({ preset })
-    }
-  }
-
-  const handleCustomApply = () => {
-    if (disabled || !customStart) return
-    onChangeTimeScope({
-      preset: 'custom',
-      start_time: customStart,
-      end_time: customEnd || null,
-    })
-  }
-
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 bg-[#141721] border-b border-[#252836] text-xs shrink-0">
-      {/* Time Range Presets */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="text-gray-400 font-medium mr-1 uppercase tracking-wider text-[11px]">
-          Time Scope:
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 bg-[#141721] border-b border-[#252836] text-xs shrink-0 select-none">
+      {/* Intelligent Scoping Status Badge */}
+      <div className="flex items-center gap-2">
+        <span className="flex h-2 w-2 relative">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
         </span>
-        {PRESETS.map((p) => {
-          const isActive = timeScope.preset === p.id
-          return (
-            <button
-              key={p.id}
-              type="button"
-              disabled={disabled}
-              onClick={() => handlePresetClick(p.id)}
-              className={`px-2.5 py-1 rounded transition-colors font-medium cursor-pointer disabled:opacity-50 ${
-                isActive
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'bg-[#1e2230] hover:bg-[#282d3f] text-gray-300'
-              }`}
-            >
-              {p.label}
-            </button>
-          )
-        })}
-
-        {/* Custom Datetime Picker */}
-        {timeScope.preset === 'custom' && (
-          <div className="flex items-center gap-1.5 ml-2 bg-[#1a1d28] p-1 rounded border border-[#2b2f42]">
-            <input
-              type="datetime-local"
-              value={customStart}
-              onChange={(e) => setCustomStart(e.target.value)}
-              className="bg-[#10121a] text-gray-200 px-1.5 py-0.5 rounded border border-[#33384c] text-[11px]"
-              disabled={disabled}
-            />
-            <span className="text-gray-500">to</span>
-            <input
-              type="datetime-local"
-              value={customEnd}
-              onChange={(e) => setCustomEnd(e.target.value)}
-              className="bg-[#10121a] text-gray-200 px-1.5 py-0.5 rounded border border-[#33384c] text-[11px]"
-              disabled={disabled}
-            />
-            <button
-              type="button"
-              onClick={handleCustomApply}
-              disabled={disabled || !customStart}
-              className="px-2 py-0.5 bg-indigo-700 hover:bg-indigo-600 text-white rounded font-medium text-[11px]"
-            >
-              Apply
-            </button>
-          </div>
-        )}
+        <span className="text-xs font-semibold text-gray-200">
+          Agentic Time Scoping Active
+        </span>
+        <span className="text-[11px] text-gray-400 font-mono hidden sm:inline">
+          (Specify time in query; e.g. "today around 3pm", "past 2 hours")
+        </span>
       </div>
 
       {/* Response detail toggles & Audio Panel Toggle */}
