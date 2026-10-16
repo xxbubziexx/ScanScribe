@@ -71,7 +71,7 @@ export function StatsPanel({
             value={date}
             onChange={onDateChange}
             activeDates={activeDates}
-            restrictToActive={activeDates.length > 0}
+            restrictToActive={false}
             aria-label="Insights date"
           />
 

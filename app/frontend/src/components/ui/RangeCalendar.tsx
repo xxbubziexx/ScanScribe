@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import {
   endOfDay,
@@ -17,7 +17,12 @@ export interface RangeCalendarProps {
   maxDate?: Date
   /** Set of YYYY-MM-DD dates that have activity/records in SQLite */
   activeDateStrings?: Set<string>
-  onPick: (day: Date) => void
+  /** If true, days not in activeDateStrings are disabled */
+  restrictToActive?: boolean
+  /** Single day pick or individual day click callback */
+  onPick?: (day: Date) => void
+  /** Range completion callback when 2 days are selected in range mode */
+  onRangeSelect?: (from: Date, to: Date) => void
   className?: string
 }
 
@@ -32,7 +37,9 @@ export function RangeCalendar({
   selected = null,
   maxDate,
   activeDateStrings,
+  restrictToActive = false,
   onPick,
+  onRangeSelect,
   className = '',
 }: RangeCalendarProps) {
   const anchor =
@@ -42,6 +49,19 @@ export function RangeCalendar({
 
   const [view, setView] = useState(() => new Date(anchor.getFullYear(), anchor.getMonth(), 1))
   const today = useMemo(() => startOfDay(new Date()), [])
+
+  // Interactive range selection state
+  const [pickingStart, setPickingStart] = useState<Date | null>(null)
+  const [hoverDate, setHoverDate] = useState<Date | null>(null)
+
+  // Sync view when anchor prop changes meaningfully
+  useEffect(() => {
+    if (mode === 'single' && selected) {
+      setView(new Date(selected.getFullYear(), selected.getMonth(), 1))
+    } else if (mode === 'range' && from) {
+      setView(new Date(from.getFullYear(), from.getMonth(), 1))
+    }
+  }, [mode, selected, from])
 
   const cells = useMemo(() => {
     const first = new Date(view.getFullYear(), view.getMonth(), 1)
@@ -54,27 +74,29 @@ export function RangeCalendar({
     })
   }, [view])
 
-  const lo =
-    mode === 'single'
-      ? null
-      : from && to
-      ? from <= to
-        ? startOfDay(from)
-        : startOfDay(to)
-      : from
-      ? startOfDay(from)
-      : null
+  const lo = useMemo(() => {
+    if (mode === 'single') return null
+    if (pickingStart !== null) {
+      const target = hoverDate ?? pickingStart
+      return pickingStart <= target ? startOfDay(pickingStart) : startOfDay(target)
+    }
+    if (from && to) {
+      return from <= to ? startOfDay(from) : startOfDay(to)
+    }
+    return from ? startOfDay(from) : null
+  }, [mode, pickingStart, hoverDate, from, to])
 
-  const hi =
-    mode === 'single'
-      ? null
-      : from && to
-      ? from <= to
-        ? startOfDay(to)
-        : startOfDay(from)
-      : from
-      ? startOfDay(from)
-      : null
+  const hi = useMemo(() => {
+    if (mode === 'single') return null
+    if (pickingStart !== null) {
+      const target = hoverDate ?? pickingStart
+      return pickingStart <= target ? startOfDay(target) : startOfDay(pickingStart)
+    }
+    if (from && to) {
+      return from <= to ? startOfDay(to) : startOfDay(from)
+    }
+    return from ? startOfDay(from) : null
+  }, [mode, pickingStart, hoverDate, from, to])
 
   const nextDisabled = maxDate
     ? new Date(view.getFullYear(), view.getMonth() + 1, 1) > startOfDay(maxDate)
@@ -83,8 +105,37 @@ export function RangeCalendar({
   const shift = (delta: number) =>
     setView((v) => new Date(v.getFullYear(), v.getMonth() + delta, 1))
 
+  const handleDayClick = (day: Date) => {
+    if (mode === 'single') {
+      onPick?.(day)
+      return
+    }
+
+    if (pickingStart === null) {
+      // First click: initiate range selection
+      setPickingStart(day)
+      setHoverDate(null)
+      onPick?.(day)
+    } else {
+      // Second click: complete range selection
+      const start = pickingStart <= day ? pickingStart : day
+      const end = pickingStart <= day ? day : pickingStart
+      setPickingStart(null)
+      setHoverDate(null)
+      onRangeSelect?.(start, end)
+      onPick?.(day)
+    }
+  }
+
   return (
-    <div className={`w-[17.5rem] p-3 select-none ${className}`} role="group" aria-label="Calendar">
+    <div
+      className={`w-[17.5rem] p-3 select-none ${className}`}
+      role="group"
+      aria-label="Calendar"
+      onMouseLeave={() => {
+        if (pickingStart !== null) setHoverDate(null)
+      }}
+    >
       {/* Month Year Header & Navigation */}
       <div className="mb-2.5 flex items-center justify-between">
         <span className="text-sm font-semibold tracking-tight text-gray-100">
@@ -125,10 +176,12 @@ export function RangeCalendar({
         {cells.map((d, index) => {
           const dStart = startOfDay(d)
           const outside = d.getMonth() !== view.getMonth()
-          const disabled = maxDate ? dStart > endOfDay(maxDate) : false
-          const isToday = isSameDay(d, today)
           const ymd = toYmd(d)
           const hasDbData = activeDateStrings ? activeDateStrings.has(ymd) : false
+          const isBlockedByActive =
+            restrictToActive && Boolean(activeDateStrings?.size) && !hasDbData
+          const disabled = (maxDate ? dStart > endOfDay(maxDate) : false) || isBlockedByActive
+          const isToday = isSameDay(d, today)
 
           let isStart = false
           let isEnd = false
@@ -180,7 +233,12 @@ export function RangeCalendar({
                 disabled={disabled}
                 aria-label={d.toDateString()}
                 aria-pressed={isEdge}
-                onClick={() => onPick(d)}
+                onClick={() => handleDayClick(d)}
+                onMouseEnter={() => {
+                  if (mode === 'range' && pickingStart !== null) {
+                    setHoverDate(d)
+                  }
+                }}
                 className={`relative z-10 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg transition-colors cursor-pointer ${
                   isEdge
                     ? 'bg-neutral-900 border border-neutral-700 text-white font-bold shadow sm:bg-indigo-600 sm:border-indigo-500'

@@ -463,15 +463,21 @@ This living document is the **shared memory** between different AI models, human
     - Overhauled [`DatabaseDateSinglePicker.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/database/DatabaseDateSinglePicker.tsx):
       - Replaced legacy single-day picker in [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx) / [`StatsPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/StatsPanel.tsx) with single-mode `RangeCalendar`, local zone badge, and "Today" shortcut.
     - Fixed `canAdmin` capability enforcement in [`Events/Incidents/index.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/Incidents/index.tsx).
-    - Added comprehensive automated test suite [`DatePickers.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatePickers.test.tsx).
+    - **Interactive Range Selection Fix**:
+      - Implemented full two-click range completion in [`RangeCalendar.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/ui/RangeCalendar.tsx) (`onRangeSelect` callback) with dynamic hover-preview band extending from start date to hovered day.
+      - Auto-corrects inverted selections (e.g. clicking later date then earlier date automatically assigns the earlier date to `from` and later date to `to`).
+      - Auto-applies `onChange` in both [`DatabaseDateRangePicker.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/database/DatabaseDateRangePicker.tsx) and [`TimeRangePicker.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/ui/TimeRangePicker.tsx) immediately upon clicking the second date on the calendar, without requiring the user to locate an Apply button.
+      - Removed artificial blocking in [`StatsPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/StatsPanel.tsx) (`restrictToActive={false}`) so historical dates can be freely browsed.
+      - Added automated unit tests in [`DatePickers.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatePickers.test.tsx) for range clicks, inverted clicks, and auto-applying.
 - **Live Ingestion Impact:** Zero impact. Pure frontend component overhaul; backend APIs and DB sessions remain isolated and non-blocking.
 - **Gotchas / Warnings for Next Model:**
-  - `DatabaseDateRangePicker` calls `onChange(from, to)` with `YYYY-MM-DD` strings (or empty strings for "All dates").
-  - `TimeRangePicker` works with `TimeRangeValue` objects and resolves rolling presets at query time to naive local ISO datetimes matching backend `LogEntry.timestamp`.
+  - `RangeCalendar` handles range picking internally: click 1 sets start date and begins hover preview; click 2 commits the range and triggers `onRangeSelect(minDate, maxDate)`.
+  - In `DatabaseDateRangePicker`, `onChange(from, to)` is called immediately upon calendar range completion, preset button click, or "Apply" button click.
 - **Verification Performed:**
   - Full backend pytest suite: **123 passed in 23.72s** (100% green).
-  - Full frontend vitest suite: **6 test files, 27 passed in 3.24s** (100% green).
+  - Full frontend vitest suite: **6 test files, 30 passed in 3.78s** (100% green).
   - TypeScript compilation: `npm run typecheck` passed with 0 errors.
+  - Production build: `npm run build` compiled cleanly in 1.49s.
 - **Next Tasks / Unfinished Work:** Ready for deployment or user testing.
 
 <!-- 

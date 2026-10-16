@@ -146,6 +146,7 @@ export function DatabaseDateSinglePicker({
             selected={selectedDate}
             maxDate={new Date()}
             activeDateStrings={activeSet}
+            restrictToActive={restrictToActive}
             onPick={handlePick}
           />
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { RangeCalendar } from './RangeCalendar'
 import {
   TIME_RANGE_PRESETS,
   describeTimeRange,
@@ -11,8 +12,6 @@ import {
   startOfDay,
   type TimeRangeValue,
 } from './timeRange'
-
-import { RangeCalendar } from './RangeCalendar'
 
 function CalendarIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
@@ -37,8 +36,6 @@ export interface TimeRangePickerProps {
   disabled?: boolean
 }
 
-type CalendarTarget = 'from' | 'to' | null
-
 export function TimeRangePicker({ value, onChange, className = '', disabled }: TimeRangePickerProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -46,14 +43,12 @@ export function TimeRangePicker({ value, onChange, className = '', disabled }: T
 
   const [fromText, setFromText] = useState('')
   const [toText, setToText] = useState('')
-  const [calendar, setCalendar] = useState<CalendarTarget>(null)
   const [error, setError] = useState<string | null>(null)
 
   const seedDrafts = useCallback(() => {
     const { start, end } = resolveTimeRange(value)
     setFromText(formatLocal(start))
     setToText(formatLocal(end))
-    setCalendar(null)
     setError(null)
   }, [value])
 
@@ -69,9 +64,7 @@ export function TimeRangePicker({ value, onChange, className = '', disabled }: T
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (calendar) setCalendar(null)
-      else setOpen(false)
+      if (e.key === 'Escape') setOpen(false)
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
@@ -79,40 +72,41 @@ export function TimeRangePicker({ value, onChange, className = '', disabled }: T
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey)
     }
-  }, [open, calendar])
+  }, [open])
 
-  const draftFrom = parseLocal(fromText)
-  const draftTo = parseLocal(toText)
+  const draftFrom = useMemo(() => parseLocal(fromText), [fromText])
+  const draftTo = useMemo(() => parseLocal(toText), [toText])
 
-  const pickDay = (day: Date) => {
+  const handleCalendarRangeSelect = (start: Date, end: Date) => {
+    const fromDate = startOfDay(start)
+    const toDate = endOfDay(end)
+    setFromText(formatLocal(fromDate))
+    setToText(formatLocal(toDate))
     setError(null)
-    if (calendar === 'from') {
-      const time = draftFrom ?? startOfDay(day)
-      const next = new Date(day.getFullYear(), day.getMonth(), day.getDate(), time.getHours(), time.getMinutes(), time.getSeconds())
-      setFromText(formatLocal(next))
-      setCalendar('to')
-    } else if (calendar === 'to') {
-      const time = draftTo ?? endOfDay(day)
-      const next = new Date(day.getFullYear(), day.getMonth(), day.getDate(), time.getHours(), time.getMinutes(), time.getSeconds())
-      setToText(formatLocal(next))
-      setCalendar(null)
-    }
+    onChange({ kind: 'absolute', from: fromDate, to: toDate })
+  }
+
+  const handleCalendarDayPick = (day: Date) => {
+    setError(null)
+    setFromText(formatLocal(startOfDay(day)))
   }
 
   const apply = () => {
     if (!draftFrom || !draftTo) {
-      setError('Use the format YYYY-MM-DD HH:mm:ss')
+      setError('Use format YYYY-MM-DD HH:mm:ss')
       return
     }
-    if (draftFrom > draftTo) {
-      setError('"From" must be before "To"')
-      return
-    }
-    if (draftTo > new Date()) {
+
+    // Auto-swap if start > end
+    const from = draftFrom <= draftTo ? draftFrom : draftTo
+    const to = draftFrom <= draftTo ? draftTo : draftFrom
+
+    if (to > new Date()) {
       setError('"To" cannot be in the future')
       return
     }
-    onChange({ kind: 'absolute', from: draftFrom, to: draftTo })
+
+    onChange({ kind: 'absolute', from, to })
     setOpen(false)
   }
 
@@ -138,9 +132,10 @@ export function TimeRangePicker({ value, onChange, className = '', disabled }: T
         <div
           role="dialog"
           aria-label="Select time range"
-          className="absolute right-0 z-50 mt-2 flex max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-lg border border-[#2b2f42] bg-[#141722] shadow-2xl shadow-black/50 sm:flex-row"
+          className="absolute right-0 z-50 mt-2 flex max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-xl border border-[#2b2f42] bg-[#141722] shadow-2xl shadow-black/60 sm:flex-row"
         >
-          <ul className="flex shrink-0 flex-row gap-0.5 overflow-x-auto border-b border-[#222533] p-2 sm:w-48 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r">
+          {/* Left Column: Presets */}
+          <ul className="flex shrink-0 flex-row gap-0.5 overflow-x-auto border-b border-[#222533] p-2 sm:w-44 sm:flex-col sm:overflow-visible sm:border-b-0 sm:border-r">
             {TIME_RANGE_PRESETS.map((p) => {
               const selected = value.kind === 'preset' && value.presetId === p.id
               return (
@@ -153,7 +148,7 @@ export function TimeRangePicker({ value, onChange, className = '', disabled }: T
                     }}
                     className={`flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-xs transition-colors cursor-pointer ${
                       selected
-                        ? 'bg-indigo-500/15 text-white'
+                        ? 'bg-indigo-500/15 text-white font-medium'
                         : 'text-gray-300 hover:bg-[#1e2333]'
                     }`}
                   >
@@ -165,50 +160,57 @@ export function TimeRangePicker({ value, onChange, className = '', disabled }: T
             })}
           </ul>
 
-          <div className="w-full p-3 sm:w-72">
+          {/* Middle Column: Absolute Date & Time Inputs */}
+          <div className="w-full p-3 sm:w-72 border-b border-[#222533] sm:border-b-0 sm:border-r">
             <div className="mb-2 text-xs font-semibold text-gray-200">Absolute time range</div>
 
-            {(['from', 'to'] as const).map((field) => {
-              const text = field === 'from' ? fromText : toText
-              const invalid = text !== '' && parseLocal(text) === null
-              return (
-                <div key={field} className="mb-2.5">
-                  <label
-                    htmlFor={`time-range-${field}`}
-                    className="mb-1 block text-xs text-gray-400"
-                  >
-                    {field === 'from' ? 'From' : 'To'}
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id={`time-range-${field}`}
-                      value={text}
-                      onChange={(e) => {
-                        setError(null)
-                        if (field === 'from') setFromText(e.target.value)
-                        else setToText(e.target.value)
-                      }}
-                      onFocus={() => setCalendar(null)}
-                      placeholder="YYYY-MM-DD HH:mm:ss"
-                      spellCheck={false}
-                      className={`${inputClass} ${invalid ? 'border-red-500/70' : 'border-[#2b2f42]'}`}
-                    />
-                    <button
-                      type="button"
-                      aria-label={`Pick ${field} date`}
-                      onClick={() => setCalendar(calendar === field ? null : field)}
-                      className={`flex h-[30px] w-9 shrink-0 items-center justify-center rounded-md border text-gray-300 transition-colors cursor-pointer ${
-                        calendar === field
-                          ? 'border-indigo-500 bg-indigo-500/15'
-                          : 'border-[#2b2f42] hover:bg-[#1e2333]'
-                      }`}
-                    >
-                      <CalendarIcon />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
+            <div className="mb-2.5">
+              <label
+                htmlFor="time-range-from"
+                className="mb-1 block text-xs text-gray-400"
+              >
+                From
+              </label>
+              <input
+                id="time-range-from"
+                value={fromText}
+                onChange={(e) => {
+                  setError(null)
+                  setFromText(e.target.value)
+                }}
+                placeholder="YYYY-MM-DD HH:mm:ss"
+                spellCheck={false}
+                className={`${inputClass} ${
+                  fromText && parseLocal(fromText) === null
+                    ? 'border-red-500/70'
+                    : 'border-[#2b2f42]'
+                }`}
+              />
+            </div>
+
+            <div className="mb-2.5">
+              <label
+                htmlFor="time-range-to"
+                className="mb-1 block text-xs text-gray-400"
+              >
+                To
+              </label>
+              <input
+                id="time-range-to"
+                value={toText}
+                onChange={(e) => {
+                  setError(null)
+                  setToText(e.target.value)
+                }}
+                placeholder="YYYY-MM-DD HH:mm:ss"
+                spellCheck={false}
+                className={`${inputClass} ${
+                  toText && parseLocal(toText) === null
+                    ? 'border-red-500/70'
+                    : 'border-[#2b2f42]'
+                }`}
+              />
+            </div>
 
             {error && (
               <div role="alert" className="mb-2 text-xs text-red-400">
@@ -223,19 +225,23 @@ export function TimeRangePicker({ value, onChange, className = '', disabled }: T
             >
               Apply
             </button>
+
+            <p className="mt-3 text-[11px] text-gray-500">
+              Pick 2 days on the calendar to set the range, or type local datetimes above.
+            </p>
           </div>
 
-          {calendar && (
-            <div className="border-t border-[#222533] sm:border-l sm:border-t-0">
-              <RangeCalendar
-                key={calendar}
-                from={draftFrom}
-                to={draftTo}
-                maxDate={new Date()}
-                onPick={pickDay}
-              />
-            </div>
-          )}
+          {/* Right Column: Month Range Calendar */}
+          <div className="p-1">
+            <RangeCalendar
+              mode="range"
+              from={draftFrom}
+              to={draftTo}
+              maxDate={new Date()}
+              onPick={handleCalendarDayPick}
+              onRangeSelect={handleCalendarRangeSelect}
+            />
+          </div>
         </div>
       )}
     </div>

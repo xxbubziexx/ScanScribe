@@ -119,8 +119,6 @@ export interface DatabaseDateRangePickerProps {
   disabled?: boolean
 }
 
-type CalendarTarget = 'from' | 'to' | null
-
 export function DatabaseDateRangePicker({
   from,
   to,
@@ -136,7 +134,6 @@ export function DatabaseDateRangePicker({
 
   const [fromInput, setFromInput] = useState(from)
   const [toInput, setToInput] = useState(to)
-  const [calendarTarget, setCalendarTarget] = useState<CalendarTarget>('from')
   const [error, setError] = useState<string | null>(null)
 
   const activeSet = useMemo(() => new Set(activeDates ?? []), [activeDates])
@@ -145,7 +142,6 @@ export function DatabaseDateRangePicker({
     setFromInput(from)
     setToInput(to)
     setError(null)
-    setCalendarTarget('from')
   }, [from, to])
 
   useEffect(() => {
@@ -170,20 +166,21 @@ export function DatabaseDateRangePicker({
   const draftFromDate = useMemo(() => parseYmd(fromInput), [fromInput])
   const draftToDate = useMemo(() => parseYmd(toInput), [toInput])
 
-  const onPickCalendarDay = (day: Date) => {
-    const ymd = toYmd(day)
+  // Direct calendar range pick (User clicked day 1 then day 2)
+  const handleCalendarRangeSelect = (start: Date, end: Date) => {
+    const fromYmd = toYmd(start)
+    const toYmdStr = toYmd(end)
+    setFromInput(fromYmd)
+    setToInput(toYmdStr)
     setError(null)
-    if (calendarTarget === 'from') {
-      setFromInput(ymd)
-      setCalendarTarget('to')
-    } else if (calendarTarget === 'to') {
-      setToInput(ymd)
-      setCalendarTarget(null)
-    } else {
-      // Default behavior if neither specifically targeted: start a new range
-      setFromInput(ymd)
-      setCalendarTarget('to')
-    }
+    onChange(fromYmd, toYmdStr)
+  }
+
+  // Individual day pick (visual feedback for start of range)
+  const handleCalendarDayPick = (day: Date) => {
+    setError(null)
+    setFromInput(toYmd(day))
+    setToInput('')
   }
 
   const handleApply = () => {
@@ -207,7 +204,11 @@ export function DatabaseDateRangePicker({
     }
 
     if (trimmedFrom && trimmedTo && trimmedFrom > trimmedTo) {
-      setError('"From" date must be earlier than or equal to "To" date')
+      // Auto-correct order if inverted
+      setFromInput(trimmedTo)
+      setToInput(trimmedFrom)
+      onChange(trimmedTo, trimmedFrom)
+      setOpen(false)
       return
     }
 
@@ -329,20 +330,6 @@ export function DatabaseDateRangePicker({
                     fromInput && !parseYmd(fromInput) ? 'border-red-500/70' : 'border-[#2b2f42]'
                   }`}
                 />
-                <button
-                  type="button"
-                  aria-label="Pick from date"
-                  onClick={() =>
-                    setCalendarTarget((cur) => (cur === 'from' ? null : 'from'))
-                  }
-                  className={`flex h-[30px] w-9 shrink-0 items-center justify-center rounded-md border text-gray-300 transition-colors cursor-pointer ${
-                    calendarTarget === 'from'
-                      ? 'border-indigo-500 bg-indigo-500/15'
-                      : 'border-[#2b2f42] hover:bg-[#1e2333]'
-                  }`}
-                >
-                  <CalendarIcon />
-                </button>
               </div>
             </div>
 
@@ -368,20 +355,6 @@ export function DatabaseDateRangePicker({
                     toInput && !parseYmd(toInput) ? 'border-red-500/70' : 'border-[#2b2f42]'
                   }`}
                 />
-                <button
-                  type="button"
-                  aria-label="Pick to date"
-                  onClick={() =>
-                    setCalendarTarget((cur) => (cur === 'to' ? null : 'to'))
-                  }
-                  className={`flex h-[30px] w-9 shrink-0 items-center justify-center rounded-md border text-gray-300 transition-colors cursor-pointer ${
-                    calendarTarget === 'to'
-                      ? 'border-indigo-500 bg-indigo-500/15'
-                      : 'border-[#2b2f42] hover:bg-[#1e2333]'
-                  }`}
-                >
-                  <CalendarIcon />
-                </button>
               </div>
             </div>
 
@@ -408,10 +381,13 @@ export function DatabaseDateRangePicker({
               </button>
             </div>
 
-            {/* Legend for active SQLite database entries */}
-            <div className="mt-4 flex items-center gap-1.5 border-t border-[#222533] pt-3 text-[11px] text-gray-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" aria-hidden />
-              <span>Day has recorded transmissions</span>
+            {/* Hint & Legend */}
+            <div className="mt-3 text-[11px] text-gray-400 space-y-1">
+              <p>Click two days on the calendar to select a range.</p>
+              <div className="flex items-center gap-1.5 pt-1 border-t border-[#222533]">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0" aria-hidden />
+                <span>Day has recorded transmissions</span>
+              </div>
             </div>
           </div>
 
@@ -423,7 +399,8 @@ export function DatabaseDateRangePicker({
               to={draftToDate}
               maxDate={new Date()}
               activeDateStrings={activeSet}
-              onPick={onPickCalendarDay}
+              onPick={handleCalendarDayPick}
+              onRangeSelect={handleCalendarRangeSelect}
             />
           </div>
         </div>

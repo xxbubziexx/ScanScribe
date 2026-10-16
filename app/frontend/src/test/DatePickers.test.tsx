@@ -8,18 +8,18 @@ import { DatabaseDateSinglePicker } from '@/components/database/DatabaseDateSing
 import type { TimeRangeValue } from '@/components/ui/timeRange'
 
 describe('RangeCalendar component', () => {
-  it('renders days and fires onPick callback when clicking a day', async () => {
+  it('renders days and completes range selection across two clicks', async () => {
     const user = userEvent.setup()
-    const handlePick = vi.fn()
-    const testDate = new Date(2026, 9, 15) // October 15, 2026
+    const handleRangeSelect = vi.fn()
+    const testDate = new Date(2026, 9, 31) // October 31, 2026
 
     render(
       <RangeCalendar
         mode="range"
-        from={new Date(2026, 9, 5)}
-        to={new Date(2026, 9, 10)}
+        from={new Date(2026, 9, 1)}
+        to={new Date(2026, 9, 2)}
         maxDate={testDate}
-        onPick={handlePick}
+        onRangeSelect={handleRangeSelect}
       />,
     )
 
@@ -28,11 +28,45 @@ describe('RangeCalendar component', () => {
     expect(screen.getByText('Su')).toBeInTheDocument()
     expect(screen.getByText('Mo')).toBeInTheDocument()
 
-    // Find day button for Oct 5
-    const dayBtn = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 5).toDateString(), 'i') })
-    expect(dayBtn).toBeInTheDocument()
-    await user.click(dayBtn)
-    expect(handlePick).toHaveBeenCalled()
+    // Click day 5 (start of new range)
+    const day5 = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 5).toDateString(), 'i') })
+    await user.click(day5)
+
+    // Click day 12 (end of new range)
+    const day12 = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 12).toDateString(), 'i') })
+    await user.click(day12)
+
+    expect(handleRangeSelect).toHaveBeenCalledWith(
+      new Date(2026, 9, 5),
+      new Date(2026, 9, 12),
+    )
+  })
+
+  it('corrects inverted range selection when clicking later date then earlier date', async () => {
+    const user = userEvent.setup()
+    const handleRangeSelect = vi.fn()
+    const testDate = new Date(2026, 9, 31)
+
+    render(
+      <RangeCalendar
+        mode="range"
+        from={null}
+        to={null}
+        maxDate={testDate}
+        onRangeSelect={handleRangeSelect}
+      />,
+    )
+
+    // Click day 20 first, then day 10
+    const day20 = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 20).toDateString(), 'i') })
+    const day10 = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 10).toDateString(), 'i') })
+    await user.click(day20)
+    await user.click(day10)
+
+    expect(handleRangeSelect).toHaveBeenCalledWith(
+      new Date(2026, 9, 10),
+      new Date(2026, 9, 20),
+    )
   })
 
   it('renders SQLite active dots for days with data', () => {
@@ -76,6 +110,28 @@ describe('TimeRangePicker component', () => {
     await user.click(presetBtn)
     expect(handleChange).toHaveBeenCalledWith({ kind: 'preset', presetId: '6h' })
   })
+
+  it('allows clicking two days on calendar to immediately set absolute range', async () => {
+    const user = userEvent.setup()
+    const handleChange = vi.fn()
+    const val: TimeRangeValue = { kind: 'preset', presetId: 'today' }
+
+    render(<TimeRangePicker value={val} onChange={handleChange} />)
+
+    await user.click(screen.getByRole('button', { name: /today/i }))
+
+    // Click day 5 then day 10
+    const day5 = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 5).toDateString(), 'i') })
+    const day10 = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 10).toDateString(), 'i') })
+    await user.click(day5)
+    await user.click(day10)
+
+    expect(handleChange).toHaveBeenCalled()
+    const lastCall = handleChange.mock.calls[handleChange.mock.calls.length - 1][0]
+    expect(lastCall.kind).toBe('absolute')
+    expect(lastCall.from.getDate()).toBe(5)
+    expect(lastCall.to.getDate()).toBe(10)
+  })
 })
 
 describe('DatabaseDateRangePicker component', () => {
@@ -107,6 +163,30 @@ describe('DatabaseDateRangePicker component', () => {
     const clearBtn = screen.getByRole('button', { name: /^clear$/i })
     await user.click(clearBtn)
     expect(handleChange).toHaveBeenCalledWith('', '')
+  })
+
+  it('immediately triggers onChange when two days are clicked on the calendar', async () => {
+    const user = userEvent.setup()
+    const handleChange = vi.fn()
+
+    render(
+      <DatabaseDateRangePicker
+        from=""
+        to=""
+        onChange={handleChange}
+        activeDates={[]}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /date range/i }))
+
+    // Click day 3 then day 8
+    const day3 = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 3).toDateString(), 'i') })
+    const day8 = screen.getByRole('button', { name: new RegExp(new Date(2026, 9, 8).toDateString(), 'i') })
+    await user.click(day3)
+    await user.click(day8)
+
+    expect(handleChange).toHaveBeenCalledWith('2026-10-03', '2026-10-08')
   })
 })
 
