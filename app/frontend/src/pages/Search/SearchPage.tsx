@@ -531,11 +531,10 @@ export function SearchPage() {
                       <button
                         type="button"
                         onClick={() => toggleAudio(entry.id, entry.audio_path)}
-                        className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
-                          isPlaying
+                        className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${isPlaying
                             ? 'bg-amber-600 text-white'
                             : 'bg-indigo-600/30 text-indigo-200 hover:bg-indigo-600/50'
-                        }`}
+                          }`}
                         title={isPlaying ? 'Stop audio' : 'Play transmission audio'}
                       >
                         {isPlaying ? <StopIcon className="h-3 w-3" /> : <PlayIcon className="h-3 w-3" />}

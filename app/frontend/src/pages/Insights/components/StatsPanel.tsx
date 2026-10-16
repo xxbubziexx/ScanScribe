@@ -63,11 +63,11 @@ export function StatsPanel({
             <span className="ss-insights-date">
               {dateFrom === dateTo || !dateTo
                 ? new Date(activeDateLabel + 'T00:00:00').toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
                 : `${dateFrom} → ${dateTo}`}
             </span>
           )}

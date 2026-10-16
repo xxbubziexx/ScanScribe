@@ -295,11 +295,10 @@ export function DatabaseDateRangePicker({
                   <button
                     type="button"
                     onClick={() => handlePresetSelect(p)}
-                    className={`flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-xs transition-colors cursor-pointer ${
-                      selected
+                    className={`flex min-h-9 w-full items-center justify-between gap-3 rounded-md px-3 text-left text-xs transition-colors cursor-pointer ${selected
                         ? 'bg-indigo-500/15 text-white font-medium'
                         : 'text-gray-300 hover:bg-[#1e2333]'
-                    }`}
+                      }`}
                   >
                     <span className="whitespace-nowrap">{p.label}</span>
                     {selected && <span aria-hidden="true">&#10003;</span>}
@@ -331,9 +330,8 @@ export function DatabaseDateRangePicker({
                   }}
                   placeholder="YYYY-MM-DD"
                   spellCheck={false}
-                  className={`${inputClass} ${
-                    fromInput && !parseYmd(fromInput) ? 'border-red-500/70' : 'border-[#2b2f42]'
-                  }`}
+                  className={`${inputClass} ${fromInput && !parseYmd(fromInput) ? 'border-red-500/70' : 'border-[#2b2f42]'
+                    }`}
                 />
               </div>
             </div>
@@ -356,9 +354,8 @@ export function DatabaseDateRangePicker({
                   }}
                   placeholder="YYYY-MM-DD"
                   spellCheck={false}
-                  className={`${inputClass} ${
-                    toInput && !parseYmd(toInput) ? 'border-red-500/70' : 'border-[#2b2f42]'
-                  }`}
+                  className={`${inputClass} ${toInput && !parseYmd(toInput) ? 'border-red-500/70' : 'border-[#2b2f42]'
+                    }`}
                 />
               </div>
             </div>
