@@ -9,7 +9,7 @@ import type {
   ChatMessage,
   ToolCallRecord,
 } from '@/types/chat'
-import { TimeScopeBar } from './components/TimeScopeBar'
+import { IntelHeader } from './components/IntelHeader'
 import { ChatMessageList } from './components/ChatMessageList'
 import { ChatInputBox } from './components/ChatInputBox'
 import { AudioControlPanel } from './components/AudioControlPanel'
@@ -360,35 +360,19 @@ export function IntelPage() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#0c0e14]">
-        {/* Top Header / Scope Bar */}
-        <div className="flex items-center justify-between px-4 py-2 bg-[#141721] border-b border-[#222533]">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-1 text-gray-400 hover:text-gray-100 mr-1"
-            >
-              ☰
-            </button>
-            <h1 className="text-sm font-semibold text-gray-200 truncate">
-              {activeThreadDetail?.title || 'Scanner Intelligence'}
-            </h1>
-          </div>
-          <div className="text-xs text-gray-500 font-mono">
-            {threads.length} Threads Stored
-          </div>
-        </div>
-
-        {/* Time Scope & Filter Controls */}
-        <TimeScopeBar
+        {/* Professional Instrument-Grade Intel Header */}
+        <IntelHeader
+          title={activeThreadDetail?.title || 'Scanner Intelligence'}
+          threadCount={threads.length}
           showTools={showTools}
           onChangeShowTools={setShowTools}
           showThinking={showThinking}
           onChangeShowThinking={setShowThinking}
-          disabled={isStreaming}
           audioCount={citedTransmissionsList.length}
           audioPanelOpen={audioPanelOpen}
           onToggleAudioPanel={() => setAudioPanelOpen(!audioPanelOpen)}
+          isStreaming={isStreaming}
+          onOpenSidebar={() => setSidebarOpen(true)}
         />
 
         {/* Conversation Message List */}
