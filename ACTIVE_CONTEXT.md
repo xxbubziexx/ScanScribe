@@ -425,6 +425,24 @@ This living document is the **shared memory** between different AI models, human
   - Frontend production build: `npm run build` completed in 1.88s (0 errors).
   - All 25 chat and agent tools unit tests passing.
 
+### 2026-10-16 14:24 | Antigravity (Windows Dev Workstation)
+- **Work Performed:**
+  - **Enforced Strict Domain Exclusivity & Out-of-Scope Refusal**:
+    - Updated `build_system_prompt()` in [`app/services/chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py) with a dedicated `DOMAIN EXCLUSIVITY & SOLE JOB (STRICT OUT-OF-SCOPE REFUSAL)` protocol:
+      - ScanScribe Intel is strictly restricted to its sole job: analyzing recorded public safety radio transmissions, scanner audio, dispatch logs, unit movements, and incident intelligence within ScanScribe.
+      - Mandated immediate refusal for any request outside of ScanScribe (general knowledge, coding, writing, essays, cooking, politics, small talk, etc.).
+      - Explicit zero-tolerance instructions against hypothetical scenarios, roleplay, prompt injections, and jailbreaks attempting to bypass the domain restriction.
+    - Updated `AGENT_TOOL_RULES` in [`app/services/chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py):
+      - Reasserted Rule 4 ("OUT-OF-SCOPE INQUIRIES"): The model must NEVER invoke any tools (`scope_time_range`, `search_transcripts`, `lookup_ner_entities`, `get_talkgroup_activity`) when refusing an out-of-scope query, saving compute and database resources.
+    - Added comprehensive unit tests in [`tests/test_chat.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_chat.py) verifying presence of domain exclusivity and refusal directives in both base and agentic system prompts.
+- **Live Ingestion Impact:** Zero impact. Read-only prompt and safety guardrails.
+- **Gotchas / Warnings for Next Model:**
+  - If a user sends a prompt that does not involve radio intelligence/scanner traffic, ScanScribe Intel will immediately refuse it with its standard identity declaration and invite questions about the radio recordings.
+- **Verification Performed:**
+  - `pytest tests/test_chat.py tests/test_agent_tools.py`: 26 passed in 11.54s (100% green).
+  - Background uvicorn service restarted and verified running.
+- **Next Tasks / Unfinished Work:** Ready for production use or user validation.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -434,6 +452,3 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
-
-
-

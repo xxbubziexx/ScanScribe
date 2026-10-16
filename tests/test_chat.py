@@ -15,6 +15,7 @@ from app.services.chat_context import (
     extract_cited_ids,
     format_context_block,
     build_system_prompt,
+    build_agent_system_prompt,
     query_transmissions,
 )
 
@@ -184,3 +185,13 @@ def test_talkgroups_listing(client, chat_auth):
     res = client.get("/api/chat/talkgroups", headers=headers)
     assert res.status_code == 200
     assert isinstance(res.json(), list)
+
+
+def test_system_prompt_domain_exclusivity():
+    base = build_system_prompt()
+    agent = build_agent_system_prompt()
+    assert "DOMAIN EXCLUSIVITY & SOLE JOB" in base
+    assert "STRICT OUT-OF-SCOPE REFUSAL" in base
+    assert "DOMAIN EXCLUSIVITY & SOLE JOB" in agent
+    assert "OUT-OF-SCOPE INQUIRIES" in agent
+
