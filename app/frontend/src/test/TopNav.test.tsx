@@ -52,6 +52,7 @@ describe('TopNav mobile navigation drawer', () => {
     expect(within(mobileNav).getByRole('link', { name: /command center/i })).toBeInTheDocument()
     expect(within(mobileNav).getByRole('link', { name: /audio feed/i })).toBeInTheDocument()
     expect(within(mobileNav).getByRole('link', { name: /insights/i })).toBeInTheDocument()
+    expect(within(mobileNav).getByRole('link', { name: /search/i })).toBeInTheDocument()
     expect(within(mobileNav).getByRole('link', { name: /events/i })).toBeInTheDocument()
     expect(within(mobileNav).queryByRole('link', { name: /database/i })).not.toBeInTheDocument()
     expect(within(mobileNav).queryByRole('link', { name: /users/i })).not.toBeInTheDocument()

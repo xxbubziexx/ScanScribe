@@ -13,6 +13,7 @@ interface ActivityChartProps {
   data: ActivityPoint[]
   view: InsightsView
   onHourClick?: (hour: number) => void
+  isMultiDay?: boolean
 }
 
 function parseHourLabel(label: string): number | null {
@@ -76,8 +77,8 @@ function CustomTooltip({ active, payload, label, canClick }: CustomTooltipProps)
   )
 }
 
-export function ActivityChart({ data, view, onHourClick }: ActivityChartProps) {
-  const canClick = view === 'hourly' && !!onHourClick
+export function ActivityChart({ data, view, onHourClick, isMultiDay }: ActivityChartProps) {
+  const canClick = view === 'hourly' && !isMultiDay && !!onHourClick
 
   return (
     <div className="w-full">

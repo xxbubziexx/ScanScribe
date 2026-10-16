@@ -69,6 +69,8 @@ export const eventsApi = {
     monitorId?: number
     status?: string
     q?: string
+    dateFrom?: string
+    dateTo?: string
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
     limit?: number
@@ -78,6 +80,8 @@ export const eventsApi = {
     if (typeof args.monitorId === 'number') sp.set('monitor_id', String(args.monitorId))
     if (args.status) sp.set('status', args.status)
     if (args.q) sp.set('q', args.q)
+    if (args.dateFrom) sp.set('date_from', args.dateFrom)
+    if (args.dateTo) sp.set('date_to', args.dateTo)
     if (args.sortBy) sp.set('sort_by', args.sortBy)
     if (args.sortOrder) sp.set('sort_order', args.sortOrder)
     sp.set('limit', String(args.limit ?? 50))
@@ -166,6 +170,8 @@ export const eventsApi = {
     talkgroup?: string
     logEntryId?: number
     q?: string
+    dateFrom?: string
+    dateTo?: string
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
     limit?: number
@@ -176,6 +182,8 @@ export const eventsApi = {
     if (args.talkgroup) sp.set('talkgroup', args.talkgroup)
     if (typeof args.logEntryId === 'number') sp.set('log_entry_id', String(args.logEntryId))
     if (args.q) sp.set('q', args.q)
+    if (args.dateFrom) sp.set('date_from', args.dateFrom)
+    if (args.dateTo) sp.set('date_to', args.dateTo)
     if (args.sortBy) sp.set('sort_by', args.sortBy)
     if (args.sortOrder) sp.set('sort_order', args.sortOrder)
     sp.set('limit', String(args.limit ?? 50))
@@ -190,6 +198,8 @@ export const eventsApi = {
     logEntryId?: number
     spanStoreId?: number
     q?: string
+    dateFrom?: string
+    dateTo?: string
     sortBy?: string
     sortOrder?: 'asc' | 'desc'
     limit?: number
@@ -202,6 +212,8 @@ export const eventsApi = {
     if (typeof args.logEntryId === 'number') sp.set('log_entry_id', String(args.logEntryId))
     if (typeof args.spanStoreId === 'number') sp.set('span_store_id', String(args.spanStoreId))
     if (args.q) sp.set('q', args.q)
+    if (args.dateFrom) sp.set('date_from', args.dateFrom)
+    if (args.dateTo) sp.set('date_to', args.dateTo)
     if (args.sortBy) sp.set('sort_by', args.sortBy)
     if (args.sortOrder) sp.set('sort_order', args.sortOrder)
     sp.set('limit', String(args.limit ?? 50))
@@ -213,11 +225,15 @@ export const eventsApi = {
 export async function downloadEventsExportHeaders(args: {
   monitorId?: number
   status?: string
+  dateFrom?: string
+  dateTo?: string
   limit?: number
 }): Promise<void> {
   const sp = new URLSearchParams()
   if (typeof args.monitorId === 'number') sp.set('monitor_id', String(args.monitorId))
   if (args.status) sp.set('status', args.status)
+  if (args.dateFrom) sp.set('date_from', args.dateFrom)
+  if (args.dateTo) sp.set('date_to', args.dateTo)
   sp.set('limit', String(args.limit ?? 10000))
   const token = getToken()
   const res = await fetch(`${BASE}${EVENTS_API}/events/export-headers?${sp.toString()}`, {

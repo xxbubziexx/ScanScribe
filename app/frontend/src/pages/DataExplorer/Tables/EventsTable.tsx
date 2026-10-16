@@ -2,6 +2,8 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { downloadEventsExportHeaders, eventsApi } from '@/lib/events'
+import { logsApi } from '@/lib/logs'
+import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import type { EventDetailResponse, EventListItem } from '@/types/events'
@@ -208,12 +210,21 @@ export function EventsTable() {
   const [status, setStatus] = useState<string>('')
   const [search, setSearch] = useState<string>('')
   const [debouncedSearch, setDebouncedSearch] = useState<string>('')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [pageSize, setPageSize] = useState<number>(50)
   const [page, setPage] = useState<number>(1)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState<boolean>(false)
+
+  const activeDatesQuery = useQuery({
+    queryKey: ['database-active-dates'],
+    queryFn: () => logsApi.activeDates(),
+    staleTime: 5 * 60_000,
+  })
+  const activeDateList = activeDatesQuery.data?.dates
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(search), 400)
@@ -222,7 +233,7 @@ export function EventsTable() {
 
   useEffect(() => {
     setPage(1)
-  }, [monitorId, status, debouncedSearch, sortBy, sortOrder, pageSize])
+  }, [monitorId, status, debouncedSearch, dateFrom, dateTo, sortBy, sortOrder, pageSize])
 
   const monitorsQuery = useQuery({
     queryKey: ['events-monitors'],
@@ -246,6 +257,8 @@ export function EventsTable() {
       monitorId,
       status,
       debouncedSearch,
+      dateFrom,
+      dateTo,
       sortBy,
       sortOrder,
     ],
@@ -254,6 +267,8 @@ export function EventsTable() {
         monitorId: monitorId ? Number.parseInt(monitorId, 10) : undefined,
         status: status || undefined,
         q: debouncedSearch.trim() || undefined,
+        dateFrom: dateFrom.trim() || undefined,
+        dateTo: dateTo.trim() || undefined,
         sortBy,
         sortOrder,
         limit: pageSize,
@@ -281,6 +296,8 @@ export function EventsTable() {
       await downloadEventsExportHeaders({
         monitorId: monitorId ? Number.parseInt(monitorId, 10) : undefined,
         status: status || undefined,
+        dateFrom: dateFrom.trim() || undefined,
+        dateTo: dateTo.trim() || undefined,
       })
       addToast('Events exported successfully', 'success')
     } catch (e) {
@@ -330,6 +347,16 @@ export function EventsTable() {
             <option value="open">Open</option>
             <option value="closed">Closed</option>
           </select>
+
+          <DatabaseDateRangePicker
+            from={dateFrom}
+            to={dateTo}
+            onChange={(f, t) => {
+              setDateFrom(f)
+              setDateTo(t)
+            }}
+            activeDates={activeDateList}
+          />
 
           <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="event-search">
             Search

@@ -1,6 +1,6 @@
 import type { InsightsSummary, InsightsView, TrendData, ActivityPoint } from '@/types/insights'
 import { OdometerValue } from '@/components/ui/OdometerValue'
-import { DatabaseDateSinglePicker } from '@/components/database/DatabaseDateSinglePicker'
+import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { ActivityChart } from './ActivityChart'
 
 function TrendBadge({ trend }: { trend?: TrendData }) {
@@ -17,21 +17,23 @@ function TrendBadge({ trend }: { trend?: TrendData }) {
   )
 }
 
-const VIEW_OPTIONS: { value: InsightsView; label: string }[] = [
-  { value: 'hourly', label: 'Hourly' },
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-]
+function ChartIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M2 13.5h12M4 10.5v-3M8 10.5v-6M12 10.5v-8" strokeLinecap="round" />
+    </svg>
+  )
+}
 
 interface StatsPanelProps {
   summary: InsightsSummary | null
   liveCpm: number | null
   activity: ActivityPoint[]
   view: InsightsView
-  date: string
+  dateFrom: string
+  dateTo: string
   activeDates: string[]
-  onViewChange: (v: InsightsView) => void
-  onDateChange: (d: string) => void
+  onDateRangeChange: (from: string, to: string) => void
   /** When omitted, chart hour clicks do nothing. */
   onHourClick?: (hour: number) => void
 }
@@ -41,54 +43,42 @@ export function StatsPanel({
   liveCpm,
   activity,
   view,
-  date,
+  dateFrom,
+  dateTo,
   activeDates,
-  onViewChange,
-  onDateChange,
+  onDateRangeChange,
   onHourClick,
 }: StatsPanelProps) {
   const s = summary
   const cpm = liveCpm ?? s?.calls_per_minute ?? 0
+  const activeDateLabel = dateTo || dateFrom
 
   return (
     <div className="ss-glass-panel">
       <div className="ss-insights-head">
-        <h2 className="ss-insights-title">
-          📈 Activity Statistics
-          {date && (
+        <h2 className="ss-insights-title flex items-center gap-2">
+          <ChartIcon className="h-4 w-4 text-indigo-400" />
+          <span>Activity Statistics</span>
+          {activeDateLabel && (
             <span className="ss-insights-date">
-              {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
+              {dateFrom === dateTo || !dateTo
+                ? new Date(activeDateLabel + 'T00:00:00').toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })
+                : `${dateFrom} → ${dateTo}`}
             </span>
           )}
         </h2>
         <div className="ss-insights-controls">
-          <DatabaseDateSinglePicker
-            value={date}
-            onChange={onDateChange}
+          <DatabaseDateRangePicker
+            from={dateFrom}
+            to={dateTo}
+            onChange={onDateRangeChange}
             activeDates={activeDates}
-            restrictToActive={false}
-            aria-label="Insights date"
           />
-
-          <div className="ss-seg">
-            {VIEW_OPTIONS.map(({ value, label }) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => onViewChange(value)}
-                className={
-                  view === value ? 'ss-seg-btn ss-seg-btn--on' : 'ss-seg-btn'
-                }
-              >
-                {label}
-              </button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -126,7 +116,11 @@ export function StatsPanel({
               suffix: 's',
               decimals: 1,
             },
-            { label: 'Peak Hour', value: s?.peak_hour, decimals: 0 },
+            {
+              label: dateFrom && dateTo && dateFrom !== dateTo ? 'Peak Day' : 'Peak Hour',
+              value: s?.peak_hour,
+              decimals: 0,
+            },
           ] satisfies {
             label: string
             value: number | string | null | undefined
@@ -154,7 +148,12 @@ export function StatsPanel({
         ))}
       </div>
 
-      <ActivityChart data={activity} view={view} onHourClick={onHourClick} />
+      <ActivityChart
+        data={activity}
+        view={view}
+        onHourClick={onHourClick}
+        isMultiDay={dateFrom !== dateTo && !!dateFrom && !!dateTo}
+      />
     </div>
   )
 }

@@ -70,26 +70,41 @@ async def get_live_cpm(
 @router.get("/stats")
 async def get_insights_stats(
     date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
+    date_from: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
+    date_to: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
     view: str = Query("hourly", description="View type: hourly, daily, weekly"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db),
     events_db: Session = Depends(get_events_db),
 ):
-    """Get insights statistics for a given date and view type."""
-    if date:
-        try:
-            target_date = datetime.strptime(date, "%Y-%m-%d").date()
-        except ValueError:
-            target_date = datetime.now().date()
-    else:
-        target_date = datetime.now().date()
+    """Get insights statistics for a given date or date range and view type."""
+    start_str = date_from or date
+    end_str = date_to or date or start_str
 
-    return compute_insights_stats(db, target_date, view, events_db=events_db)
+    if start_str:
+        try:
+            target_start = datetime.strptime(start_str, "%Y-%m-%d").date()
+        except ValueError:
+            target_start = datetime.now().date()
+    else:
+        target_start = datetime.now().date()
+
+    if end_str:
+        try:
+            target_end = datetime.strptime(end_str, "%Y-%m-%d").date()
+        except ValueError:
+            target_end = target_start
+    else:
+        target_end = target_start
+
+    return compute_insights_stats(db, target_start, view, date_to=target_end, events_db=events_db)
 
 
 @router.get("/search")
 async def search_transcriptions(
     date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
+    date_from: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
+    date_to: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
     keyword: str = Query("", description="Keyword to search in transcripts"),
     talkgroup: Optional[List[str]] = Query(None, description="Filter by talkgroup (multiple allowed)"),
     hour: str = Query("", description="Filter by hour (0-23)"),
@@ -99,17 +114,28 @@ async def search_transcriptions(
     db: Session = Depends(get_logs_db),
     events_db: Session = Depends(get_events_db),
 ):
-    """Search and filter transcriptions."""
-    if date:
-        try:
-            target_date = datetime.strptime(date, "%Y-%m-%d").date()
-        except ValueError:
-            target_date = datetime.now().date()
-    else:
-        target_date = datetime.now().date()
+    """Search and filter transcriptions across date or date range."""
+    start_str = date_from or date
+    end_str = date_to or date or start_str
 
-    start = datetime.combine(target_date, datetime.min.time())
-    end = datetime.combine(target_date, datetime.max.time())
+    if start_str:
+        try:
+            target_start = datetime.strptime(start_str, "%Y-%m-%d").date()
+        except ValueError:
+            target_start = datetime.now().date()
+    else:
+        target_start = datetime.now().date()
+
+    if end_str:
+        try:
+            target_end = datetime.strptime(end_str, "%Y-%m-%d").date()
+        except ValueError:
+            target_end = target_start
+    else:
+        target_end = target_start
+
+    start = datetime.combine(min(target_start, target_end), datetime.min.time())
+    end = datetime.combine(max(target_start, target_end), datetime.max.time())
 
     query = db.query(LogEntry).filter(
         LogEntry.timestamp >= start,

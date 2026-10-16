@@ -2,6 +2,8 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { eventsApi } from '@/lib/events'
+import { logsApi } from '@/lib/logs'
+import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import type { SpanStoreRow } from '@/types/events'
@@ -64,12 +66,21 @@ export function SpansTable() {
   const [logEntryId, setLogEntryId] = useState<string>('')
   const [search, setSearch] = useState<string>('')
   const [debouncedSearch, setDebouncedSearch] = useState<string>('')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('id')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [pageSize, setPageSize] = useState<number>(50)
   const [page, setPage] = useState<number>(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [jsonViewId, setJsonViewId] = useState<number | null>(null)
+
+  const activeDatesQuery = useQuery({
+    queryKey: ['database-active-dates'],
+    queryFn: () => logsApi.activeDates(),
+    staleTime: 5 * 60_000,
+  })
+  const activeDateList = activeDatesQuery.data?.dates
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(search), 400)
@@ -78,7 +89,7 @@ export function SpansTable() {
 
   useEffect(() => {
     setPage(1)
-  }, [monitorId, talkgroup, logEntryId, debouncedSearch, sortBy, sortOrder, pageSize])
+  }, [monitorId, talkgroup, logEntryId, debouncedSearch, dateFrom, dateTo, sortBy, sortOrder, pageSize])
 
   const monitorsQuery = useQuery({
     queryKey: ['events-monitors'],
@@ -106,6 +117,8 @@ export function SpansTable() {
       talkgroup,
       logEntryFilter,
       debouncedSearch,
+      dateFrom,
+      dateTo,
       sortBy,
       sortOrder,
     ],
@@ -115,6 +128,8 @@ export function SpansTable() {
         talkgroup: talkgroup.trim() || undefined,
         logEntryId: logEntryFilter,
         q: debouncedSearch.trim() || undefined,
+        dateFrom: dateFrom.trim() || undefined,
+        dateTo: dateTo.trim() || undefined,
         sortBy,
         sortOrder,
         limit: pageSize,
@@ -187,6 +202,16 @@ export function SpansTable() {
             placeholder="1234"
             value={logEntryId}
             onChange={(e) => setLogEntryId(e.target.value)}
+          />
+
+          <DatabaseDateRangePicker
+            from={dateFrom}
+            to={dateTo}
+            onChange={(f, t) => {
+              setDateFrom(f)
+              setDateTo(t)
+            }}
+            activeDates={activeDateList}
           />
 
           <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="span-search">

@@ -147,10 +147,15 @@ export function DatabaseDateRangePicker({
   useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => {
+      const path = e.composedPath ? e.composedPath() : []
       const t = e.target
-      if (t instanceof Node && !popRef.current?.contains(t) && !btnRef.current?.contains(t)) {
-        setOpen(false)
+      if (
+        (popRef.current && (popRef.current.contains(t as Node) || path.includes(popRef.current))) ||
+        (btnRef.current && (btnRef.current.contains(t as Node) || path.includes(btnRef.current)))
+      ) {
+        return
       }
+      setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)

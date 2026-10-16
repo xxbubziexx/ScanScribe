@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { downloadEventsExportHeaders, eventsApi } from '@/lib/events'
+import { logsApi } from '@/lib/logs'
+import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import { useAdminCapability } from '@/hooks/useAdminCapability'
@@ -30,6 +32,8 @@ export function EventsIncidentsPage() {
     if (s === 'all' || s === 'open' || s === 'closed') return s
     return 'open'
   })
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   useEffect(() => {
     const s = searchParams.get('status')
@@ -39,6 +43,13 @@ export function EventsIncidentsPage() {
   }, [searchParams])
   const [cardCount, setCardCount] = useState<number>(50)
   const [activeTab, setActiveTab] = useState<DetailTab>('event-thread')
+
+  const activeDatesQuery = useQuery({
+    queryKey: ['database-active-dates'],
+    queryFn: () => logsApi.activeDates(),
+    staleTime: 5 * 60_000,
+  })
+  const activeDateList = activeDatesQuery.data?.dates
 
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(min-width: 1024px)').matches : false,
@@ -59,11 +70,13 @@ export function EventsIncidentsPage() {
   })
 
   const listQuery = useQuery({
-    queryKey: ['events-list', monitor, status, cardCount],
+    queryKey: ['events-list', monitor, status, cardCount, dateFrom, dateTo],
     queryFn: () =>
       eventsApi.list({
         monitorId: monitor === 'all' ? undefined : monitor,
         status: status === 'all' ? undefined : status,
+        dateFrom: dateFrom.trim() || undefined,
+        dateTo: dateTo.trim() || undefined,
         limit: cardCount,
         offset: 0,
       }),
@@ -88,9 +101,20 @@ export function EventsIncidentsPage() {
   }, [listQuery.data?.items, monitorsQuery.data])
 
   const filtered = useMemo(() => {
+    let result = events
+    if (dateFrom || dateTo) {
+      result = result.filter((event) => {
+        const rawDate = event.incidentAt || event.createdAt
+        if (!rawDate) return true
+        const dateStr = rawDate.slice(0, 10)
+        if (dateFrom && dateStr < dateFrom) return false
+        if (dateTo && dateStr > dateTo) return false
+        return true
+      })
+    }
     const q = query.trim().toLowerCase()
-    if (!q.length) return events
-    return events.filter((event) => {
+    if (!q.length) return result
+    return result.filter((event) => {
       const hay = [
         event.eventId,
         typeDisplayFor(event),
@@ -108,7 +132,7 @@ export function EventsIncidentsPage() {
         .toLowerCase()
       return hay.includes(q)
     })
-  }, [events, query])
+  }, [events, query, dateFrom, dateTo])
 
   const urlEventId = searchParams.get('incident_id') || searchParams.get('event_id') || ''
 
@@ -176,6 +200,8 @@ export function EventsIncidentsPage() {
     await downloadEventsExportHeaders({
       monitorId: monitor === 'all' ? undefined : monitor,
       status: status === 'all' ? undefined : status,
+      dateFrom: dateFrom.trim() || undefined,
+      dateTo: dateTo.trim() || undefined,
     })
   }
 
@@ -302,6 +328,15 @@ export function EventsIncidentsPage() {
           <option value="open">Open</option>
           <option value="closed">Closed</option>
         </select>
+        <DatabaseDateRangePicker
+          from={dateFrom}
+          to={dateTo}
+          onChange={(f, t) => {
+            setDateFrom(f)
+            setDateTo(t)
+          }}
+          activeDates={activeDateList}
+        />
         <button
           type="button"
           className="ss-btn-ghost"
@@ -309,6 +344,8 @@ export function EventsIncidentsPage() {
             setQuery('')
             setStatus('all')
             setMonitor('all')
+            setDateFrom('')
+            setDateTo('')
           }}
         >
           Clear

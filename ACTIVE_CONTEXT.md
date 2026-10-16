@@ -478,7 +478,87 @@ This living document is the **shared memory** between different AI models, human
   - Full frontend vitest suite: **6 test files, 30 passed in 3.78s** (100% green).
   - TypeScript compilation: `npm run typecheck` passed with 0 errors.
   - Production build: `npm run build` compiled cleanly in 1.49s.
-- **Next Tasks / Unfinished Work:** Ready for deployment or user testing.
+---
+
+### 2026-10-16 16:15 | Gemini (Windows Dev Workstation)
+- **Work Performed:**
+  - **Calendar Interaction Bug Fix**:
+    - Identified why clicking the second day on Insights page caused problems: `RangeCalendar.tsx` had an erroneous `onPick?.(day)` call inside the second-click branch (`onRangeSelect?.(start, end)` was called, followed immediately by `onPick?.(day)` which reset `fromInput` to the single day and wiped out `toInput`). Removed the redundant `onPick` call on range completion.
+    - Protected `onDoc` click-outside logic across `DatabaseDateRangePicker.tsx` using `e.composedPath()` to guard against detached DOM elements during re-renders.
+    - Verified `DatabaseDateRangePicker` stays open upon second click so users can inspect their selected range band before hitting "Apply" or closing.
+  - **App-Wide Date Picker Deployment**:
+    - **Events & Incidents Page (`/events`, `pages/Events/Incidents/index.tsx`)**:
+      - Added `dateFrom` and `dateTo` state, active dates indicator query, and wired `<DatabaseDateRangePicker>` into the filters bar.
+      - Integrated date filtering into `filtered` useMemo (`incidentAt` or `createdAt` matching `[dateFrom, dateTo]`).
+      - Connected date window to CSV export (`downloadCsv`).
+      - Reset date window on "Clear" filter button.
+    - **Database Explorer Suite (`/data`)**:
+      - **Events Table (`EventsTable.tsx`)**: Outfitted with `DatabaseDateRangePicker`, active dates indicators, server-side filtering via `date_from` and `date_to` parameters, and updated CSV export.
+      - **Spans Table (`SpansTable.tsx`)**: Outfitted with `DatabaseDateRangePicker`, active dates indicators, and server-side filtering via `date_from` and `date_to`.
+      - **Entities Table (`EntitiesTable.tsx`)**: Outfitted with `DatabaseDateRangePicker`, active dates indicators, and server-side filtering via `date_from` and `date_to`.
+      - Note: Logs Table (`DatabasePage.tsx`) and Dataset (`DatasetPage.tsx`) were already equipped with `DatabaseDateRangePicker`.
+  - **Backend API & Router Updates**:
+    - Updated `GET /api/events/events` and `GET /api/events/events/export-headers` in [`incidents_router.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/events/incidents_router.py) to accept `date_from` and `date_to` queries and filter `Event.created_at`.
+    - Updated `GET /api/events/spans` and `GET /api/events/entities` in [`spans_router.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/events/spans_router.py) to accept `date_from` and `date_to` queries and filter `SpanStore.created_at` and `EntityObservation.ts`.
+    - Updated [`lib/events.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/lib/events.ts) client methods (`list`, `spanStore`, `entities`, `downloadEventsExportHeaders`) to forward `dateFrom` and `dateTo`.
+- **Live Ingestion Impact:** Zero impact. Radio ingestion loop, audio storage, and SQLite WAL integrity remain untouched.
+- **Gotchas / Warnings for Next Model:**
+  - `DatabaseDateRangePicker` can be placed anywhere in filter toolbars. When using it, remember to query `logsApi.activeDates()` so the small indigo activity indicator dots light up on dates with recorded audio.
+- **Verification Performed:**
+  - Backend pytest: **123 passed in 23.13s** (100% green).
+  - Frontend vitest: **6 test files, 30 passed in 3.64s** (100% green).
+  - TypeScript compilation: `npm run typecheck` passed with 0 errors.
+  - Production build: `npm run build` compiled successfully in 1.40s.
+  - **Multi-Day Graph Adaptation (`/insights`)**:
+    - Backend [`insights_engine.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/insights_engine.py) now provides `get_range_summary`, `get_range_activity`, `get_range_talkgroup_breakdown`, `get_all_range_talkgroups`, `get_range_recent_activity`, and `get_event_daily_range_counts`.
+    - When a range > 1 day is chosen, the engine generates daily data points across the exact date range (or weekly buckets if > 35 days).
+    - Summary cards calculate totals, unique talkgroups, average duration, and peak day across the full range.
+    - Updated [`app/routes/insights.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/insights.py) (`/stats` and `/search`) to accept `date_from` and `date_to`.
+    - Updated [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx) to automatically adapt `view` from `hourly` to `daily` (or `weekly` if > 35 days) when a multi-day range is selected, and return to `hourly` when a single day is chosen.
+    - Updated [`StatsPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/StatsPanel.tsx) to dynamically label the metric card "Peak Day" vs "Peak Hour".
+    - Updated [`SearchTab.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/tabs/SearchTab.tsx) to search transcriptions across the multi-day window.
+---
+
+### 2026-10-16 17:05 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - **Removed Obsolete Segmented Control (`ss-seg`) on Insights Page**:
+    - Removed manual `Hourly | Daily | Weekly` segmented toggle buttons (`.ss-seg`) from [`StatsPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/StatsPanel.tsx).
+    - Removed obsolete `.ss-seg`, `.ss-seg-btn`, and `.ss-seg-btn--on` CSS classes from [`insights.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/insights.css).
+    - In [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx), cleanly derived `view` state purely via `useMemo` based on `dateFrom` and `dateTo`:
+      - Single day (`dateFrom === dateTo`): `hourly` view.
+      - Multi-day <= 35 days: `daily` view.
+      - Multi-day > 35 days: `weekly` view.
+    - Prevents graph glitching caused by manual hourly view override on multi-day date ranges.
+- **Live Ingestion Impact:** Zero impact. Backend audio ingest and database remain unaffected.
+- **Gotchas / Warnings for Next Model:**
+  - `StatsPanel` no longer accepts `onViewChange` prop; graph resolution is automatically determined by the date range selected.
+- **Verification Performed:**
+  - TypeScript compilation: `npm run typecheck` passed with 0 errors.
+  - Frontend test suite: `vitest run` — **6 test files, 30 tests passed**.
+  - Production build: `npm run build` completed successfully.
+  - Backend test suite: `pytest tests/` — **123 tests passed in 22.93s** (100% green).
+---
+
+### 2026-10-16 17:32 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - **Dedicated Search & Investigation Suite (`/search`)**:
+    - Created dedicated [`SearchPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Search/SearchPage.tsx) accessible at route `/search` and added to main navigation in [`TopNav.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/layout/TopNav.tsx).
+    - Equipped `/search` with full-range `DatabaseDateRangePicker`, active audio indicator dots, keyword search, talkgroup multi-select, hour filter, sorting, audio playback with play/stop toggle, attached incident jump-links, and CSV export.
+    - URL query parameters (`date_from`, `date_to`, `keyword`, `talkgroup`, `hour`, `sort`, `limit`) automatically sync with browser history for shareable and bookmarkable searches.
+  - **Insights Visual Analytics Overhaul & Hour × Day Diurnal Heatmap**:
+    - Implemented `get_diurnal_heatmap(db, start_date, end_date)` in [`insights_engine.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/insights_engine.py) generating a 7-day (Sun–Sat) × 24-hour call count and duration intensity matrix.
+    - Created [`DiurnalHeatmap.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/DiurnalHeatmap.tsx) featuring subtle dark-mode intensity gradient, hour ticks, day summaries, floating interactive tooltip, and direct click-through drilldown to `/search?hour=H`.
+    - Decommissioned legacy tabs from [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx) (`TalkgroupTab`, `SummariesTab`, `RecentTab`, and `SearchTab`) turning `/insights` into a focused visual intelligence command deck.
+    - Removed cartoon emojis across Insights and Search components in favor of crisp SVG iconography and instrument-grade typography.
+- **Live Ingestion Impact:** Zero impact. Radio ingestion loop, audio storage, and SQLite WAL integrity remain untouched.
+- **Gotchas / Warnings for Next Model:**
+  - Legacy `tabs/` folder under `src/pages/Insights/` has been purged. Any transcription search links should navigate directly to `/search`.
+- **Verification Performed:**
+  - TypeScript compilation: `npm run typecheck` passed with 0 errors.
+  - Frontend test suite: `vitest run` — **6 test files, 30 tests passed** (100% green).
+  - Production build: `npm run build` compiled cleanly in 1.38s.
+  - Backend test suite: `pytest tests/` — **123 tests passed in 23.15s** (100% green).
+- **Next Tasks / Unfinished Work:** Expand on additional requested graph visualizations on `/insights` (e.g. Talkgroup Share of Voice, Incident Categories & Severity).
 
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
@@ -489,4 +569,6 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+
+
 

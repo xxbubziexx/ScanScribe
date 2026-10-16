@@ -9,8 +9,14 @@ import type {
 } from '@/types/insights'
 
 export const insights = {
-  stats: (date: string, view: InsightsView) =>
-    request<InsightsStats>(`/api/insights/stats?date=${date}&view=${view}`),
+  stats: (date: string, view: InsightsView, dateTo?: string) => {
+    const sp = new URLSearchParams({ date, view })
+    if (dateTo && dateTo !== date) {
+      sp.set('date_from', date)
+      sp.set('date_to', dateTo)
+    }
+    return request<InsightsStats>(`/api/insights/stats?${sp.toString()}`)
+  },
 
   liveCpm: () => request<LiveCpmResponse>('/api/insights/live-cpm'),
 

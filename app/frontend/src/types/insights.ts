@@ -50,12 +50,38 @@ export interface LogEntry {
   attached_events?: AttachedEventInfo[]
 }
 
+export interface HeatmapHourCell {
+  hour: number
+  label: string
+  count: number
+  duration: number
+}
+
+export interface HeatmapDayRow {
+  day: number // 0 = Sun .. 6 = Sat
+  day_label: string
+  hours: HeatmapHourCell[]
+  day_total: number
+}
+
+export interface DiurnalHeatmapData {
+  matrix: HeatmapDayRow[]
+  max_count: number
+  total_calls: number
+  total_airtime: number
+  peak_day: string
+  peak_hour: string
+  range_start: string
+  range_end: string
+}
+
 export interface InsightsStats {
   summary: InsightsSummary
   activity: ActivityPoint[]
   talkgroups: TalkgroupEntry[]
   talkgroups_all: TalkgroupEntry[]
   recent: LogEntry[]
+  heatmap?: DiurnalHeatmapData
 }
 
 export interface HourActivityEntry {

@@ -1,44 +1,29 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { useAdminCapability } from '@/hooks/useAdminCapability'
 import { insights } from '@/lib/insights'
-import type { InsightsTab, InsightsView, SearchFilters, TalkgroupEntry } from '@/types/insights'
+import type { InsightsView } from '@/types/insights'
 import { StatsPanel } from './components/StatsPanel'
-import { SearchTab } from './tabs/SearchTab'
-import { TalkgroupTab } from './tabs/TalkgroupTab'
-import { SummariesTab } from './tabs/SummariesTab'
-import { RecentTab } from './tabs/RecentTab'
-
-const TABS: { id: InsightsTab; label: string; shortLabel: string }[] = [
-  { id: 'search', label: '🔍 Search & Filter', shortLabel: '🔍 Search' },
-  { id: 'talkgroup', label: '📡 Talkgroup Activity', shortLabel: '📡 Talkgroups' },
-  { id: 'summaries', label: '📝 Summaries', shortLabel: '📝 Summaries' },
-  { id: 'recent', label: '🕐 Live Activity', shortLabel: '🕐 Live' },
-]
-
-const DEFAULT_FILTERS: SearchFilters = {
-  keyword: '',
-  talkgroups: [],
-  hour: '',
-  sort: 'newest',
-  limit: 50,
-}
+import { DiurnalHeatmap } from './components/DiurnalHeatmap'
 
 function todayIso() {
   return new Date().toISOString().split('T')[0]
 }
 
 export function InsightsPage() {
-  const { canAdmin } = useAdminCapability()
-  const viewOnly = !canAdmin
+  const navigate = useNavigate()
+  const [dateFrom, setDateFrom] = useState(todayIso())
+  const [dateTo, setDateTo] = useState(todayIso())
+  const isMultiDay = dateFrom !== dateTo && !!dateFrom && !!dateTo
 
-  const [date, setDate] = useState(todayIso())
-  const [view, setView] = useState<InsightsView>('hourly')
-  const [activeTab, setActiveTab] = useState<InsightsTab>(() => {
-    const saved = localStorage.getItem('insights_active_tab')
-    return (saved as InsightsTab) ?? 'search'
-  })
-  const [searchFilters, setSearchFilters] = useState<SearchFilters>(DEFAULT_FILTERS)
+  const view: InsightsView = useMemo(() => {
+    if (!isMultiDay) return 'hourly'
+    const d1 = new Date(dateFrom).getTime()
+    const d2 = new Date(dateTo).getTime()
+    const diffDays = Math.round(Math.abs(d2 - d1) / (1000 * 3600 * 24)) + 1
+    return diffDays > 35 ? 'weekly' : 'daily'
+  }, [dateFrom, dateTo, isMultiDay])
+
   const [liveCpm, setLiveCpm] = useState<number | null>(null)
   const cpmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -52,17 +37,19 @@ export function InsightsPage() {
 
   useEffect(() => {
     if (activeDates.length > 0) {
-      setDate(activeDates[activeDates.length - 1])
+      const last = activeDates[activeDates.length - 1]
+      setDateFrom(last)
+      setDateTo(last)
     }
   }, [activeDates.length]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: statsData } = useQuery({
-    queryKey: ['insights-stats', date, view],
-    queryFn: () => insights.stats(date, view),
+    queryKey: ['insights-stats', dateFrom, dateTo, view],
+    queryFn: () => insights.stats(dateFrom, view, dateTo),
     staleTime: 30_000,
     refetchInterval: 5_000,
     refetchIntervalInBackground: true,
-    enabled: !!date,
+    enabled: !!dateFrom,
   })
 
   useEffect(() => {
@@ -81,83 +68,42 @@ export function InsightsPage() {
     }
   }, [])
 
-  function switchTab(tab: InsightsTab) {
-    setActiveTab(tab)
-    localStorage.setItem('insights_active_tab', tab)
-  }
-
   function onHourClick(hour: number) {
-    setSearchFilters((f) => ({ ...f, hour: String(hour) }))
-    switchTab('search')
+    const params = new URLSearchParams()
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    params.set('hour', String(hour))
+    navigate(`/search?${params.toString()}`)
   }
 
-  function onTalkgroupClick(tg: string) {
-    setSearchFilters((f) => ({
-      ...f,
-      talkgroups: f.talkgroups.includes(tg) ? f.talkgroups : [...f.talkgroups, tg],
-    }))
-    switchTab('search')
+  const handleDateRangeChange = (from: string, to: string) => {
+    setDateFrom(from)
+    setDateTo(to)
   }
 
   const summary = statsData?.summary ?? null
   const activity = statsData?.activity ?? []
-  const talkgroups: TalkgroupEntry[] = statsData?.talkgroups ?? []
-  const allTalkgroups: TalkgroupEntry[] = statsData?.talkgroups_all ?? []
-  const recent = statsData?.recent ?? []
+  const heatmap = statsData?.heatmap
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-4">
       <StatsPanel
         summary={summary}
         liveCpm={liveCpm}
         activity={activity}
         view={view}
-        date={date}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
         activeDates={activeDates}
-        onViewChange={setView}
-        onDateChange={setDate}
+        onDateRangeChange={handleDateRangeChange}
         onHourClick={onHourClick}
       />
 
-      <div className="ss-insights-tabs">
-        <div className="ss-insights-tabrow" role="tablist">
-          {TABS.map(({ id, label, shortLabel }) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === id}
-              onClick={() => switchTab(id)}
-              className={
-                activeTab === id
-                  ? 'ss-insights-tab ss-insights-tab--active'
-                  : 'ss-insights-tab'
-              }
-            >
-              <span className="sm:hidden">{shortLabel}</span>
-              <span className="hidden sm:inline">{label}</span>
-            </button>
-          ))}
-        </div>
-
-        <div className="ss-insights-tabpanel">
-          {activeTab === 'search' && (
-            <SearchTab
-              date={date}
-              allTalkgroups={allTalkgroups}
-              filters={searchFilters}
-              onFiltersChange={setSearchFilters}
-              onTalkgroupFilter={() => switchTab('search')}
-              viewOnly={viewOnly}
-            />
-          )}
-          {activeTab === 'talkgroup' && (
-            <TalkgroupTab talkgroups={talkgroups} onTalkgroupClick={onTalkgroupClick} viewOnly={viewOnly} />
-          )}
-          {activeTab === 'summaries' && <SummariesTab date={date} viewOnly={viewOnly} />}
-          {activeTab === 'recent' && <RecentTab recent={recent} />}
-        </div>
-      </div>
+      <DiurnalHeatmap
+        data={heatmap}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+      />
     </div>
   )
 }

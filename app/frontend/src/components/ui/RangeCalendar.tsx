@@ -123,7 +123,6 @@ export function RangeCalendar({
       setPickingStart(null)
       setHoverDate(null)
       onRangeSelect?.(start, end)
-      onPick?.(day)
     }
   }
 

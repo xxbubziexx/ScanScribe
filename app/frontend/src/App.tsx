@@ -8,6 +8,7 @@ import { CommandCenterPage } from '@/pages/CommandCenter/CommandCenterPage'
 import { DashboardPage } from '@/pages/Dashboard/DashboardPage'
 import { InsightsPage } from '@/pages/Insights/InsightsPage'
 import { IntelPage } from '@/pages/Intel/IntelPage'
+import { SearchPage } from '@/pages/Search/SearchPage'
 import { DatabasePage } from '@/pages/Database/DatabasePage'
 
 import { DatasetPage } from '@/pages/DataExplorer/DatasetPage'
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/" element={<CommandCenterPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/insights" element={<InsightsPage />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/intel" element={<IntelPage />} />
           <Route path="/events" element={<EventsLayout />}>
 

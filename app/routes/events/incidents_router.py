@@ -48,6 +48,8 @@ async def list_events(
     monitor_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     q: Optional[str] = Query(None, max_length=500, description="Search in summary, location, units, transcript"),
+    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD) inclusive"),
+    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD) inclusive"),
     sort_by: Optional[str] = Query("updated_at", pattern="^(id|event_id|created_at|updated_at|closed_at|status|event_type|location)$"),
     sort_order: Optional[str] = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, ge=1, le=200),
@@ -62,6 +64,10 @@ async def list_events(
         query = query.filter(Event.monitor_id == monitor_id)
     if status:
         query = query.filter(Event.status == status)
+    if date_from and date_from.strip():
+        query = query.filter(Event.created_at >= f"{date_from.strip()} 00:00:00")
+    if date_to and date_to.strip():
+        query = query.filter(Event.created_at <= f"{date_to.strip()} 23:59:59.999999")
     if q and q.strip():
         term = f"%{q.strip()}%"
         query = query.filter(
@@ -138,6 +144,8 @@ async def list_events(
 async def export_events_normalized_headers(
     monitor_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
+    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD) inclusive"),
+    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD) inclusive"),
     limit: int = Query(10000, ge=1, le=50000),
     current_user: User = Depends(get_current_active_user),
     events_db: Session = Depends(get_events_db),
@@ -149,6 +157,10 @@ async def export_events_normalized_headers(
         q = q.filter(Event.monitor_id == monitor_id)
     if status:
         q = q.filter(Event.status == status)
+    if date_from and date_from.strip():
+        q = q.filter(Event.created_at >= f"{date_from.strip()} 00:00:00")
+    if date_to and date_to.strip():
+        q = q.filter(Event.created_at <= f"{date_to.strip()} 23:59:59.999999")
     rows = q.limit(limit).all()
     event_ids = [e.id for e in rows]
     monitors = {m.id: m.name for m in events_db.query(Monitor).all()}
