@@ -112,7 +112,10 @@ export function DatabaseDateSinglePicker({
   }
 
   return (
-    <div className="relative inline-block">
+    <div
+      className={`relative inline-block ${open ? 'z-50' : ''}`}
+      data-popover-open={open ? 'true' : undefined}
+    >
       {/* Trigger Button */}
       <button
         ref={btnRef}

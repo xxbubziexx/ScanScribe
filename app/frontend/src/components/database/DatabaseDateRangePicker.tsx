@@ -251,7 +251,10 @@ export function DatabaseDateRangePicker({
     'w-full rounded-md border bg-[#0c0e14] px-2.5 py-1.5 font-mono text-xs text-gray-100 outline-none transition-colors focus:border-indigo-500'
 
   return (
-    <div className="relative inline-block">
+    <div
+      className={`relative inline-block ${open ? 'z-50' : ''}`}
+      data-popover-open={open ? 'true' : undefined}
+    >
       <label className="ss-form-label mb-1 block" id={`${uid}-lbl`} htmlFor={`${uid}-btn`}>
         Date range
       </label>

@@ -270,7 +270,7 @@ export function SearchPage() {
   return (
     <div className="w-full space-y-4">
       {/* Search Header & Toolbar */}
-      <div className="ss-glass-panel flex flex-col gap-4">
+      <div className="ss-glass-panel relative z-30 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-4">
           <div className="flex items-center gap-2">
             <SearchIcon className="h-5 w-5 text-indigo-400" />

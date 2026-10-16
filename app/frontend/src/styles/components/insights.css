@@ -19,6 +19,11 @@
     @apply mb-4 rounded-xl border border-white/10 bg-white/5 p-3 backdrop-blur-sm sm:p-4;
   }
 
+  .ss-glass-panel:has([data-popover-open="true"]) {
+    position: relative;
+    z-index: 50;
+  }
+
   .ss-insights-head {
     @apply mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between;
   }

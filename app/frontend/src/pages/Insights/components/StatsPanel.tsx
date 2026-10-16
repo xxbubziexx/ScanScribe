@@ -54,7 +54,7 @@ export function StatsPanel({
   const activeDateLabel = dateTo || dateFrom
 
   return (
-    <div className="ss-glass-panel">
+    <div className="ss-glass-panel relative z-20">
       <div className="ss-insights-head">
         <h2 className="ss-insights-title flex items-center gap-2">
           <ChartIcon className="h-4 w-4 text-indigo-400" />
