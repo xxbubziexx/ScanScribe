@@ -608,6 +608,18 @@ This living document is the **shared memory** between different AI models, human
   - Tested `pytest tests/test_cli_update.py`: 5/5 tests passed in 0.76s.
 - **Next Tasks / Unfinished Work:** Ready for deployment.
 
+### 2026-10-16 19:18 | Antigravity (Windows Dev Workstation)
+- **Work Performed:**
+  - Updated the NER inspection matrix header in [`app/frontend/src/pages/Search/SearchPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Search/SearchPage.tsx) from `"Dispatched Units"` to `"Units Mentioned"`.
+  - Recompiled frontend production bundle into `app/frontend/dist/`.
+- **Live Ingestion Impact:** None. Cosmetic UI copy adjustment.
+- **Gotchas / Warnings for Next Model:** None.
+- **Verification Performed:**
+  - `npm run typecheck` passed (0 errors).
+  - Vitest frontend suite: 6/6 test files passed (30/30 tests).
+  - Production build: `npm run build` succeeded without error.
+- **Next Tasks / Unfinished Work:** Ready for deployment.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -617,4 +629,5 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+
 

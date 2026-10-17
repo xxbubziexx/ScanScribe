@@ -755,7 +755,7 @@ export function SearchPage() {
                           {/* Units */}
                           <div className="rounded border border-sky-500/20 bg-sky-950/20 p-2">
                             <div className="text-[10px] font-semibold text-sky-400 uppercase tracking-wider mb-1">
-                              Dispatched Units ({entities.units?.length ?? 0})
+                              Units Mentioned ({entities.units?.length ?? 0})
                             </div>
                             {entities.units && entities.units.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
