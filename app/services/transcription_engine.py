@@ -433,11 +433,29 @@ class TranscriptionEngine:
             skip_special_tokens=True
         )[0].strip()
         
-        # Confidence
-        if hasattr(generated_ids, 'sequences_scores'):
-            confidence = float(torch.exp(generated_ids.sequences_scores[0]))
-        else:
-            confidence = 0.85
+        # Confidence calculation (token-level probability)
+        confidence = 0.0
+        if hasattr(generated_ids, "sequences_scores") and generated_ids.sequences_scores is not None:
+            # Beam search: length_penalty=1.0 equals avg_logprob; exp() gives geometric mean confidence
+            raw_score = generated_ids.sequences_scores[0]
+            if torch.isfinite(raw_score):
+                confidence = float(torch.clamp(torch.exp(raw_score), 0.0, 1.0).item())
+        elif hasattr(generated_ids, "scores") and generated_ids.scores:
+            # Greedy decoding (beam_size=1): sequences_scores is absent, derive from logits
+            try:
+                transition_scores = self.model.compute_transition_scores(
+                    generated_ids.sequences,
+                    generated_ids.scores,
+                    normalize_logits=True
+                )
+                if transition_scores.numel() > 0:
+                    log_probs = transition_scores[0]
+                    valid = log_probs[torch.isfinite(log_probs)]
+                    if len(valid) > 0:
+                        confidence = float(torch.clamp(torch.exp(valid.mean()), 0.0, 1.0).item())
+                del transition_scores
+            except Exception as score_err:
+                logger.debug(f"Transition scores computation skipped: {score_err}")
         
         # Release tensor references explicitly to prevent caching allocator growth
         del input_features, generated_ids
