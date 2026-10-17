@@ -5,6 +5,7 @@ import { insights } from '@/lib/insights'
 import type { LogEntry, SearchFilters, TalkgroupEntry } from '@/types/insights'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { useAdminCapability } from '@/hooks/useAdminCapability'
+import { getSavedDateRange, saveDateRange } from '@/lib/dateSelection'
 
 function todayIso(): string {
   const d = new Date()
@@ -110,9 +111,11 @@ export function SearchPage() {
   const { canAdmin } = useAdminCapability()
   const viewOnly = !canAdmin
 
-  const initialDate = searchParams.get('date') || todayIso()
-  const [dateFrom, setDateFrom] = useState(searchParams.get('date_from') || initialDate)
-  const [dateTo, setDateTo] = useState(searchParams.get('date_to') || initialDate)
+  const saved = getSavedDateRange()
+  const initialFrom = searchParams.get('date_from') || searchParams.get('date') || saved?.dateFrom || todayIso()
+  const initialTo = searchParams.get('date_to') || searchParams.get('date') || saved?.dateTo || initialFrom
+  const [dateFrom, setDateFrom] = useState(initialFrom)
+  const [dateTo, setDateTo] = useState(initialTo)
 
   const [filters, setFilters] = useState<SearchFilters>({
     keyword: searchParams.get('keyword') || '',
@@ -335,6 +338,7 @@ export function SearchPage() {
               onChange={(f, t) => {
                 setDateFrom(f)
                 setDateTo(t)
+                saveDateRange(f, t)
               }}
             />
             {!viewOnly && (

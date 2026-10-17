@@ -4,6 +4,7 @@ import { WidgetInfoTooltip } from './WidgetInfoTooltip'
 
 interface RtfThroughputWidgetProps {
   data?: RtfTelemetry
+  isMultiDay?: boolean
 }
 
 function CpuPulseIcon({ className = '' }: { className?: string }) {
@@ -26,7 +27,7 @@ function GaugeSpeedIcon({ className = '' }: { className?: string }) {
   )
 }
 
-export function RtfThroughputWidget({ data }: RtfThroughputWidgetProps) {
+export function RtfThroughputWidget({ data, isMultiDay }: RtfThroughputWidgetProps) {
   const [hoveredHour, setHoveredHour] = useState<RtfHourlyPoint | null>(null)
 
   if (!data) {
@@ -186,7 +187,9 @@ export function RtfThroughputWidget({ data }: RtfThroughputWidgetProps) {
       {/* Hourly RTF Profile & Timeline */}
       <div className="mt-4 rounded-lg border border-white/5 bg-black/10 p-3">
         <div className="flex items-center justify-between text-xs">
-          <span className="font-medium text-gray-300">24-Hour RTF Processing Curve</span>
+          <span className="font-medium text-gray-300">
+            {isMultiDay ? 'Diurnal RTF Processing Profile (Aggregated Across Range)' : '24-Hour RTF Processing Curve'}
+          </span>
           <div className="flex items-center gap-3 text-[11px] text-gray-500">
             <span className="inline-flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />

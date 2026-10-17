@@ -338,10 +338,17 @@ def get_daily_summary(db: Session, target_date: date) -> Dict[str, Any]:
     minutes_in_period = 24 * 60
     calls_per_minute = round(total / minutes_in_period, 2) if minutes_in_period else 0
 
+    total_airtime = db.query(func.sum(LogEntry.duration)).filter(
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+        LogEntry.is_deleted.is_(False)
+    ).scalar() or 0.0
+
     return {
         "total": total,
         "unique_talkgroups": unique_tg,
         "avg_duration": float(avg_duration) if avg_duration else 0,
+        "total_airtime": round(float(total_airtime), 1),
         "peak_hour": peak_hour,
         "calls_per_minute": calls_per_minute
     }
@@ -640,10 +647,17 @@ def get_range_summary(db: Session, start_date: date, end_date: date) -> Dict[str
     minutes_in_period = max(1, days * 24 * 60)
     calls_per_minute = round(total / minutes_in_period, 2) if minutes_in_period else 0
 
+    total_airtime = db.query(func.sum(LogEntry.duration)).filter(
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+        LogEntry.is_deleted.is_(False)
+    ).scalar() or 0.0
+
     return {
         "total": total,
         "unique_talkgroups": unique_tg,
         "avg_duration": float(avg_duration) if avg_duration else 0,
+        "total_airtime": round(float(total_airtime), 1),
         "peak_hour": peak_label,
         "calls_per_minute": calls_per_minute,
         "range_days": days,
@@ -1185,9 +1199,157 @@ def _hour_drivers_and_incident(
 def get_traffic_anomaly_telemetry(
     db: Session,
     target_date: date,
-    events_db: Optional[Session] = None
+    end_date: Optional[date] = None,
+    events_db: Optional[Session] = None,
 ) -> Dict[str, Any]:
     """Calculate radio traffic anomaly and surge metrics comparing volume against diurnal baseline."""
+    if end_date is not None and end_date > target_date:
+        num_days = (end_date - target_date).days + 1
+        start = datetime.combine(target_date, datetime.min.time())
+        end = datetime.combine(end_date, datetime.max.time())
+
+        total_observed = db.query(func.count(LogEntry.id)).filter(
+            LogEntry.timestamp >= start,
+            LogEntry.timestamp <= end,
+            LogEntry.is_deleted.is_(False),
+        ).scalar() or 0
+
+        if total_observed == 0:
+            return {
+                "current_hour_label": f"{num_days}-Day Span",
+                "observed": 0,
+                "baseline": 0,
+                "surge_percentage": 0.0,
+                "z_score": 0.0,
+                "severity": "normal",
+                "status_label": "No traffic recorded",
+                "primary_driver": "",
+                "drivers": [],
+                "timeline": [],
+                "recent_anomalies": [],
+                "insufficient_data": True,
+                "is_multi_day": True,
+                "range_days": num_days,
+            }
+
+        trailing_start = target_date - timedelta(days=21)
+        hist_rows = db.query(
+            extract('dow', LogEntry.timestamp).label('dow'),
+            extract('hour', LogEntry.timestamp).label('hour'),
+            func.count(LogEntry.id).label('cnt'),
+            func.count(func.distinct(func.date(LogEntry.timestamp))).label('active_days'),
+        ).filter(
+            LogEntry.timestamp >= datetime.combine(trailing_start, datetime.min.time()),
+            LogEntry.timestamp < start,
+            LogEntry.is_deleted.is_(False),
+        ).group_by(
+            extract('dow', LogEntry.timestamp),
+            extract('hour', LogEntry.timestamp),
+        ).all()
+
+        baseline_lookup: Dict[Tuple[int, int], int] = {}
+        for r in hist_rows:
+            dow_val = int(r.dow)
+            h_val = int(r.hour)
+            act_days = max(1, int(r.active_days or 1))
+            baseline_lookup[(dow_val, h_val)] = max(5, int(r.cnt // act_days))
+
+        default_base = max(4, int(total_observed / (num_days * 24) * 0.8))
+
+        range_hourly_rows = db.query(
+            func.date(LogEntry.timestamp).label('day'),
+            extract('hour', LogEntry.timestamp).label('hour'),
+            func.count(LogEntry.id).label('cnt'),
+        ).filter(
+            LogEntry.timestamp >= start,
+            LogEntry.timestamp <= end,
+            LogEntry.is_deleted.is_(False),
+        ).group_by(
+            func.date(LogEntry.timestamp),
+            extract('hour', LogEntry.timestamp),
+        ).all()
+
+        anomalies: List[Dict[str, Any]] = []
+        for r in range_hourly_rows:
+            d_str = str(r.day)
+            h = int(r.hour)
+            cnt = int(r.cnt)
+            try:
+                d_obj = datetime.strptime(d_str[:10], "%Y-%m-%d").date()
+            except Exception:
+                d_obj = target_date
+            dow = (d_obj.weekday() + 1) % 7
+            base = baseline_lookup.get((dow, h), default_base)
+            sigma = max(2.5, math.sqrt(base) * 0.85)
+            z_score = round((cnt - base) / sigma, 2)
+            upper_bound = round(base + 2.0 * sigma, 1)
+            is_anomaly = cnt >= upper_bound and cnt >= 8
+
+            if is_anomaly:
+                hour_drivers, likely_incident = _hour_drivers_and_incident(db, events_db, d_obj, h, limit=1)
+                anomalies.append({
+                    "date": d_str[:10],
+                    "hour": h,
+                    "time_window": f"{d_obj.strftime('%b %d')} {hour_clock_label(h)} – {hour_clock_label((h + 1) % 24)}",
+                    "z_score": z_score,
+                    "observed": cnt,
+                    "baseline": base,
+                    "primary_driver": hour_drivers[0]["talkgroup"] if hour_drivers else "Unknown",
+                    "likely_incident": likely_incident,
+                })
+
+        anomalies.sort(key=lambda a: a["z_score"], reverse=True)
+
+        if anomalies:
+            top = anomalies[0]
+            focus_label = top["time_window"]
+            obs = top["observed"]
+            base = top["baseline"]
+            z = top["z_score"]
+            surge_pct = round(((obs - base) / max(1, base)) * 100, 1)
+            primary_driver = top["primary_driver"]
+            drivers = [{"talkgroup": top["primary_driver"], "count": top["observed"], "percentage": 100.0}]
+            if z >= 3.0:
+                severity = "critical"
+                status_label = f"Critical Surge ({z:+.1f}σ)"
+            elif z >= 2.0:
+                severity = "high"
+                status_label = f"High Surge Alert ({z:+.1f}σ)"
+            elif z >= 1.0:
+                severity = "elevated"
+                status_label = f"Elevated Traffic ({z:+.1f}σ)"
+            else:
+                severity = "normal"
+                status_label = f"Nominal Flow ({z:+.1f}σ)"
+        else:
+            focus_label = f"{num_days}-Day Span"
+            obs = total_observed
+            base = total_observed
+            z = 0.0
+            surge_pct = 0.0
+            severity = "normal"
+            status_label = f"Nominal Flow ({num_days} Days)"
+            primary_driver = ""
+            drivers = []
+
+        return {
+            "current_hour_label": focus_label,
+            "observed": obs,
+            "baseline": base,
+            "surge_percentage": surge_pct,
+            "z_score": z,
+            "severity": severity,
+            "status_label": status_label,
+            "primary_driver": primary_driver,
+            "drivers": drivers,
+            "timeline": [],
+            "recent_anomalies": anomalies[:30],
+            "insufficient_data": total_observed < 25,
+            "is_multi_day": True,
+            "range_days": num_days,
+        }
+
+    # Single-day calculation
     start = datetime.combine(target_date, datetime.min.time())
     end = datetime.combine(target_date, datetime.max.time())
 
@@ -1230,6 +1392,8 @@ def get_traffic_anomaly_telemetry(
             ],
             "recent_anomalies": [],
             "insufficient_data": True,
+            "is_multi_day": False,
+            "range_days": 1,
         }
 
     # extract('dow') is Sunday=0; date.weekday() is Monday=0.
@@ -1297,6 +1461,7 @@ def get_traffic_anomaly_telemetry(
         if is_anomaly:
             hour_drivers, likely_incident = _hour_drivers_and_incident(db, events_db, target_date, h, limit=1)
             anomalies.append({
+                "date": target_date.isoformat(),
                 "hour": h,
                 "time_window": f"{hour_clock_label(h)} – {hour_clock_label((h + 1) % 24)}",
                 "z_score": z_score,
@@ -1342,6 +1507,8 @@ def get_traffic_anomaly_telemetry(
         "recent_anomalies": anomalies,
         # Baseline is estimated from the same day when fewer than 25 calls exist.
         "insufficient_data": total_observed < 25,
+        "is_multi_day": False,
+        "range_days": 1,
     }
 
 
@@ -1445,15 +1612,38 @@ def compute_insights_stats(
         recent = get_recent_activity(db, target_date, limit=50, events_db=events_db)
         all_talkgroups = get_all_talkgroups(db, target_date, view)
 
-    calls_last_minute = get_last_full_minute_transcription_count(db)
-    summary["calls_last_minute"] = calls_last_minute
-    summary["calls_per_minute_window"] = 1
-    summary["trends"] = get_summary_trends(db, calls_last_minute)
+    is_today = (num_days == 1 and start_date == datetime.now().date())
+    if is_today:
+        calls_last_minute = get_last_full_minute_transcription_count(db)
+        summary["calls_last_minute"] = calls_last_minute
+        summary["calls_per_minute_window"] = 1
+        summary["trends"] = get_summary_trends(db, calls_last_minute)
+        summary["is_multi_day"] = False
+        summary["range_days"] = 1
+    elif num_days > 1:
+        # Multi-day range: null out live real-time metrics
+        summary["calls_last_minute"] = None
+        summary["calls_per_minute_window"] = None
+        summary["trends"] = None
+        summary["is_multi_day"] = True
+        summary["range_days"] = num_days
+    else:
+        # Single historical day
+        summary["calls_last_minute"] = None
+        summary["calls_per_minute_window"] = None
+        summary["trends"] = None
+        summary["is_multi_day"] = False
+        summary["range_days"] = 1
 
     heatmap = get_diurnal_heatmap(db, start_date, end_date)
     rtf_telemetry = get_rtf_telemetry(db, start_date, end_date)
     ner_summary = get_ner_tactical_summary(events_db or db, start_date, end_date)
-    traffic_anomaly = get_traffic_anomaly_telemetry(db, start_date, events_db=events_db or db)
+    traffic_anomaly = get_traffic_anomaly_telemetry(
+        db,
+        start_date,
+        end_date=end_date if num_days > 1 else None,
+        events_db=events_db or db,
+    )
     asr_quality = get_asr_quality_spectrum(db, start_date, end_date)
 
     return {

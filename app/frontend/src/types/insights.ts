@@ -11,12 +11,17 @@ export interface InsightsSummary {
   calls_per_minute: number
   unique_talkgroups: number
   avg_duration: number
+  total_airtime?: number | null
   peak_hour: string | null
+  calls_last_minute?: number | null
+  calls_per_minute_window?: number | null
+  is_multi_day?: boolean | null
+  range_days?: number | null
   trends?: {
     total_transcriptions?: TrendData
     calls_last_minute?: TrendData
     unique_talkgroups?: TrendData
-  }
+  } | null
 }
 
 export interface ActivityPoint {
@@ -145,6 +150,7 @@ export interface AnomalyDriver {
 }
 
 export interface AnomalyIncidentRecord {
+  date?: string | null
   hour: number
   time_window: string
   z_score: number
@@ -167,6 +173,8 @@ export interface TrafficAnomalyTelemetry {
   timeline: AnomalyTimelinePoint[]
   recent_anomalies: AnomalyIncidentRecord[]
   insufficient_data: boolean
+  is_multi_day?: boolean
+  range_days?: number | null
 }
 
 export interface AsrQualitySpectrum {

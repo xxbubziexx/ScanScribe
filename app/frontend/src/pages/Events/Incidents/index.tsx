@@ -7,6 +7,7 @@ import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRange
 import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import { useAdminCapability } from '@/hooks/useAdminCapability'
+import { getSavedDateRange, saveDateRange } from '@/lib/dateSelection'
 import type { MonitorResponse } from '@/types/events'
 
 import type { DetailTab } from './utils/incidentFormatters'
@@ -32,8 +33,9 @@ export function EventsIncidentsPage() {
     if (s === 'all' || s === 'open' || s === 'closed') return s
     return 'open'
   })
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const saved = getSavedDateRange()
+  const [dateFrom, setDateFrom] = useState(saved?.dateFrom ?? '')
+  const [dateTo, setDateTo] = useState(saved?.dateTo ?? '')
 
   useEffect(() => {
     const s = searchParams.get('status')
@@ -334,6 +336,7 @@ export function EventsIncidentsPage() {
           onChange={(f, t) => {
             setDateFrom(f)
             setDateTo(t)
+            saveDateRange(f, t)
           }}
           activeDates={activeDateList}
         />

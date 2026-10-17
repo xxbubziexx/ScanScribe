@@ -51,7 +51,7 @@ export function ChatInputBox({
   }
 
   return (
-    <div className="shrink-0 bg-transparent px-4 pb-4 pt-1">
+    <div className="shrink-0 bg-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-1">
       <div className="max-w-3xl mx-auto w-full">
         <div className="bg-[#141724] border border-[#282d42] focus-within:border-indigo-500/80 focus-within:ring-2 focus-within:ring-indigo-500/20 rounded-2xl shadow-xl p-3 flex flex-col gap-2 transition-all">
           <textarea

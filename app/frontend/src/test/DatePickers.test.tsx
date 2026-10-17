@@ -6,6 +6,7 @@ import { TimeRangePicker } from '@/components/ui/TimeRangePicker'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { DatabaseDateSinglePicker } from '@/components/database/DatabaseDateSinglePicker'
 import type { TimeRangeValue } from '@/components/ui/timeRange'
+import { clearSavedDateRange, getSavedDateRange, saveDateRange } from '@/lib/dateSelection'
 
 describe('RangeCalendar component', () => {
   it('renders days and completes range selection across two clicks', async () => {
@@ -215,5 +216,19 @@ describe('DatabaseDateSinglePicker component', () => {
     expect(todayBtn).toBeInTheDocument()
     await user.click(todayBtn)
     expect(handleChange).toHaveBeenCalled()
+  })
+})
+
+describe('Persistent Date Range logic', () => {
+  it('saves, retrieves, and clears date range in localStorage', () => {
+    localStorage.clear()
+    expect(getSavedDateRange()).toBeNull()
+
+    saveDateRange('2026-10-10', '2026-10-15')
+    const saved = getSavedDateRange()
+    expect(saved).toEqual({ dateFrom: '2026-10-10', dateTo: '2026-10-15' })
+
+    clearSavedDateRange()
+    expect(getSavedDateRange()).toBeNull()
   })
 })

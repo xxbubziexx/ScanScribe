@@ -82,3 +82,6 @@ docs/*
 app/frontend/node_modules/
 app/frontend/.env.local
 app/frontend/coverage/
+
+# Legacy scratch directories
+transcribe_old/

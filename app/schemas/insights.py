@@ -99,10 +99,12 @@ class InsightsSummary(BaseModel):
     total: int
     unique_talkgroups: int
     avg_duration: float
+    total_airtime: Optional[float] = None
     peak_hour: Optional[str] = None
     calls_per_minute: float
     calls_last_minute: Optional[int] = None
     calls_per_minute_window: Optional[int] = 1
+    is_multi_day: Optional[bool] = None
     range_days: Optional[int] = None
     trends: Optional[InsightsSummaryTrends] = None
 
@@ -199,6 +201,7 @@ class AnomalyDriver(BaseModel):
 
 
 class AnomalyIncidentRecord(BaseModel):
+    date: Optional[str] = None
     hour: int
     time_window: str
     z_score: float
@@ -231,6 +234,8 @@ class TrafficAnomalyTelemetry(BaseModel):
     timeline: List[AnomalyTimelinePoint] = Field(default_factory=list)
     recent_anomalies: List[AnomalyIncidentRecord] = Field(default_factory=list)
     insufficient_data: bool = False
+    is_multi_day: bool = False
+    range_days: Optional[int] = None
 
 
 class AsrQualitySpectrum(BaseModel):

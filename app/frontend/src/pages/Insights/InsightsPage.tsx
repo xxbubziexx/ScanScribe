@@ -11,16 +11,12 @@ import { TrafficAnomalyWidget } from './components/TrafficAnomalyWidget'
 import { TalkgroupShareWidget } from './components/TalkgroupShareWidget'
 import { AsrConfidenceWidget } from './components/AsrConfidenceWidget'
 
-function todayIso() {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
+import { usePersistentDateRange } from '@/hooks/usePersistentDateRange'
+import { getSavedDateRange } from '@/lib/dateSelection'
 
 export function InsightsPage() {
   const navigate = useNavigate()
-  const [dateFrom, setDateFrom] = useState(todayIso())
-  const [dateTo, setDateTo] = useState(todayIso())
+  const { dateFrom, dateTo, setDateRange } = usePersistentDateRange()
   const isMultiDay = dateFrom !== dateTo && !!dateFrom && !!dateTo
 
   const view: InsightsView = useMemo(() => {
@@ -46,10 +42,12 @@ export function InsightsPage() {
   useEffect(() => {
     if (defaultRangeAppliedRef.current || activeDates.length === 0) return
     defaultRangeAppliedRef.current = true
-    const last = activeDates[activeDates.length - 1]
-    setDateFrom(last)
-    setDateTo(last)
-  }, [activeDates])
+    const saved = getSavedDateRange()
+    if (!saved) {
+      const last = activeDates[activeDates.length - 1]
+      setDateRange(last, last)
+    }
+  }, [activeDates, setDateRange])
 
   const { data: statsData } = useQuery({
     queryKey: ['insights-stats', dateFrom, dateTo, view],
@@ -86,8 +84,7 @@ export function InsightsPage() {
   }
 
   const handleDateRangeChange = (from: string, to: string) => {
-    setDateFrom(from)
-    setDateTo(to)
+    setDateRange(from, to)
   }
 
   const summary = statsData?.summary ?? null
@@ -124,7 +121,7 @@ export function InsightsPage() {
 
       {/* Real-Time Factor & Tactical Semantics Intelligence Widgets */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RtfThroughputWidget data={rtf} />
+        <RtfThroughputWidget data={rtf} isMultiDay={isMultiDay} />
         <TacticalNerWidget data={ner} />
       </div>
 

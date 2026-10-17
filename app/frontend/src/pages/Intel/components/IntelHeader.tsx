@@ -162,18 +162,21 @@ export function IntelHeader({
           <button
             type="button"
             onClick={onToggleAudioPanel}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-xs select-none ${
+            aria-expanded={audioPanelOpen}
+            aria-controls="ss-audio-deck"
+            className={`flex items-center gap-2 px-3 py-1.5 min-h-[40px] sm:min-h-[36px] rounded-lg border text-xs font-semibold transition-all cursor-pointer shadow-xs select-none ${
               audioPanelOpen
                 ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 border-indigo-400/60 text-white shadow-indigo-600/30'
                 : 'bg-[#181c2b] hover:bg-[#22273c] border-[#292f45] hover:border-indigo-500/50 text-gray-200 hover:text-white'
             }`}
             title="Toggle Original Radio Transmission Audio Deck"
+            aria-label="Toggle Original Radio Transmission Audio Deck"
           >
             <span className="text-sm">📻</span>
             <span>Audio Deck</span>
             {audioCount > 0 ? (
               <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold transition-colors ${
+                className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold transition-colors ${
                   audioPanelOpen ? 'bg-indigo-900/90 text-white' : 'bg-indigo-950 text-indigo-300 border border-indigo-700/50'
                 }`}
               >

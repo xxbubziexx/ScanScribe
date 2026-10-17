@@ -22,6 +22,7 @@ import {
   type TimeRangeValue,
 } from '@/components/ui/timeRange'
 import { SHOW_THINKING_KEY, SHOW_TOOLS_KEY, usePersistedFlag } from './usePersistedFlag'
+import { useIsMobile } from '@/hooks/useAdminCapability'
 
 function extractAllTxIds(messages: ChatMessage[]): number[] {
   const ids = new Set<number>()
@@ -64,7 +65,19 @@ export function IntelPage() {
   // Response detail preferences (persisted)
   const [showTools, setShowTools] = usePersistedFlag(SHOW_TOOLS_KEY, true)
   const [showThinking, setShowThinking] = usePersistedFlag(SHOW_THINKING_KEY, false)
-  const [audioPanelOpen, setAudioPanelOpen] = usePersistedFlag('scanscribe_intel_audio_panel_open', true)
+  const [persistedAudioOpen, setPersistedAudioOpen] = usePersistedFlag('scanscribe_intel_audio_panel_open', true)
+
+  const isMobile = useIsMobile(1024)
+  const [mobileAudioOpen, setMobileAudioOpen] = useState(false)
+
+  const audioPanelOpen = isMobile ? mobileAudioOpen : persistedAudioOpen
+  const setAudioPanelOpen = (open: boolean) => {
+    if (isMobile) {
+      setMobileAudioOpen(open)
+    } else {
+      setPersistedAudioOpen(open)
+    }
+  }
 
   // Time scope applied to each query (rolling presets are resolved at send time)
   const [timeRange, setTimeRange] = useState<TimeRangeValue>(DEFAULT_TIME_RANGE)

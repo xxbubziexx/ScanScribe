@@ -1,7 +1,17 @@
+import { useMemo } from 'react'
 import type { InsightsSummary, InsightsView, TrendData, ActivityPoint } from '@/types/insights'
 import { OdometerValue } from '@/components/ui/OdometerValue'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { ActivityChart } from './ActivityChart'
+
+interface MetricCardItem {
+  label: string
+  value: number | string | null | undefined
+  trend?: TrendData
+  title?: string
+  suffix?: string
+  decimals?: number
+}
 
 function TrendBadge({ trend }: { trend?: TrendData }) {
   if (!trend) return <span className="text-xs text-gray-600">—</span>
@@ -52,8 +62,136 @@ export function StatsPanel({
   onHourClick,
 }: StatsPanelProps) {
   const s = summary
+  const isMultiDay = Boolean(s?.is_multi_day ?? (dateFrom && dateTo && dateFrom !== dateTo))
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const isToday = !isMultiDay && (dateFrom === todayStr || (!dateFrom && !dateTo))
   const cpm = liveCpm ?? s?.calls_per_minute ?? 0
   const activeDateLabel = dateTo || dateFrom
+
+  const metricCards: MetricCardItem[] = useMemo(() => {
+    if (isMultiDay) {
+      const rangeDays = s?.range_days ?? (dateFrom && dateTo ? Math.max(1, Math.round((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / 86400000) + 1) : 1)
+      const dailyAvg = s?.total ? Math.round(s.total / Math.max(1, rangeDays)) : 0
+      return [
+        {
+          label: 'Total Transcriptions',
+          value: s?.total,
+          title: 'Total audio transmissions transcribed across the selected date range',
+          decimals: 0,
+        },
+        {
+          label: 'Daily Average Volume',
+          value: dailyAvg,
+          title: `Average transmissions per day across the ${rangeDays}-day window`,
+          decimals: 0,
+        },
+        {
+          label: 'Date Range Span',
+          value: `${rangeDays} Days`,
+          title: s?.total_airtime
+            ? `Active window span (Total airtime: ${(s.total_airtime / 3600).toFixed(1)} hrs)`
+            : 'Number of calendar days in selected range',
+        },
+        {
+          label: 'Unique Talkgroups',
+          value: s?.unique_talkgroups,
+          title: 'Distinct talkgroups active across range',
+          decimals: 0,
+        },
+        {
+          label: 'Avg Duration',
+          value: s?.avg_duration,
+          suffix: 's',
+          decimals: 1,
+        },
+        {
+          label: 'Peak Day',
+          value: s?.peak_hour,
+          decimals: 0,
+        },
+      ]
+    }
+
+    if (!isToday) {
+      // Single historical day
+      const hourlyAvg = s?.total ? Math.round(s.total / 24) : 0
+      return [
+        {
+          label: 'Total Transcriptions',
+          value: s?.total,
+          decimals: 0,
+        },
+        {
+          label: 'Avg Calls / Hour',
+          value: hourlyAvg,
+          title: 'Diurnal average transmissions per hour on this date',
+          decimals: 0,
+        },
+        {
+          label: 'Calls / Minute (Avg)',
+          value: s?.calls_per_minute,
+          title: 'Average calls per minute across the 24-hour day',
+          decimals: 2,
+        },
+        {
+          label: 'Unique Talkgroups',
+          value: s?.unique_talkgroups,
+          decimals: 0,
+        },
+        {
+          label: 'Avg Duration',
+          value: s?.avg_duration,
+          suffix: 's',
+          decimals: 1,
+        },
+        {
+          label: 'Peak Hour',
+          value: s?.peak_hour,
+          decimals: 0,
+        },
+      ]
+    }
+
+    // Live / Today
+    return [
+      {
+        label: 'Total Transcriptions',
+        value: s?.total,
+        decimals: 0,
+      },
+      {
+        label: 'Transcriptions Last Hour',
+        value: s?.trends?.total_transcriptions?.current,
+        trend: s?.trends?.total_transcriptions,
+        title: 'Transcriptions in previous full hour vs the hour before',
+        decimals: 0,
+      },
+      {
+        label: 'Calls Last Minute',
+        value: cpm,
+        trend: s?.trends?.calls_last_minute,
+        title: 'Count of transcriptions in the previous complete minute',
+        decimals: 0,
+      },
+      {
+        label: 'Unique Talkgroups',
+        value: s?.unique_talkgroups,
+        trend: s?.trends?.unique_talkgroups,
+        decimals: 0,
+      },
+      {
+        label: 'Avg Duration',
+        value: s?.avg_duration,
+        suffix: 's',
+        decimals: 1,
+      },
+      {
+        label: 'Peak Hour',
+        value: s?.peak_hour,
+        decimals: 0,
+      },
+    ]
+  }, [s, isMultiDay, isToday, dateFrom, dateTo, cpm])
 
   return (
     <div className="ss-glass-panel relative z-20">
@@ -94,53 +232,7 @@ export function StatsPanel({
       </div>
 
       <div className="ss-metric-grid">
-        {(
-          [
-            {
-              label: 'Total Transcriptions',
-              value: s?.total,
-              decimals: 0,
-            },
-            {
-              label: 'Transcriptions Last Hour',
-              value: s?.trends?.total_transcriptions?.current,
-              trend: s?.trends?.total_transcriptions,
-              title: 'Transcriptions in previous full hour vs the hour before',
-              decimals: 0,
-            },
-            {
-              label: 'Calls Last Minute',
-              value: cpm,
-              trend: s?.trends?.calls_last_minute,
-              title: 'Count of transcriptions in the previous complete minute',
-              decimals: 0,
-            },
-            {
-              label: 'Unique Talkgroups',
-              value: s?.unique_talkgroups,
-              trend: s?.trends?.unique_talkgroups,
-              decimals: 0,
-            },
-            {
-              label: 'Avg Duration',
-              value: s?.avg_duration,
-              suffix: 's',
-              decimals: 1,
-            },
-            {
-              label: dateFrom && dateTo && dateFrom !== dateTo ? 'Peak Day' : 'Peak Hour',
-              value: s?.peak_hour,
-              decimals: 0,
-            },
-          ] satisfies {
-            label: string
-            value: number | string | null | undefined
-            trend?: TrendData
-            title?: string
-            suffix?: string
-            decimals?: number
-          }[]
-        ).map(({ label, value, trend, title, suffix, decimals }) => (
+        {metricCards.map(({ label, value, trend, title, suffix, decimals }) => (
           <div
             key={String(label)}
             className="ss-metric-card"

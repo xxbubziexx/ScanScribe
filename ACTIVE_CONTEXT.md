@@ -801,6 +801,67 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:**
   - `pytest tests/`: **137/137 passed in 27.65s**.
   - Verified git status on branch `snapshot`.
+### 2026-10-17 16:05 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Resolved false / misleading metrics when selecting multi-day date ranges or historical single days on the Insights page:
+    1. **StatsPanel Card Alignment**:
+       - Multi-Day Mode: Replaced real-time minute/hour cards with "Daily Average Volume" (`s.total / range_days`) and "Date Range Span" (`X Days` with total airtime in hours), and nulled out live trailing-60s trends.
+       - Historical Single-Day Mode: Replaced live trailing 60s and live last-hour cards with "Avg Calls / Hour" and "Calls / Minute (Avg)" without irrelevant live-trend badges.
+       - Today Mode: Retains live trailing 60s CPM, full previous hour volume, and live delta comparison badges.
+    2. **Traffic Anomaly & Spike Detector Multi-Day Analytics**:
+       - Enriched backend `get_traffic_anomaly_telemetry(db, target_date, end_date, events_db)` in [`app/services/insights_engine.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/insights_engine.py) to scan all `(date, hour)` combinations within `[start_date, end_date]` against trailing diurnal baselines.
+       - Identifies all anomalous hours ($Z \ge 2.0\sigma, \text{cnt} \ge 8$) across the entire multi-day date range and derives dominant talkgroups and likely incident tags.
+       - Populated `AnomalyIncidentRecord` with `date`, sorted by $Z$-score descending.
+       - Updated [`TrafficAnomalyWidget.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/TrafficAnomalyWidget.tsx) to render a multi-day surge telemetry deck in multi-day mode (KPIs showing Peak Surge Traffic, Peak $Z$-score, and Range Span) and date-aware search drilldown (`/search?date_from=${ano.date}&date_to=${ano.date}&hour=${ano.hour}`).
+    3. **RTF Throughput Telemetry**:
+       - Added `isMultiDay` prop to [`RtfThroughputWidget.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/RtfThroughputWidget.tsx) to label the 24-hour curve as "Diurnal RTF Processing Profile (Aggregated Across Range)" when viewing multiple days.
+    4. **Cross-Page Date Selection Persistence**:
+       - Created [`app/frontend/src/lib/dateSelection.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/lib/dateSelection.ts) with `getSavedDateRange()`, `saveDateRange(dateFrom, dateTo)`, and `scanscribe:date_range_changed` cross-component event dispatcher.
+       - Created [`app/frontend/src/hooks/usePersistentDateRange.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/hooks/usePersistentDateRange.ts) React hook.
+       - Integrated persistent date synchronization across [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx), [`SearchPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Search/SearchPage.tsx), [`Events/Incidents/index.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/Incidents/index.tsx), [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx), and [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx). Date range selections now persist seamlessly when navigating between pages unless overridden by explicit URL query parameters.
+- **Live Ingestion Impact:** Zero impact. Non-blocking database aggregation queries, no table locking or schema DDL changes.
+- **Gotchas / Warnings for Next Model:**
+  - `localStorage` key `'scanscribe_selected_date_range'` stores `{"dateFrom": "YYYY-MM-DD", "dateTo": "YYYY-MM-DD"}`.
+  - URL parameters on drilldowns take precedence over persistent dates, but user changes in the date pickers update the shared persistent state.
+- **Verification Performed:**
+  - `pytest tests/`: **137/137 passed in 23.6s**.
+  - `vitest`: **34/34 passed** (including new `Persistent Date Range logic` tests in `DatePickers.test.tsx`).
+  - `npm run build`: Production bundle built cleanly in 1.50s with zero TypeScript errors.
 - **Next Tasks / Unfinished Work:**
-  - System fully verified on branch `snapshot`.
+  - Ready for user review on branch `snapshot`.
+
+---
+
+### 2026-10-17 17:30 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Addressed user feedback regarding mobile implementation of the **Audio Deck** (the cited radio transmission playback panel on `/intel`):
+    1. **Mobile Responsive Slide-Over Drawer & Overlay ([`AudioControlPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/AudioControlPanel.tsx))**:
+       - Converted the desktop docked sidebar (`w-88 xl:w-96`) into a responsive slide-over drawer on mobile devices (`fixed inset-y-0 right-0 z-50 w-full sm:w-[420px] max-w-full h-full h-dvh animate-slide-in`) with a darkened backdrop overlay (`fixed inset-0 bg-black/75 backdrop-blur-xs z-40 lg:hidden`).
+       - On desktop (`lg:` / `xl:`), retains docked side-by-side layout (`lg:static lg:z-30 lg:w-88 xl:w-96 lg:shadow-none lg:animate-none`).
+       - Added keyboard `Escape` listener to close the drawer automatically when open.
+       - Tapping the backdrop overlay or the close button (`✕`) cleanly closes the drawer.
+    2. **Mobile Ergonomics & Safe-Area Insets**:
+       - Added device notch and home bar safe area support (`pt-[max(0.75rem,env(safe-area-inset-top))]`, `pb-[max(1rem,env(safe-area-inset-bottom))]`) to header, queue list, and [`ChatInputBox.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatInputBox.tsx).
+       - Upgraded close button to `w-11 h-11` (44x44px touch hit area).
+       - Upgraded central tactical play/pause button to `w-12 h-12` (48x48px).
+       - Upgraded skip `-5s`, `+5s`, speed pill, and mute buttons to `min-w-[44px] min-h-[44px]` touch targets.
+       - Upgraded scrubber bar and volume slider for touch-friendly dragging (`h-2.5 sm:h-2`).
+       - Transmission queue cards configured with `min-h-[52px]` and `active:scale-[0.99]` tactile feedback.
+    3. **Intelligent Screen-Aware Open State ([`IntelPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/IntelPage.tsx), [`IntelHeader.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/IntelHeader.tsx))**:
+       - Used `useIsMobile(1024)` to decouple mobile drawer state from desktop preference: on mobile, starts closed (`mobileAudioOpen = false`) so the conversation and query input are immediately visible and usable without being covered by a full-screen drawer on initial page load.
+       - When a user taps the "Audio Deck" button in the header or clicks any `[TX #...]` citation link in a message, the drawer slides in automatically and selects/plays the transmission.
+       - Updated "Audio Deck" toggle button in `IntelHeader.tsx` with `min-h-[40px] sm:min-h-[36px]`, `aria-expanded`, and `aria-controls="ss-audio-deck"`.
+    4. **Unit Tests ([`AudioControlPanel.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/AudioControlPanel.test.tsx))**:
+       - Added 6 vitest unit tests covering render suppression when closed, backdrop rendering, responsive drawer classes, close button click, backdrop click, Escape key close, and transmission card queue selection.
+- **Live Ingestion Impact:** Zero impact. Purely frontend UI/UX responsiveness and touch ergonomics.
+- **Gotchas / Warnings for Next Model:**
+  - On mobile (`< 1024px`), `AudioControlPanel` renders as a fixed slide-over drawer with backdrop overlay. On desktop (`>= 1024px`), it docks statically in the flex container.
+  - Active git branch remains `snapshot`.
+- **Verification Performed:**
+  - `pytest tests/`: **137/137 passed in 23.45s**.
+  - `vitest`: **40/40 passed** across 8 test suites (including all 6 new tests in `AudioControlPanel.test.tsx`).
+  - `npm run build`: Production bundle built cleanly with zero TypeScript errors.
+- **Next Tasks / Unfinished Work:**
+  - Ready for user testing on mobile and desktop devices.
+
 
