@@ -21,7 +21,7 @@
 
 ## Overview
 
-**ScanScribe** is an enterprise-grade, end-to-end intelligence station purpose-built for public safety radio monitoring. It captures raw transmissions from SDR receivers (SDRTrunk) or hardware scanners (ProScan), runs high-throughput local speech-to-text with specialized public safety Whisper models, extracts incident entities (units, addresses, event types) using token-level NER, routes transmissions into real-time incident threads via single-pass LLMs, and maps active calls live on a tactical Command Center.
+**ScanScribe** is an enterprise-grade, end-to-end intelligence station purpose-built for public safety radio monitoring. It captures raw transmissions from SDR receivers (SDRTrunk) or hardware scanners (ProScan), runs high-throughput local speech-to-text with specialized public safety Whisper models, extracts incident entities (units, addresses, event types) using token-level NER, routes transmissions into real-time incident threads via single-pass LLMs, maps active calls live on a tactical Command Center, and powers conversational intelligence across historical radio traffic via the Scanner Intelligence Console.
 
 Whether running as a dedicated field station on Windows or a 24/7 ingestion server on Linux, ScanScribe provides immediate situational awareness for dispatchers, researchers, and scanner hobbyists.
 
@@ -53,10 +53,10 @@ Whether running as a dedicated field station on Windows or a 24/7 ingestion serv
   <img src="screenshots/insights_graph.png" alt="Analytics and Incident Insights" width="95%">
 </p>
 
-### 📝 Automated AI Incident Summaries
-*Automated chronological intelligence reports categorized by medical emergencies, transport runs, police dispatches, and traffic stops.*
+### 💬 Scanner Intelligence Console
+*Natural language conversational queries across indexed radio traffic, unit callouts, and incidents with autonomous time scoping, agentic tool execution, and direct audio citations.*
 <p align="center">
-  <img src="screenshots/summary_example.png" alt="AI Dispatch Hourly Summary" width="95%">
+  <img src="screenshots/LLM_chat.png" alt="Scanner Intelligence Console" width="95%">
 </p>
 
 ### 🗄️ Database Explorer Suite
@@ -88,6 +88,12 @@ Whether running as a dedicated field station on Windows or a 24/7 ingestion serv
 - **Single-Pass LLM Classifier**: Ultra-fast routing via OpenRouter (Gemini, Claude, Llama 3) or local Ollama instances.
 - **Automated Incident Lifecycle**: Intelligently triggers `CREATE`, `ATTACH`, `CLOSE`, or `BROADCAST` actions to maintain organized incident threads.
 - **Absolute Truth Known Units**: Enforces real department unit rosters to prevent hallucinated callsigns.
+
+### 💬 Scanner Intelligence & Conversational AI
+- **Natural Language Traffic Queries**: Query indexed transmissions in plain English (e.g. *"What did unit 112 do today?"*, *"List all pursuit calls from today"*).
+- **Autonomous Time Scope Engine**: Enforces natural-language temporal bounds (e.g. past 2 hours, yesterday, this morning) for fast, targeted context retrieval.
+- **Synchronized Audio Citations & Audio Deck**: All responses link directly to transmission badges (`[TX #...]`) with one-click synchronized playback in the slide-out Audio Deck.
+- **Agentic Tool Calling & Inspection**: Inspect reasoning chains and database queries directly via interactive thinking and tool execution accordions.
 
 ### 📊 Dataset Studio & Fine-Tuning Pipeline
 - **In-Browser Review Station**: Inspect transcriptions side-by-side with original radio audio, edit corrections, and mark verification status.
