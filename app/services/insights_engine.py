@@ -1,15 +1,17 @@
 """Insights analytics and aggregation engine."""
-from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from collections import Counter, defaultdict
+from datetime import date, datetime, time, timedelta, timezone
 import logging
+import math
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import extract, func, or_
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models.event import Event, EventTranscriptLink
+from ..models.event import EntityObservation, Event, EventTranscriptLink, SpanStore
 from ..models.log_entry import LogEntry
 
 logger = logging.getLogger(__name__)
@@ -22,9 +24,17 @@ def get_local_tz():
         iana_tz = str(getattr(pipe, "log_naive_timezone", "") or "")
         if iana_tz:
             return ZoneInfo(iana_tz)
-    except Exception:
-        pass
+    except (ValueError, AttributeError, Exception) as exc:
+        logger.debug("Failed resolving local timezone '%s': %s", locals().get("iana_tz"), exc)
     return datetime.now().astimezone().tzinfo or timezone.utc
+
+
+def local_date_range_to_utc(start_date: date, end_date: date) -> Tuple[datetime, datetime]:
+    """Convert local date range [start_date, end_date] into UTC datetime boundaries [start_utc, end_utc]."""
+    tz = get_local_tz()
+    start_local = datetime.combine(start_date, time.min, tzinfo=tz)
+    end_local = datetime.combine(end_date, time.max, tzinfo=tz)
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
 
 def get_last_full_minute_window(now: Optional[datetime] = None) -> Tuple[datetime, datetime]:
@@ -55,7 +65,7 @@ def get_transcription_count_by_created_window(db: Session, start: datetime, end:
         db.query(func.count(LogEntry.id)).filter(
             LogEntry.created_at >= start,
             LogEntry.created_at < end,
-            LogEntry.is_deleted == False
+            LogEntry.is_deleted.is_(False)
         ).scalar() or 0
     )
 
@@ -66,7 +76,7 @@ def get_unique_talkgroups_by_created_window(db: Session, start: datetime, end: d
         db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
             LogEntry.created_at >= start,
             LogEntry.created_at < end,
-            LogEntry.is_deleted == False
+            LogEntry.is_deleted.is_(False)
         ).scalar() or 0
     )
 
@@ -136,8 +146,8 @@ def get_event_hourly_counts(events_db: Optional[Session], target_date: date, tz)
                 if dt_loc.date() == target_date:
                     hour_counts[dt_loc.hour] = hour_counts.get(dt_loc.hour, 0) + 1
         return hour_counts
-    except Exception as exc:
-        logger.debug("Failed to query hourly events: %s", exc)
+    except SQLAlchemyError as exc:
+        logger.warning("Failed to query hourly events: %s", exc, exc_info=True)
         return {}
 
 
@@ -166,8 +176,8 @@ def get_event_daily_counts(events_db: Optional[Session], start_of_week: date, tz
                 d_val = dt_val.astimezone(tz).date()
                 day_counts[d_val] = day_counts.get(d_val, 0) + 1
         return day_counts
-    except Exception as exc:
-        logger.debug("Failed to query daily events: %s", exc)
+    except SQLAlchemyError as exc:
+        logger.warning("Failed to query daily events: %s", exc, exc_info=True)
         return {}
 
 
@@ -195,8 +205,8 @@ def get_event_weekly_counts(events_db: Optional[Session], earliest_week_start: d
                 w_start = d_val - timedelta(days=d_val.weekday())
                 week_counts[w_start] = week_counts.get(w_start, 0) + 1
         return week_counts
-    except Exception as exc:
-        logger.debug("Failed to query weekly events: %s", exc)
+    except SQLAlchemyError as exc:
+        logger.warning("Failed to query weekly events: %s", exc, exc_info=True)
         return {}
 
 
@@ -212,7 +222,7 @@ def get_hourly_activity(db: Session, target_date: date, events_db: Optional[Sess
     ).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).group_by(
         extract('hour', LogEntry.timestamp)
     ).all()
@@ -248,7 +258,7 @@ def get_daily_activity(db: Session, target_date: date, events_db: Optional[Sessi
         count = db.query(func.count(LogEntry.id)).filter(
             LogEntry.timestamp >= start,
             LogEntry.timestamp <= end,
-            LogEntry.is_deleted == False
+            LogEntry.is_deleted.is_(False)
         ).scalar() or 0
 
         activity.append({
@@ -277,7 +287,7 @@ def get_weekly_activity(db: Session, target_date: date, events_db: Optional[Sess
         count = db.query(func.count(LogEntry.id)).filter(
             LogEntry.timestamp >= start,
             LogEntry.timestamp <= end,
-            LogEntry.is_deleted == False
+            LogEntry.is_deleted.is_(False)
         ).scalar() or 0
 
         activity.append({
@@ -296,19 +306,19 @@ def get_daily_summary(db: Session, target_date: date) -> Dict[str, Any]:
     total = db.query(func.count(LogEntry.id)).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     avg_duration = db.query(func.avg(LogEntry.duration)).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     peak_result = db.query(
@@ -317,7 +327,7 @@ def get_daily_summary(db: Session, target_date: date) -> Dict[str, Any]:
     ).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).group_by(
         extract('hour', LogEntry.timestamp)
     ).order_by(
@@ -348,19 +358,19 @@ def get_weekly_summary(db: Session, target_date: date) -> Dict[str, Any]:
     total = db.query(func.count(LogEntry.id)).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     avg_duration = db.query(func.avg(LogEntry.duration)).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     minutes_in_period = 7 * 24 * 60
@@ -389,19 +399,19 @@ def get_monthly_summary(db: Session, target_date: date) -> Dict[str, Any]:
     total = db.query(func.count(LogEntry.id)).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     avg_duration = db.query(func.avg(LogEntry.duration)).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     days_in_month = (end_of_month - start_of_month).days + 1
@@ -432,11 +442,13 @@ def get_talkgroup_breakdown(db: Session, target_date: date, view: str) -> List[D
 
     results = db.query(
         LogEntry.talkgroup,
-        func.count(LogEntry.id).label('count')
+        func.count(LogEntry.id).label('count'),
+        func.sum(LogEntry.duration).label('duration'),
+        func.avg(LogEntry.duration).label('avg_duration')
     ).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False,
+        LogEntry.is_deleted.is_(False),
         LogEntry.talkgroup.isnot(None),
         LogEntry.talkgroup != 'N/A'
     ).group_by(
@@ -445,7 +457,19 @@ def get_talkgroup_breakdown(db: Session, target_date: date, view: str) -> List[D
         func.count(LogEntry.id).desc()
     ).limit(10).all()
 
-    return [{"talkgroup": r.talkgroup, "count": r.count} for r in results]
+    total_airtime = sum(float(r.duration or 0) for r in results)
+    out = []
+    for r in results:
+        dur = round(float(r.duration or 0), 1)
+        pct = round((dur / max(total_airtime, 0.001)) * 100, 1)
+        out.append({
+            "talkgroup": r.talkgroup,
+            "count": int(r.count),
+            "duration": dur,
+            "avg_duration": round(float(r.avg_duration or 0), 1),
+            "percentage": pct,
+        })
+    return out
 
 
 def get_all_talkgroups(db: Session, target_date: date, view: str) -> List[Dict[str, Any]]:
@@ -467,22 +491,18 @@ def get_all_talkgroups(db: Session, target_date: date, view: str) -> List[Dict[s
     ).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).group_by(
         LogEntry.talkgroup
     ).order_by(
         func.count(LogEntry.id).desc()
     ).all()
 
-    out = []
+    merged: Dict[str, int] = defaultdict(int)
     for r in results:
         tg = r.talkgroup if (r.talkgroup and str(r.talkgroup).strip()) else "N/A"
-        existing = next((x for x in out if x["talkgroup"] == tg), None)
-        if existing:
-            existing["count"] += r.count
-        else:
-            out.append({"talkgroup": tg, "count": r.count})
-    return out
+        merged[tg] += int(r.count or 0)
+    return [{"talkgroup": tg, "count": cnt} for tg, cnt in merged.items()]
 
 
 def get_attached_events_for_logs(events_db: Optional[Session], log_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
@@ -513,7 +533,7 @@ def get_attached_events_for_logs(events_db: Optional[Session], log_ids: List[int
                 })
         return dict(grouped)
     except Exception as exc:
-        logger.debug("Failed to query attached events for logs: %s", exc)
+        logger.warning("Failed to query attached events for logs: %s", exc, exc_info=True)
         return {}
 
 
@@ -525,7 +545,7 @@ def get_recent_activity(db: Session, target_date: date, limit: int = 20, events_
     results = db.query(LogEntry).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).order_by(
         LogEntry.timestamp.desc()
     ).limit(limit).all()
@@ -566,8 +586,8 @@ def get_event_daily_range_counts(events_db: Optional[Session], start_date: date,
                 d_val = dt_val.astimezone(tz).date()
                 day_counts[d_val] = day_counts.get(d_val, 0) + 1
         return day_counts
-    except Exception as exc:
-        logger.debug("Failed to query range daily events: %s", exc)
+    except SQLAlchemyError as exc:
+        logger.warning("Failed to query range daily events: %s", exc, exc_info=True)
         return {}
 
 
@@ -579,19 +599,19 @@ def get_range_summary(db: Session, start_date: date, end_date: date) -> Dict[str
     total = db.query(func.count(LogEntry.id)).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     unique_tg = db.query(func.count(func.distinct(LogEntry.talkgroup))).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     avg_duration = db.query(func.avg(LogEntry.duration)).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).scalar() or 0
 
     # Determine peak day in range
@@ -601,7 +621,7 @@ def get_range_summary(db: Session, start_date: date, end_date: date) -> Dict[str
     ).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).group_by(
         func.date(LogEntry.timestamp)
     ).order_by(
@@ -655,7 +675,7 @@ def get_range_activity(
             count = db.query(func.count(LogEntry.id)).filter(
                 LogEntry.timestamp >= w_start_dt,
                 LogEntry.timestamp <= w_end_dt,
-                LogEntry.is_deleted == False
+                LogEntry.is_deleted.is_(False)
             ).scalar() or 0
 
             ev_count = 0
@@ -678,7 +698,7 @@ def get_range_activity(
     ).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).group_by(
         func.date(LogEntry.timestamp)
     ).all()
@@ -708,11 +728,13 @@ def get_range_talkgroup_breakdown(db: Session, start_date: date, end_date: date,
     end = datetime.combine(end_date, datetime.max.time())
     results = db.query(
         LogEntry.talkgroup,
-        func.count(LogEntry.id).label('count')
+        func.count(LogEntry.id).label('count'),
+        func.sum(LogEntry.duration).label('duration'),
+        func.avg(LogEntry.duration).label('avg_duration')
     ).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False,
+        LogEntry.is_deleted.is_(False),
         LogEntry.talkgroup.isnot(None),
         LogEntry.talkgroup != 'N/A'
     ).group_by(
@@ -720,7 +742,20 @@ def get_range_talkgroup_breakdown(db: Session, start_date: date, end_date: date,
     ).order_by(
         func.count(LogEntry.id).desc()
     ).limit(limit).all()
-    return [{"talkgroup": r.talkgroup, "count": r.count} for r in results]
+
+    total_airtime = sum(float(r.duration or 0) for r in results)
+    out = []
+    for r in results:
+        dur = round(float(r.duration or 0), 1)
+        pct = round((dur / max(total_airtime, 0.001)) * 100, 1)
+        out.append({
+            "talkgroup": r.talkgroup,
+            "count": int(r.count),
+            "duration": dur,
+            "avg_duration": round(float(r.avg_duration or 0), 1),
+            "percentage": pct,
+        })
+    return out
 
 
 def get_all_range_talkgroups(db: Session, start_date: date, end_date: date) -> List[Dict[str, Any]]:
@@ -733,21 +768,17 @@ def get_all_range_talkgroups(db: Session, start_date: date, end_date: date) -> L
     ).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).group_by(
         LogEntry.talkgroup
     ).order_by(
         func.count(LogEntry.id).desc()
     ).all()
-    out = []
+    merged: Dict[str, int] = defaultdict(int)
     for r in results:
         tg = r.talkgroup if (r.talkgroup and str(r.talkgroup).strip()) else "N/A"
-        existing = next((x for x in out if x["talkgroup"] == tg), None)
-        if existing:
-            existing["count"] += r.count
-        else:
-            out.append({"talkgroup": tg, "count": r.count})
-    return out
+        merged[tg] += int(r.count or 0)
+    return [{"talkgroup": tg, "count": cnt} for tg, cnt in merged.items()]
 
 
 def get_range_recent_activity(db: Session, start_date: date, end_date: date, limit: int = 50, events_db: Optional[Session] = None) -> List[Dict[str, Any]]:
@@ -757,7 +788,7 @@ def get_range_recent_activity(db: Session, start_date: date, end_date: date, lim
     results = db.query(LogEntry).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).order_by(
         LogEntry.timestamp.desc()
     ).limit(limit).all()
@@ -800,7 +831,7 @@ def get_diurnal_heatmap(
     ).filter(
         LogEntry.timestamp >= start_dt,
         LogEntry.timestamp <= end_dt,
-        LogEntry.is_deleted == False
+        LogEntry.is_deleted.is_(False)
     ).group_by(
         extract('dow', LogEntry.timestamp),
         extract('hour', LogEntry.timestamp),
@@ -868,6 +899,510 @@ def get_diurnal_heatmap(
     }
 
 
+def _get_rtf_status(rtf: float) -> str:
+    """Classify Real-Time Factor into operator status."""
+    if rtf <= 0.35:
+        return "nominal"
+    elif rtf <= 0.75:
+        return "moderate"
+    elif rtf <= 1.0:
+        return "saturated"
+    return "backlog"
+
+
+def get_rtf_telemetry(db: Session, start_date: date, end_date: date) -> Dict[str, Any]:
+    """Calculate Real-Time Factor (RTF) and ingestion throughput performance."""
+    start = datetime.combine(start_date, datetime.min.time())
+    end = datetime.combine(end_date, datetime.max.time())
+
+    agg = db.query(
+        func.count(LogEntry.id).label("total_tx"),
+        func.sum(LogEntry.duration).label("sum_dur"),
+        func.sum(LogEntry.processing_time).label("sum_proc"),
+        func.avg(LogEntry.duration).label("avg_dur"),
+        func.avg(LogEntry.processing_time).label("avg_proc"),
+        func.avg(LogEntry.confidence).label("avg_conf"),
+    ).filter(
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+        LogEntry.is_deleted.is_(False)
+    ).first()
+
+    total_tx = int(agg.total_tx or 0) if agg else 0
+    sum_dur = float(agg.sum_dur or 0.0) if agg else 0.0
+    sum_proc = float(agg.sum_proc or 0.0) if agg else 0.0
+
+    # Discover last model used from DB or config default
+    last_model_row = db.query(LogEntry.model_used).filter(
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+        LogEntry.is_deleted.is_(False),
+        LogEntry.model_used.isnot(None),
+        LogEntry.model_used != ""
+    ).order_by(LogEntry.timestamp.desc()).first()
+    configured_model = getattr(getattr(get_settings().config, "model", None), "name", None)
+    model_name = last_model_row[0] if (last_model_row and last_model_row[0]) else (configured_model or "unknown")
+
+    # Query hourly timeline
+    hourly_rows = db.query(
+        extract('hour', LogEntry.timestamp).label('hour'),
+        func.count(LogEntry.id).label('count'),
+        func.sum(LogEntry.duration).label('audio_s'),
+        func.sum(LogEntry.processing_time).label('proc_s'),
+    ).filter(
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+        LogEntry.is_deleted.is_(False)
+    ).group_by(
+        extract('hour', LogEntry.timestamp)
+    ).all()
+
+    hourly_map = {int(r.hour): r for r in hourly_rows}
+
+    # If real data with processing time exists
+    if total_tx > 0 and sum_dur > 0 and sum_proc > 0:
+        rtf = round(sum_proc / sum_dur, 3)
+        speedup = round(sum_dur / max(sum_proc, 0.001), 1)
+        avg_latency_ms = round(float(agg.avg_proc or 0.0) * 1000, 1)
+        avg_dur_s = round(float(agg.avg_dur or 0.0), 1)
+        raw_conf = float(agg.avg_conf or 0.85)
+        avg_conf = round(raw_conf * 100 if raw_conf <= 1.0 else raw_conf, 1)
+
+        timeline = []
+        for h in range(24):
+            h12 = 12 if (h == 0 or h == 12) else (h % 12)
+            ampm = "AM" if h < 12 else "PM"
+            r = hourly_map.get(h)
+            h_cnt = int(r.count) if r else 0
+            h_audio = float(r.audio_s or 0.0) if r else 0.0
+            h_proc = float(r.proc_s or 0.0) if r else 0.0
+            h_rtf = round(h_proc / h_audio, 3) if h_audio > 0 else 0.0
+            timeline.append({
+                "hour": h,
+                "label": f"{h12} {ampm}",
+                "count": h_cnt,
+                "audio_s": round(h_audio, 1),
+                "proc_s": round(h_proc, 1),
+                "rtf": h_rtf,
+            })
+
+        return {
+            "rtf": rtf,
+            "speedup": speedup,
+            "total_audio_s": round(sum_dur, 1),
+            "total_proc_s": round(sum_proc, 1),
+            "avg_latency_ms": avg_latency_ms,
+            "avg_duration_s": avg_dur_s,
+            "avg_confidence": avg_conf,
+            "model_used": model_name,
+            "status": _get_rtf_status(rtf),
+            "insufficient_data": False,
+            "timeline": timeline,
+        }
+
+    # No transcriptions with measurable processing time in range
+    timeline = []
+    for h in range(24):
+        r = hourly_map.get(h)
+        timeline.append({
+            "hour": h,
+            "label": hour_label(h),
+            "count": int(r.count) if r else 0,
+            "audio_s": round(float(r.audio_s or 0.0), 1) if r else 0.0,
+            "proc_s": round(float(r.proc_s or 0.0), 1) if r else 0.0,
+            "rtf": 0.0,
+        })
+
+    return {
+        "rtf": 0.0,
+        "speedup": 0.0,
+        "total_audio_s": round(sum_dur, 1),
+        "total_proc_s": round(sum_proc, 1),
+        "avg_latency_ms": 0.0,
+        "avg_duration_s": round(float(agg.avg_dur or 0.0), 1) if agg else 0.0,
+        "avg_confidence": 0.0,
+        "model_used": model_name,
+        "status": "nominal",
+        "insufficient_data": True,
+        "timeline": timeline,
+    }
+
+
+def get_ner_tactical_summary(
+    events_db: Optional[Session],
+    start_date: date,
+    end_date: date,
+    limit: int = 50
+) -> Dict[str, Any]:
+    """Aggregate top detected entities across categories from EntityObservation."""
+    start = datetime.combine(start_date, datetime.min.time())
+    end = datetime.combine(end_date, datetime.max.time())
+
+    items: List[Dict[str, Any]] = []
+
+    if events_db:
+        try:
+            rows = events_db.query(
+                EntityObservation.canonical,
+                EntityObservation.label,
+                func.count(EntityObservation.id).label("freq"),
+                func.min(EntityObservation.ts).label("first_seen"),
+                func.max(EntityObservation.ts).label("last_seen"),
+                func.max(EntityObservation.log_entry_id).label("sample_tx_id"),
+            ).filter(
+                EntityObservation.ts >= start,
+                EntityObservation.ts <= end
+            ).group_by(
+                EntityObservation.canonical,
+                EntityObservation.label
+            ).order_by(
+                func.count(EntityObservation.id).desc()
+            ).limit(limit).all()
+
+            for r in rows:
+                if not r.canonical or not str(r.canonical).strip():
+                    continue
+                items.append({
+                    "canonical": str(r.canonical).strip(),
+                    "label": str(r.label).upper() if r.label else "UNKNOWN",
+                    "freq": int(r.freq),
+                    "first_seen": r.first_seen.isoformat() if r.first_seen else None,
+                    "last_seen": r.last_seen.isoformat() if r.last_seen else None,
+                    "sample_tx_id": int(r.sample_tx_id) if r.sample_tx_id else None,
+                })
+        except Exception as exc:
+            logger.warning("Failed querying entity observations: %s", exc, exc_info=True)
+
+    if items:
+        units = [it for it in items if it["label"] == "UNIT"]
+        call_types = [it for it in items if it["label"] == "EVT_TYPE"]
+        locations = [it for it in items if it["label"] in ("LOC", "ADDRESS")]
+        status = [it for it in items if it["label"] == "STATUS"]
+        return {
+            "all": items,
+            "units": units,
+            "call_types": call_types,
+            "locations": locations,
+            "status": status,
+            "total_entities_detected": sum(it["freq"] for it in items),
+            "insufficient_data": False,
+        }
+
+    return {
+        "all": [],
+        "units": [],
+        "call_types": [],
+        "locations": [],
+        "status": [],
+        "total_entities_detected": 0,
+        "insufficient_data": True,
+    }
+
+
+def hour_label(h: int) -> str:
+    """Return a 12-hour label such as '9 AM' for an hour 0-23."""
+    h12 = 12 if h in (0, 12) else h % 12
+    return f"{h12} {'AM' if h < 12 else 'PM'}"
+
+
+def hour_clock_label(h: int) -> str:
+    """Return a 12-hour clock label such as '9:00 AM' for an hour 0-23."""
+    h12 = 12 if h in (0, 12) else h % 12
+    return f"{h12}:00 {'AM' if h < 12 else 'PM'}"
+
+
+def _hour_drivers_and_incident(
+    db: Session,
+    events_db: Optional[Session],
+    target_date: date,
+    hour: int,
+    limit: int = 3,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Top talkgroups and most frequent NER call type for one hour of real traffic."""
+    h_start = datetime.combine(target_date, time(hour, 0, 0))
+    h_end = datetime.combine(target_date, time(hour, 59, 59))
+
+    tg_rows = db.query(
+        LogEntry.talkgroup,
+        func.count(LogEntry.id).label('cnt')
+    ).filter(
+        LogEntry.timestamp >= h_start,
+        LogEntry.timestamp <= h_end,
+        LogEntry.is_deleted.is_(False)
+    ).group_by(
+        LogEntry.talkgroup
+    ).order_by(
+        func.count(LogEntry.id).desc()
+    ).limit(limit).all()
+
+    total_rows = sum(int(r.cnt) for r in tg_rows)
+    hour_total = db.query(func.count(LogEntry.id)).filter(
+        LogEntry.timestamp >= h_start,
+        LogEntry.timestamp <= h_end,
+        LogEntry.is_deleted.is_(False)
+    ).scalar() or total_rows
+    hour_total = max(1, int(hour_total))
+
+    drivers = [
+        {
+            "talkgroup": r.talkgroup or "Unknown",
+            "count": int(r.cnt),
+            "percentage": round((int(r.cnt) / hour_total) * 100, 1),
+        }
+        for r in tg_rows
+    ]
+
+    likely_incident: Optional[str] = None
+    if events_db is not None:
+        try:
+            log_ids = [
+                row[0] for row in db.query(LogEntry.id).filter(
+                    LogEntry.timestamp >= h_start,
+                    LogEntry.timestamp <= h_end,
+                    LogEntry.is_deleted.is_(False)
+                ).all()
+            ]
+            counter: Counter = Counter()
+            for i in range(0, len(log_ids), 500):
+                chunk = log_ids[i:i + 500]
+                span_rows = events_db.query(SpanStore.evt_type).filter(
+                    SpanStore.log_entry_id.in_(chunk),
+                    SpanStore.evt_type.isnot(None),
+                ).all()
+                for (evt_type,) in span_rows:
+                    for item in str(evt_type).split(","):
+                        cleaned = item.strip()
+                        if cleaned:
+                            counter[cleaned] += 1
+            if counter:
+                likely_incident = counter.most_common(1)[0][0]
+        except SQLAlchemyError as exc:
+            logger.warning("Failed to derive likely incident for hour %s: %s", hour, exc, exc_info=True)
+
+    return drivers, likely_incident
+
+
+def get_traffic_anomaly_telemetry(
+    db: Session,
+    target_date: date,
+    events_db: Optional[Session] = None
+) -> Dict[str, Any]:
+    """Calculate radio traffic anomaly and surge metrics comparing volume against diurnal baseline."""
+    start = datetime.combine(target_date, datetime.min.time())
+    end = datetime.combine(target_date, datetime.max.time())
+
+    hourly_rows = db.query(
+        extract('hour', LogEntry.timestamp).label('hour'),
+        func.count(LogEntry.id).label('cnt')
+    ).filter(
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+        LogEntry.is_deleted.is_(False)
+    ).group_by(
+        extract('hour', LogEntry.timestamp)
+    ).all()
+
+    observed_map = {int(r.hour): int(r.cnt) for r in hourly_rows}
+    total_observed = sum(observed_map.values())
+
+    if total_observed == 0:
+        return {
+            "current_hour_label": hour_label(min(23, max(0, datetime.now().hour))),
+            "observed": 0,
+            "baseline": 0,
+            "surge_percentage": 0.0,
+            "z_score": 0.0,
+            "severity": "normal",
+            "status_label": "No traffic recorded",
+            "primary_driver": "",
+            "drivers": [],
+            "timeline": [
+                {
+                    "hour": h,
+                    "label": hour_label(h),
+                    "observed": 0,
+                    "baseline": 0,
+                    "upper_bound": 0.0,
+                    "z_score": 0.0,
+                    "is_anomaly": False,
+                }
+                for h in range(24)
+            ],
+            "recent_anomalies": [],
+            "insufficient_data": True,
+        }
+
+    # extract('dow') is Sunday=0; date.weekday() is Monday=0.
+    dow = (target_date.weekday() + 1) % 7
+    trailing_start = target_date - timedelta(days=21)
+
+    # Count distinct calendar days matching this weekday in the trailing 21-day window that have logged traffic
+    active_trailing_days = (
+        db.query(func.count(func.distinct(func.date(LogEntry.timestamp))))
+        .filter(
+            LogEntry.timestamp >= datetime.combine(trailing_start, datetime.min.time()),
+            LogEntry.timestamp < start,
+            extract('dow', LogEntry.timestamp) == dow,
+            LogEntry.is_deleted.is_(False),
+        )
+        .scalar()
+        or 0
+    )
+    divisor = max(1, int(active_trailing_days))
+
+    hist_rows = db.query(
+        extract('hour', LogEntry.timestamp).label('hour'),
+        func.count(LogEntry.id).label('cnt')
+    ).filter(
+        LogEntry.timestamp >= datetime.combine(trailing_start, datetime.min.time()),
+        LogEntry.timestamp < start,
+        extract('dow', LogEntry.timestamp) == dow,
+        LogEntry.is_deleted.is_(False)
+    ).group_by(
+        extract('hour', LogEntry.timestamp)
+    ).all()
+
+    baseline_map = {int(r.hour): max(5, int(r.cnt // divisor)) for r in hist_rows}
+    for h in range(24):
+        if h not in baseline_map:
+            baseline_map[h] = max(4, int(total_observed / 24 * 0.8))
+
+    timeline = []
+    anomalies = []
+    peak_hour = 0
+    peak_z = -999.0
+
+    for h in range(24):
+        obs = observed_map.get(h, 0)
+        base = baseline_map.get(h, 10)
+        sigma = max(2.5, math.sqrt(base) * 0.85)
+        z_score = round((obs - base) / sigma, 2)
+        upper_bound = round(base + 2.0 * sigma, 1)
+        is_anomaly = obs >= upper_bound and obs >= 8
+
+        if z_score > peak_z:
+            peak_z = z_score
+            peak_hour = h
+
+        timeline.append({
+            "hour": h,
+            "label": hour_label(h),
+            "observed": obs,
+            "baseline": base,
+            "upper_bound": upper_bound,
+            "z_score": z_score,
+            "is_anomaly": is_anomaly,
+        })
+
+        if is_anomaly:
+            hour_drivers, likely_incident = _hour_drivers_and_incident(db, events_db, target_date, h, limit=1)
+            anomalies.append({
+                "hour": h,
+                "time_window": f"{hour_clock_label(h)} – {hour_clock_label((h + 1) % 24)}",
+                "z_score": z_score,
+                "observed": obs,
+                "baseline": base,
+                "primary_driver": hour_drivers[0]["talkgroup"] if hour_drivers else "Unknown",
+                "likely_incident": likely_incident,
+            })
+
+    cur_h = min(23, max(0, datetime.now().hour))
+    focus_h = peak_hour if (timeline[peak_hour]["z_score"] >= 1.5) else cur_h
+    focus_pt = timeline[focus_h]
+
+    drivers, _ = _hour_drivers_and_incident(db, events_db, target_date, focus_h, limit=3)
+    primary_driver = drivers[0]["talkgroup"] if drivers else ""
+    z = focus_pt["z_score"]
+    surge_pct = round(((focus_pt["observed"] - focus_pt["baseline"]) / max(1, focus_pt["baseline"])) * 100, 1)
+
+    if z >= 3.0:
+        severity = "critical"
+        status_label = f"Critical Anomaly ({z:+.1f}σ)"
+    elif z >= 2.0:
+        severity = "high"
+        status_label = f"High Surge Alert ({z:+.1f}σ)"
+    elif z >= 1.0:
+        severity = "elevated"
+        status_label = f"Elevated Traffic ({z:+.1f}σ)"
+    else:
+        severity = "normal"
+        status_label = f"Nominal Flow ({z:+.1f}σ)"
+
+    return {
+        "current_hour_label": focus_pt["label"],
+        "observed": focus_pt["observed"],
+        "baseline": focus_pt["baseline"],
+        "surge_percentage": surge_pct,
+        "z_score": z,
+        "severity": severity,
+        "status_label": status_label,
+        "primary_driver": primary_driver,
+        "drivers": drivers,
+        "timeline": timeline,
+        "recent_anomalies": anomalies,
+        # Baseline is estimated from the same day when fewer than 25 calls exist.
+        "insufficient_data": total_observed < 25,
+    }
+
+
+def get_asr_quality_spectrum(db: Session, start_date: date, end_date: date) -> Dict[str, Any]:
+    """Calculate Whisper ASR confidence and signal fidelity breakdown across quality tiers."""
+    start = datetime.combine(start_date, datetime.min.time())
+    end = datetime.combine(end_date, datetime.max.time())
+
+    rows = db.query(
+        LogEntry.confidence
+    ).filter(
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+        LogEntry.is_deleted.is_(False),
+        LogEntry.confidence.isnot(None)
+    ).all()
+
+    total = len(rows)
+    if total > 0:
+        high = 0
+        moderate = 0
+        low = 0
+        sum_conf = 0.0
+
+        for (conf_val,) in rows:
+            c = float(conf_val or 0.0)
+            score = c * 100.0 if c <= 1.0 else c
+            sum_conf += score
+            if score >= 85.0:
+                high += 1
+            elif score >= 70.0:
+                moderate += 1
+            else:
+                low += 1
+
+        mean_conf = round(sum_conf / max(1, total), 1)
+        return {
+            "high_count": high,
+            "high_percentage": round((high / total) * 100, 1),
+            "moderate_count": moderate,
+            "moderate_percentage": round((moderate / total) * 100, 1),
+            "low_count": low,
+            "low_percentage": round((low / total) * 100, 1),
+            "mean_confidence": mean_conf,
+            "total_evaluated": total,
+            "insufficient_data": total < 10,
+        }
+
+    return {
+        "high_count": 0,
+        "high_percentage": 0.0,
+        "moderate_count": 0,
+        "moderate_percentage": 0.0,
+        "low_count": 0,
+        "low_percentage": 0.0,
+        "mean_confidence": 0.0,
+        "total_evaluated": 0,
+        "insufficient_data": True,
+    }
+
+
 def compute_insights_stats(
     db: Session,
     target_date: date,
@@ -916,6 +1451,10 @@ def compute_insights_stats(
     summary["trends"] = get_summary_trends(db, calls_last_minute)
 
     heatmap = get_diurnal_heatmap(db, start_date, end_date)
+    rtf_telemetry = get_rtf_telemetry(db, start_date, end_date)
+    ner_summary = get_ner_tactical_summary(events_db or db, start_date, end_date)
+    traffic_anomaly = get_traffic_anomaly_telemetry(db, start_date, events_db=events_db or db)
+    asr_quality = get_asr_quality_spectrum(db, start_date, end_date)
 
     return {
         "summary": summary,
@@ -924,5 +1463,9 @@ def compute_insights_stats(
         "talkgroups_all": all_talkgroups,
         "recent": recent,
         "heatmap": heatmap,
+        "rtf": rtf_telemetry,
+        "ner": ner_summary,
+        "anomaly": traffic_anomaly,
+        "asr_quality": asr_quality,
     }
 

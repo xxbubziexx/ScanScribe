@@ -28,7 +28,11 @@ function parseHourLabel(label: string): number | null {
 
 interface CustomTooltipProps {
   active?: boolean
-  payload?: readonly any[]
+  payload?: readonly {
+    dataKey?: string | number | unknown
+    value?: number | string | unknown
+    color?: string
+  }[]
   label?: string | number
   canClick?: boolean
 }
@@ -60,7 +64,7 @@ function CustomTooltip({ active, payload, label, canClick }: CustomTooltipProps)
             Transcriptions:
           </span>
           <span style={{ fontWeight: 600, color: '#ffffff', fontVariantNumeric: 'tabular-nums' }}>
-            {trans?.value ?? 0}
+            {String(trans?.value ?? 0)}
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14 }}>
@@ -69,7 +73,7 @@ function CustomTooltip({ active, payload, label, canClick }: CustomTooltipProps)
             Events:
           </span>
           <span style={{ fontWeight: 700, color: '#f97316', fontVariantNumeric: 'tabular-nums' }}>
-            {evts?.value ?? 0}
+            {String(evts?.value ?? 0)}
           </span>
         </div>
       </div>
@@ -93,11 +97,11 @@ export function ActivityChart({ data, view, onHourClick, isMultiDay }: ActivityC
         </span>
       </div>
 
-      <div className="ss-chart">
+      <div className="ss-chart w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}
-            margin={{ top: 5, right: 6, left: -14, bottom: 0 }}
+            margin={{ top: 8, right: 16, left: 16, bottom: 4 }}
             onClick={
               canClick
                 ? (payload: { activeLabel?: string | number }) => {
@@ -121,20 +125,20 @@ export function ActivityChart({ data, view, onHourClick, isMultiDay }: ActivityC
             <YAxis
               yAxisId="left"
               allowDecimals={false}
-              tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 10 }}
+              tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
-              width={24}
+              width={42}
             />
             <YAxis
               yAxisId="right"
               orientation="right"
               allowDecimals={false}
               domain={[0, (dataMax: number) => Math.max(5, Math.ceil(dataMax * 1.15))]}
-              tick={{ fill: 'rgba(249,115,22,0.85)', fontSize: 10 }}
+              tick={{ fill: 'rgba(249,115,22,0.85)', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
-              width={24}
+              width={36}
             />
             <Tooltip
               content={(props) => <CustomTooltip {...props} canClick={canClick} />}

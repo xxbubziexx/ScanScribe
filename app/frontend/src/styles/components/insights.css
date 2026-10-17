@@ -67,7 +67,7 @@
   }
 
   .ss-chart {
-    @apply h-52 sm:h-80;
+    @apply h-52 sm:h-80 w-full min-w-0;
   }
 
   .ss-rec-scroll {

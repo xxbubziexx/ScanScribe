@@ -17,9 +17,11 @@ function TrendBadge({ trend }: { trend?: TrendData }) {
   )
 }
 
-function ChartIcon({ className = 'h-4 w-4' }: { className?: string }) {
+import { WidgetInfoTooltip } from './WidgetInfoTooltip'
+
+function ChartIcon({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16" className={`h-4 w-4 shrink-0 ${className}`} fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
       <path d="M2 13.5h12M4 10.5v-3M8 10.5v-6M12 10.5v-8" strokeLinecap="round" />
     </svg>
   )
@@ -59,6 +61,15 @@ export function StatsPanel({
         <h2 className="ss-insights-title flex items-center gap-2">
           <ChartIcon className="h-4 w-4 text-indigo-400" />
           <span>Activity Statistics</span>
+          <WidgetInfoTooltip
+            title="Activity Statistics & Timeline"
+            description="Transmission volumes, live calls-per-minute throughput, active talkgroups, and CAD incident event activity across the selected time period."
+            bullets={[
+              'Calls/Min: Trailing 60-second throughput rate with delta comparison.',
+              'Timeline Curve: Volume overlay of raw radio traffic and created events.',
+              'Historical Baselines: Delta trend metrics compared against preceding periods.',
+            ]}
+          />
           {activeDateLabel && (
             <span className="ss-insights-date">
               {dateFrom === dateTo || !dateTo

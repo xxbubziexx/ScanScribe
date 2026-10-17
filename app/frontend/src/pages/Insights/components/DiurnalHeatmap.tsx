@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { DiurnalHeatmapData, HeatmapHourCell } from '@/types/insights'
+import { WidgetInfoTooltip } from './WidgetInfoTooltip'
 
 interface DiurnalHeatmapProps {
   data?: DiurnalHeatmapData
@@ -8,9 +9,9 @@ interface DiurnalHeatmapProps {
   dateTo?: string
 }
 
-function MatrixIcon({ className = 'h-4 w-4' }: { className?: string }) {
+function MatrixIcon({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 16 16" className={className} fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 16 16" className={`h-4 w-4 shrink-0 ${className}`} fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
       <rect x="2" y="2" width="3" height="3" rx="0.5" />
       <rect x="6.5" y="2" width="3" height="3" rx="0.5" />
       <rect x="11" y="2" width="3" height="3" rx="0.5" />
@@ -69,6 +70,15 @@ export function DiurnalHeatmap({ data, dateFrom, dateTo }: DiurnalHeatmapProps) 
           <div className="flex items-center gap-2">
             <MatrixIcon className="h-4 w-4 text-indigo-400" />
             <h2 className="text-sm font-semibold text-gray-200">Diurnal Activity Pattern</h2>
+            <WidgetInfoTooltip
+              title="Diurnal Activity Heatmap"
+              description="Plots radio transmission density across a 7-day by 24-hour matrix to identify recurring peak shift hours and historical dispatch cycles."
+              bullets={[
+                'Cell Intensity: Color saturation corresponds to transmission volume.',
+                'Day of Week Patterns: Exposes diurnal trends and shift transition spikes.',
+                'Interactive Filter: Click any hourly cell to jump directly into Search.',
+              ]}
+            />
             <span className="text-xs text-gray-500">
               ({range_start} to {range_end})
             </span>

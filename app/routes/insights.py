@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +12,15 @@ from ..models.event import SpanStore
 from ..models.hour_summary import HourSummary
 from ..models.log_entry import LogEntry
 from ..models.user import User
+from ..schemas.insights import (
+    DeleteHourSummaryResponse,
+    GenerateHourSummaryResponse,
+    InsightsStatsResponse,
+    ListHourSummariesResponse,
+    LiveCpmResponse,
+    SearchTranscriptionsResponse,
+    SummaryHoursResponse,
+)
 from ..services.insights_engine import (
     build_trend,
     compute_insights_stats,
@@ -33,12 +42,20 @@ from ..services.insights_engine import (
 from ..services.summarization import generate_hour_summary
 from .auth import get_current_active_user
 
-# Aliases for backward compatibility
-_build_trend = build_trend
-_get_attached_events_for_logs = get_attached_events_for_logs
-
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 logger = logging.getLogger(__name__)
+
+def parse_date_param(param_name: str, val: Optional[str]) -> Optional[date]:
+    """Parse YYYY-MM-DD date parameter or raise HTTP 422 if invalid."""
+    if not val:
+        return None
+    try:
+        return datetime.strptime(val.strip(), "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid date format for '{param_name}': '{val}'. Expected YYYY-MM-DD."
+        )
 
 
 class HourSummaryRequest(BaseModel):
@@ -47,8 +64,8 @@ class HourSummaryRequest(BaseModel):
     force: bool = False
 
 
-@router.get("/live-cpm")
-async def get_live_cpm(
+@router.get("/live-cpm", response_model=LiveCpmResponse)
+def get_live_cpm(
     window: int = Query(1, ge=1, le=60, description="Deprecated. Metric is fixed to previous full minute."),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db),
@@ -68,8 +85,8 @@ async def get_live_cpm(
     }
 
 
-@router.get("/stats")
-async def get_insights_stats(
+@router.get("/stats", response_model=InsightsStatsResponse)
+def get_insights_stats(
     date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
     date_from: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
     date_to: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
@@ -79,30 +96,18 @@ async def get_insights_stats(
     events_db: Session = Depends(get_events_db),
 ):
     """Get insights statistics for a given date or date range and view type."""
-    start_str = date_from or date
-    end_str = date_to or date or start_str
+    parsed_date = parse_date_param("date", date)
+    parsed_from = parse_date_param("date_from", date_from)
+    parsed_to = parse_date_param("date_to", date_to)
 
-    if start_str:
-        try:
-            target_start = datetime.strptime(start_str, "%Y-%m-%d").date()
-        except ValueError:
-            target_start = datetime.now().date()
-    else:
-        target_start = datetime.now().date()
-
-    if end_str:
-        try:
-            target_end = datetime.strptime(end_str, "%Y-%m-%d").date()
-        except ValueError:
-            target_end = target_start
-    else:
-        target_end = target_start
+    target_start = parsed_from or parsed_date or datetime.now().date()
+    target_end = parsed_to or parsed_date or target_start
 
     return compute_insights_stats(db, target_start, view, date_to=target_end, events_db=events_db)
 
 
-@router.get("/search")
-async def search_transcriptions(
+@router.get("/search", response_model=SearchTranscriptionsResponse)
+def search_transcriptions(
     date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
     date_from: Optional[str] = Query(None, description="Start date in YYYY-MM-DD format"),
     date_to: Optional[str] = Query(None, description="End date in YYYY-MM-DD format"),
@@ -116,24 +121,12 @@ async def search_transcriptions(
     events_db: Session = Depends(get_events_db),
 ):
     """Search and filter transcriptions across date or date range."""
-    start_str = date_from or date
-    end_str = date_to or date or start_str
+    parsed_date = parse_date_param("date", date)
+    parsed_from = parse_date_param("date_from", date_from)
+    parsed_to = parse_date_param("date_to", date_to)
 
-    if start_str:
-        try:
-            target_start = datetime.strptime(start_str, "%Y-%m-%d").date()
-        except ValueError:
-            target_start = datetime.now().date()
-    else:
-        target_start = datetime.now().date()
-
-    if end_str:
-        try:
-            target_end = datetime.strptime(end_str, "%Y-%m-%d").date()
-        except ValueError:
-            target_end = target_start
-    else:
-        target_end = target_start
+    target_start = parsed_from or parsed_date or datetime.now().date()
+    target_end = parsed_to or parsed_date or target_start
 
     start = datetime.combine(min(target_start, target_end), datetime.min.time())
     end = datetime.combine(max(target_start, target_end), datetime.max.time())
@@ -141,7 +134,7 @@ async def search_transcriptions(
     query = db.query(LogEntry).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted == False,
+        LogEntry.is_deleted.is_(False),
     )
 
     if keyword:
@@ -199,7 +192,10 @@ async def search_transcriptions(
 
     entities_map: Dict[int, Dict[str, List[str]]] = {}
     if log_ids:
-        spans = events_db.query(SpanStore).filter(SpanStore.log_entry_id.in_(log_ids)).all()
+        spans: List[SpanStore] = []
+        for i in range(0, len(log_ids), 500):
+            chunk = log_ids[i:i + 500]
+            spans.extend(events_db.query(SpanStore).filter(SpanStore.log_entry_id.in_(chunk)).all())
         for span in spans:
             if not span.log_entry_id:
                 continue
@@ -253,8 +249,8 @@ async def search_transcriptions(
     }
 
 
-@router.get("/summaries/hours")
-async def get_summary_hours(
+@router.get("/summaries/hours", response_model=SummaryHoursResponse)
+def get_summary_hours(
     date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db),
@@ -279,7 +275,7 @@ async def get_summary_hours(
         .filter(
             LogEntry.timestamp >= start,
             LogEntry.timestamp <= end,
-            LogEntry.is_deleted == False,
+            LogEntry.is_deleted.is_(False),
         )
         .group_by(extract("hour", LogEntry.timestamp))
         .order_by(extract("hour", LogEntry.timestamp).asc())
@@ -292,8 +288,8 @@ async def get_summary_hours(
     }
 
 
-@router.get("/summaries")
-async def list_hour_summaries(
+@router.get("/summaries", response_model=ListHourSummariesResponse)
+def list_hour_summaries(
     date: Optional[str] = Query(None, description="Date in YYYY-MM-DD format"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db),
@@ -333,8 +329,8 @@ async def list_hour_summaries(
     }
 
 
-@router.post("/summaries/generate")
-async def generate_hour_summary_endpoint(
+@router.post("/summaries/generate", response_model=GenerateHourSummaryResponse)
+def generate_hour_summary_endpoint(
     payload: HourSummaryRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db),
@@ -377,7 +373,7 @@ async def generate_hour_summary_endpoint(
         .filter(
             LogEntry.timestamp >= start,
             LogEntry.timestamp <= end,
-            LogEntry.is_deleted == False,
+            LogEntry.is_deleted.is_(False),
             extract("hour", LogEntry.timestamp) == payload.hour,
         )
         .order_by(LogEntry.timestamp.asc())
@@ -450,8 +446,8 @@ async def generate_hour_summary_endpoint(
     }
 
 
-@router.delete("/summaries")
-async def delete_hour_summary(
+@router.delete("/summaries", response_model=DeleteHourSummaryResponse)
+def delete_hour_summary(
     date: str = Query(..., description="Date in YYYY-MM-DD format"),
     hour: int = Query(..., ge=0, le=23),
     current_user: User = Depends(get_current_active_user),

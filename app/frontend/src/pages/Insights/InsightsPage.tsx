@@ -5,9 +5,16 @@ import { insights } from '@/lib/insights'
 import type { InsightsView } from '@/types/insights'
 import { StatsPanel } from './components/StatsPanel'
 import { DiurnalHeatmap } from './components/DiurnalHeatmap'
+import { RtfThroughputWidget } from './components/RtfThroughputWidget'
+import { TacticalNerWidget } from './components/TacticalNerWidget'
+import { TrafficAnomalyWidget } from './components/TrafficAnomalyWidget'
+import { TalkgroupShareWidget } from './components/TalkgroupShareWidget'
+import { AsrConfidenceWidget } from './components/AsrConfidenceWidget'
 
 function todayIso() {
-  return new Date().toISOString().split('T')[0]
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 export function InsightsPage() {
@@ -35,25 +42,27 @@ export function InsightsPage() {
 
   const activeDates = datesData?.dates ?? []
 
+  const defaultRangeAppliedRef = useRef(false)
   useEffect(() => {
-    if (activeDates.length > 0) {
-      const last = activeDates[activeDates.length - 1]
-      setDateFrom(last)
-      setDateTo(last)
-    }
-  }, [activeDates.length]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (defaultRangeAppliedRef.current || activeDates.length === 0) return
+    defaultRangeAppliedRef.current = true
+    const last = activeDates[activeDates.length - 1]
+    setDateFrom(last)
+    setDateTo(last)
+  }, [activeDates])
 
   const { data: statsData } = useQuery({
     queryKey: ['insights-stats', dateFrom, dateTo, view],
     queryFn: () => insights.stats(dateFrom, view, dateTo),
-    staleTime: 30_000,
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: true,
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
     enabled: !!dateFrom,
   })
 
   useEffect(() => {
     const poll = async () => {
+      if (document.hidden) return
       try {
         const data = await insights.liveCpm()
         setLiveCpm(data.calls_per_minute)
@@ -84,6 +93,11 @@ export function InsightsPage() {
   const summary = statsData?.summary ?? null
   const activity = statsData?.activity ?? []
   const heatmap = statsData?.heatmap
+  const rtf = statsData?.rtf
+  const ner = statsData?.ner
+  const anomaly = statsData?.anomaly
+  const talkgroups = statsData?.talkgroups ?? []
+  const asrQuality = statsData?.asr_quality
 
   return (
     <div className="w-full space-y-4">
@@ -98,6 +112,21 @@ export function InsightsPage() {
         onDateRangeChange={handleDateRangeChange}
         onHourClick={onHourClick}
       />
+
+      {/* Traffic Anomaly & Spike Detector */}
+      <TrafficAnomalyWidget data={anomaly} onHourClick={onHourClick} />
+
+      {/* Talkgroup Share of Voice & ASR Quality Spectrum */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <TalkgroupShareWidget data={talkgroups} dateFrom={dateFrom} dateTo={dateTo} />
+        <AsrConfidenceWidget data={asrQuality} />
+      </div>
+
+      {/* Real-Time Factor & Tactical Semantics Intelligence Widgets */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <RtfThroughputWidget data={rtf} />
+        <TacticalNerWidget data={ner} />
+      </div>
 
       <DiurnalHeatmap
         data={heatmap}

@@ -29,6 +29,9 @@ export interface ActivityPoint {
 export interface TalkgroupEntry {
   talkgroup: string
   count: number
+  duration?: number
+  avg_duration?: number
+  percentage?: number
 }
 
 export interface AttachedEventInfo {
@@ -83,6 +86,101 @@ export interface DiurnalHeatmapData {
   range_end: string
 }
 
+export interface RtfHourlyPoint {
+  hour: number
+  label: string
+  count: number
+  rtf: number
+  audio_s: number
+  proc_s: number
+}
+
+export interface RtfTelemetry {
+  rtf: number
+  speedup: number
+  total_audio_s: number
+  total_proc_s: number
+  avg_latency_ms: number
+  avg_duration_s: number
+  avg_confidence: number
+  model_used: string
+  status: 'nominal' | 'moderate' | 'saturated' | 'backlog'
+  insufficient_data: boolean
+  timeline: RtfHourlyPoint[]
+}
+
+export interface TacticalEntityItem {
+  canonical: string
+  label: 'UNIT' | 'EVT_TYPE' | 'LOC' | 'ADDRESS' | 'STATUS' | string
+  freq: number
+  first_seen?: string | null
+  last_seen?: string | null
+  sample_tx_id?: number | null
+}
+
+export interface TacticalNerSummary {
+  all: TacticalEntityItem[]
+  units: TacticalEntityItem[]
+  call_types: TacticalEntityItem[]
+  locations: TacticalEntityItem[]
+  status: TacticalEntityItem[]
+  total_entities_detected: number
+  insufficient_data: boolean
+}
+
+export interface AnomalyTimelinePoint {
+  hour: number
+  label: string
+  observed: number
+  baseline: number
+  upper_bound: number
+  z_score: number
+  is_anomaly: boolean
+}
+
+export interface AnomalyDriver {
+  talkgroup: string
+  count: number
+  percentage: number
+}
+
+export interface AnomalyIncidentRecord {
+  hour: number
+  time_window: string
+  z_score: number
+  observed: number
+  baseline: number
+  primary_driver: string
+  likely_incident?: string | null
+}
+
+export interface TrafficAnomalyTelemetry {
+  current_hour_label: string
+  observed: number
+  baseline: number
+  surge_percentage: number
+  z_score: number
+  severity: 'normal' | 'elevated' | 'high' | 'critical'
+  status_label: string
+  primary_driver: string
+  drivers: AnomalyDriver[]
+  timeline: AnomalyTimelinePoint[]
+  recent_anomalies: AnomalyIncidentRecord[]
+  insufficient_data: boolean
+}
+
+export interface AsrQualitySpectrum {
+  high_count: number
+  high_percentage: number
+  moderate_count: number
+  moderate_percentage: number
+  low_count: number
+  low_percentage: number
+  mean_confidence: number
+  total_evaluated: number
+  insufficient_data: boolean
+}
+
 export interface InsightsStats {
   summary: InsightsSummary
   activity: ActivityPoint[]
@@ -90,6 +188,10 @@ export interface InsightsStats {
   talkgroups_all: TalkgroupEntry[]
   recent: LogEntry[]
   heatmap?: DiurnalHeatmapData
+  rtf?: RtfTelemetry
+  ner?: TacticalNerSummary
+  anomaly?: TrafficAnomalyTelemetry
+  asr_quality?: AsrQualitySpectrum
 }
 
 export interface HourActivityEntry {

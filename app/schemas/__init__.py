@@ -44,6 +44,15 @@ from .chat import (
     ChatPromptInput,
     TransmissionLookupOut,
 )
+from .insights import (
+    LiveCpmResponse,
+    SearchTranscriptionsResponse,
+    SummaryHoursResponse,
+    ListHourSummariesResponse,
+    GenerateHourSummaryResponse,
+    DeleteHourSummaryResponse,
+    InsightsStatsResponse,
+)
 
 __all__ = [
     "UserBase",
@@ -77,8 +86,11 @@ __all__ = [
     "ChatThreadDetailOut",
     "ChatPromptInput",
     "TransmissionLookupOut",
+    "LiveCpmResponse",
+    "SearchTranscriptionsResponse",
+    "SummaryHoursResponse",
+    "ListHourSummariesResponse",
+    "GenerateHourSummaryResponse",
+    "DeleteHourSummaryResponse",
+    "InsightsStatsResponse",
 ]
-
-
-
-
