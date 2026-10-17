@@ -560,6 +560,36 @@ This living document is the **shared memory** between different AI models, human
   - Backend test suite: `pytest tests/` — **123 tests passed in 23.15s** (100% green).
 - **Next Tasks / Unfinished Work:** Expand on additional requested graph visualizations on `/insights` (e.g. Talkgroup Share of Voice, Incident Categories & Severity).
 
+### 2026-10-16 19:00 | Antigravity (Windows Dev Workstation)
+- **Work Performed:**
+  - **Transcriptions Search Feed Overhaul with Compact Accordion & Color-Coded NER Badges (`/search`)**:
+    - **Backend SpanStore Integration**: Updated `GET /api/insights/search` in [`app/routes/insights.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/insights.py) to query `SpanStore` for all returned `log_ids` and attach structured NER entities (`units`, `locations`, `call_types`, `status`).
+    - **Frontend Typing**: Extended `LogEntry` in [`types/insights.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/types/insights.ts) with `entities?: TransmissionEntities`.
+    - **Compact Row Design with Dynamic NER Metadata**:
+      - Metadata strip displays: Talkgroup, Date & Time, Duration, Whisper ASR confidence percentage.
+      - **Color-Coded NER Badges**: Rendered dynamically **only IF present** in that transmission:
+        - `UNITS` (Blue/Sky): e.g. `UNITS: 112, Medic 4`
+        - `LOC` (Emerald): e.g. `LOC: Highway 61`
+        - `TYPE` (Amber): e.g. `TYPE: Structure Fire`
+        - `STATUS` (Purple): e.g. `STATUS: En Route`
+      - Actions on right: Attached incident jump-links, inline audio play/stop toggle, and animated expand chevron.
+    - **Inline Accordion Expansion**:
+      - Clicking anywhere on the transmission row toggles expansion without page jump.
+      - Dedicated "Expand all / Collapse all" toggle in the active filter summary bar.
+      - Expanded state reveals:
+        - Full un-truncated transcript box with copy-to-clipboard button and visual feedback.
+        - Detailed 4-column NER Matrix with interactive entity pill chips (clicking a unit, location, or call type instantly filters the search feed).
+        - Technical Telemetry Strip: Transmission ID (`#ID`), exact Whisper ASR confidence %, audio file size, filename, and ISO timestamp.
+- **Live Ingestion Impact:** Zero impact. Read-only query against `SpanStore` via indexed `log_entry_id`; radio ingestion loop, audio storage, and SQLite WAL integrity unhindered.
+- **Gotchas / Warnings for Next Model:**
+  - `entities` on `LogEntry` defaults to empty arrays if no NER spans were detected for that transmission; UI guards with `hasAnyEntities` to prevent empty card renders.
+- **Verification Performed:**
+  - Full backend pytest suite: **41/41 tests passed in 22.23s** (100% green).
+  - Full frontend vitest suite: **6 test files, 30 passed in 3.29s** (100% green).
+  - TypeScript compilation: `npm run typecheck` passed with 0 errors.
+  - Production build: `npm run build` compiled cleanly into `app/frontend/dist/`.
+- **Next Tasks / Unfinished Work:** Ready for end-user interaction on `/search`.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -569,6 +599,3 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
-
-
-

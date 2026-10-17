@@ -38,6 +38,13 @@ export interface AttachedEventInfo {
   event_type?: string | null
 }
 
+export interface TransmissionEntities {
+  units?: string[]
+  locations?: string[]
+  call_types?: string[]
+  status?: string[]
+}
+
 export interface LogEntry {
   id: number
   timestamp: string
@@ -48,6 +55,7 @@ export interface LogEntry {
   audio_path: string
   confidence?: number
   attached_events?: AttachedEventInfo[]
+  entities?: TransmissionEntities
 }
 
 export interface HeatmapHourCell {

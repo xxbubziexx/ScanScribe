@@ -8,6 +8,7 @@ from sqlalchemy import extract, func, or_
 from sqlalchemy.orm import Session
 
 from ..database import get_events_db, get_logs_db
+from ..models.event import SpanStore
 from ..models.hour_summary import HourSummary
 from ..models.log_entry import LogEntry
 from ..models.user import User
@@ -193,7 +194,41 @@ async def search_transcriptions(
 
     total = query.count()
     results = query.limit(limit).all()
-    attached = get_attached_events_for_logs(events_db, [r.id for r in results if r.id is not None])
+    log_ids = [r.id for r in results if r.id is not None]
+    attached = get_attached_events_for_logs(events_db, log_ids)
+
+    entities_map: Dict[int, Dict[str, List[str]]] = {}
+    if log_ids:
+        spans = events_db.query(SpanStore).filter(SpanStore.log_entry_id.in_(log_ids)).all()
+        for span in spans:
+            if not span.log_entry_id:
+                continue
+
+            def split_clean(val: Optional[str]) -> List[str]:
+                if not val:
+                    return []
+                seen = set()
+                out = []
+                for item in val.split(","):
+                    c = item.strip()
+                    if c and c.lower() not in seen:
+                        seen.add(c.lower())
+                        out.append(c)
+                return out
+
+            units = split_clean(span.units)
+            locs = split_clean(span.locations)
+            addrs = split_clean(span.addresses)
+            combined_locs = locs + [a for a in addrs if a.lower() not in {l.lower() for l in locs}]
+            call_types = split_clean(span.evt_type)
+            status_list = split_clean(span.status)
+
+            entities_map[span.log_entry_id] = {
+                "units": units,
+                "locations": combined_locs,
+                "call_types": call_types,
+                "status": status_list,
+            }
 
     return {
         "total": total,
@@ -208,6 +243,10 @@ async def search_transcriptions(
                 "confidence": r.confidence,
                 "audio_path": r.audio_path,
                 "attached_events": attached.get(r.id, []),
+                "entities": entities_map.get(
+                    r.id,
+                    {"units": [], "locations": [], "call_types": [], "status": []},
+                ),
             }
             for r in results
         ],
