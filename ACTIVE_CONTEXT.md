@@ -590,6 +590,24 @@ This living document is the **shared memory** between different AI models, human
   - Production build: `npm run build` compiled cleanly into `app/frontend/dist/`.
 - **Next Tasks / Unfinished Work:** Ready for end-user interaction on `/search`.
 
+### 2026-10-16 19:08 | Antigravity (Windows Dev Workstation)
+- **Work Performed:**
+  - **Fixed `scanscribe stop` and `scanscribe status` PID Discovery**:
+    - **Root Cause**: `cmd_stop` and `cmd_status` relied exclusively on reading `.scanscribe.pid`. If ScanScribe was started in foreground mode, launched by a daemon, or if `.scanscribe.pid` was missing or unlinked, `_get_stored_pid()` returned `(None, 8000)` and reported `[!] ScanScribe does not appear to be running.`, leaving the server running and occupying port 8000.
+    - **Port Listener Discovery (`_find_pid_listening_on_port`)**: Implemented robust cross-platform detection in [`app/server_control.py`](file:///a:/Scanscribe_Projects/scanscribe/app/server_control.py) (via `netstat -ano -p tcp` on Windows, and `lsof`/`ss` on Linux/macOS) to discover any active process binding the server port.
+    - **Multi-Stage Process Termination & Port Verification**: Updated `cmd_stop()` to wait for process exit, fall back to direct termination if stubborn, verify that the port is completely freed, and clean up orphan child processes.
+    - **Foreground PID Registration**: Updated `cmd_start(args)` in foreground mode to write PID on startup and clean up in a `finally` block.
+    - **CLI Options**: Added `--port` argument to `scanscribe stop` and `scanscribe status` in [`app/cli.py`](file:///a:/Scanscribe_Projects/scanscribe/app/cli.py).
+- **Live Ingestion Impact:** None. Server lifecycle commands are now resilient across all environments.
+- **Gotchas / Warnings for Next Model:**
+  - `scanscribe stop` will now detect and terminate any running ScanScribe instance even if `.scanscribe.pid` is missing.
+- **Verification Performed:**
+  - Tested `scanscribe status`: accurately detected active PID (21800), URL, and health.
+  - Tested `scanscribe stop`: successfully terminated PID 21800 and verified port 8000 release.
+  - Tested subsequent `scanscribe status`: confirmed `[X] ScanScribe is NOT running.`.
+  - Tested `pytest tests/test_cli_update.py`: 5/5 tests passed in 0.76s.
+- **Next Tasks / Unfinished Work:** Ready for deployment.
+
 <!-- 
 ### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
 ### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
@@ -599,3 +617,4 @@ This living document is the **shared memory** between different AI models, human
 - **Verification Performed:** <pytest / typecheck / live testing results>
 - **Next Tasks / Unfinished Work:** <What should the next agent work on?>
 -->
+

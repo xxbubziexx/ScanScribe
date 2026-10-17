@@ -81,24 +81,83 @@ def _is_pid_running(pid: int) -> bool:
             return False
 
 
-def _get_stored_pid() -> tuple[int | None, int]:
-    """Return (pid, port) from PID file if valid."""
-    if not PID_FILE.is_file():
-        return None, DEFAULT_PORT
-    try:
-        content = PID_FILE.read_text().strip().split(":")
-        pid = int(content[0])
-        port = int(content[1]) if len(content) > 1 else DEFAULT_PORT
-        if _is_pid_running(pid):
-            return pid, port
-        # Stale PID file
+def _find_pid_listening_on_port(port: int) -> int | None:
+    """Find PID of process listening on port."""
+    if sys.platform == "win32":
         try:
-            PID_FILE.unlink(missing_ok=True)
+            out = subprocess.check_output(
+                ["netstat", "-ano", "-p", "tcp"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                errors="replace",
+            )
+            for line in out.splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 5 and parts[3].upper() == "LISTENING":
+                    if parts[1].endswith(f":{port}"):
+                        pid = int(parts[4])
+                        if pid > 0 and _is_pid_running(pid):
+                            return pid
         except Exception:
             pass
-        return None, port
-    except Exception:
-        return None, DEFAULT_PORT
+    else:
+        try:
+            out = subprocess.check_output(
+                ["lsof", "-t", "-i", f":{port}"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                errors="replace",
+            )
+            for line in out.strip().splitlines():
+                if line.strip().isdigit():
+                    pid = int(line.strip())
+                    if pid > 0 and _is_pid_running(pid):
+                        return pid
+        except Exception:
+            pass
+        try:
+            out = subprocess.check_output(
+                ["ss", "-lptn", f"sport = :{port}"],
+                stderr=subprocess.DEVNULL,
+                text=True,
+                errors="replace",
+            )
+            import re
+            m = re.search(r"pid=(\d+)", out)
+            if m:
+                pid = int(m.group(1))
+                if pid > 0 and _is_pid_running(pid):
+                    return pid
+        except Exception:
+            pass
+    return None
+
+
+def _get_stored_pid(fallback_port: int | None = None) -> tuple[int | None, int]:
+    """Return (pid, port) from PID file if valid, or fall back to port listener."""
+    port = fallback_port or DEFAULT_PORT
+    if PID_FILE.is_file():
+        try:
+            content = PID_FILE.read_text().strip().split(":")
+            pid = int(content[0])
+            port = int(content[1]) if len(content) > 1 else port
+            if _is_pid_running(pid):
+                return pid, port
+            # Stale PID file
+            try:
+                PID_FILE.unlink(missing_ok=True)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+    # Fallback: discover process listening on target port
+    discovered_pid = _find_pid_listening_on_port(port)
+    if discovered_pid:
+        _save_pid(discovered_pid, port)
+        return discovered_pid, port
+
+    return None, port
 
 
 def _save_pid(pid: int, port: int):
@@ -154,9 +213,13 @@ def cmd_start(args):
     if foreground:
         if not silent:
             print(f"[*] Starting ScanScribe in foreground on http://localhost:{port}...")
-        import uvicorn
-        os.chdir(str(BASE_DIR))
-        uvicorn.run("app.main:app", host=host, port=port, log_level="info")
+        _save_pid(os.getpid(), port)
+        try:
+            import uvicorn
+            os.chdir(str(BASE_DIR))
+            uvicorn.run("app.main:app", host=host, port=port, log_level="info")
+        finally:
+            _remove_pid()
         return 0
 
     # Background / Daemon spawn
@@ -245,7 +308,13 @@ def cmd_start(args):
 
 def cmd_stop(args):
     """Stop ScanScribe server."""
-    pid, port = _get_stored_pid()
+    target_port = getattr(args, "port", None) or DEFAULT_PORT
+    pid, port = _get_stored_pid(fallback_port=target_port)
+    if not pid:
+        pid = _find_pid_listening_on_port(target_port)
+        if pid:
+            port = target_port
+
     if not pid:
         print("[!] ScanScribe does not appear to be running.")
         _remove_pid()
@@ -253,17 +322,40 @@ def cmd_stop(args):
 
     print(f"[*] Stopping ScanScribe (PID: {pid})...")
 
+    stopped = False
     if sys.platform == "win32":
         try:
-            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
         except Exception as e:
             print(f"Error stopping process: {e}", file=sys.stderr)
+
+        for _ in range(25):
+            time.sleep(0.2)
+            if not _is_pid_running(pid):
+                stopped = True
+                break
+
+        if not stopped and _is_pid_running(pid):
+            try:
+                import ctypes
+                PROCESS_TERMINATE = 0x0001
+                handle = ctypes.windll.kernel32.OpenProcess(PROCESS_TERMINATE, False, pid)
+                if handle:
+                    ctypes.windll.kernel32.TerminateProcess(handle, 1)
+                    ctypes.windll.kernel32.CloseHandle(handle)
+            except Exception:
+                pass
     else:
         try:
             os.kill(pid, signal.SIGTERM)
-            for _ in range(15):
-                time.sleep(0.3)
+            for _ in range(20):
+                time.sleep(0.25)
                 if not _is_pid_running(pid):
+                    stopped = True
                     break
             if _is_pid_running(pid):
                 os.kill(pid, signal.SIGKILL)
@@ -271,6 +363,18 @@ def cmd_stop(args):
             print(f"Error stopping process: {e}", file=sys.stderr)
 
     _remove_pid()
+
+    # Clean up any remaining process still binding the port
+    remaining_pid = _find_pid_listening_on_port(port)
+    if remaining_pid and remaining_pid != pid:
+        try:
+            if sys.platform == "win32":
+                subprocess.run(["taskkill", "/PID", str(remaining_pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                os.kill(remaining_pid, signal.SIGKILL)
+        except Exception:
+            pass
+
     print("[✓] ScanScribe stopped.")
     return 0
 
@@ -284,7 +388,8 @@ def cmd_restart(args):
 
 def cmd_status(args):
     """Check ScanScribe status."""
-    pid, port = _get_stored_pid()
+    target_port = getattr(args, "port", None) or DEFAULT_PORT
+    pid, port = _get_stored_pid(fallback_port=target_port)
     if not pid:
         print("[X] ScanScribe is NOT running.")
         try:

@@ -222,7 +222,9 @@ def _add_lifecycle_commands(sub: argparse._SubParsersAction) -> None:
     p_start.add_argument("--no-update-check", action="store_true", help="Skip checking for updates on launch")
     p_start.set_defaults(func=sc.cmd_start)
 
-    sub.add_parser("stop", help="Stop the running ScanScribe instance").set_defaults(func=sc.cmd_stop)
+    p_stop = sub.add_parser("stop", help="Stop the running ScanScribe instance")
+    p_stop.add_argument("--port", type=int, default=sc.DEFAULT_PORT, help="Port to target (default: 8000)")
+    p_stop.set_defaults(func=sc.cmd_stop)
 
     p_restart = sub.add_parser("restart", help="Restart ScanScribe")
     p_restart.add_argument("--port", type=int, default=sc.DEFAULT_PORT, help="Port to listen on")
@@ -230,7 +232,9 @@ def _add_lifecycle_commands(sub: argparse._SubParsersAction) -> None:
     p_restart.add_argument("--silent", action="store_true", help="Restart silently")
     p_restart.set_defaults(func=sc.cmd_restart)
 
-    sub.add_parser("status", help="Show PID, port and health").set_defaults(func=sc.cmd_status)
+    p_status = sub.add_parser("status", help="Show PID, port and health")
+    p_status.add_argument("--port", type=int, default=sc.DEFAULT_PORT, help="Port to target (default: 8000)")
+    p_status.set_defaults(func=sc.cmd_status)
 
     p_update = sub.add_parser("update", help="Update ScanScribe codebase, sync packages, and run database migrations")
     p_update.add_argument("--branch", type=str, default="main", help="Git branch to pull updates from (default: main)")
