@@ -300,11 +300,20 @@ export function IntelPage() {
 
   return (
     <div className="flex h-[calc(100dvh-56px)] bg-[#0c0e14] text-gray-100 overflow-hidden select-none">
+      {/* Mobile Drawer Backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 top-14 bg-black/60 backdrop-blur-xs z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Thread Sidebar (Desktop + Mobile Drawer) */}
       <div
         className={`${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        } fixed md:static inset-y-0 left-0 z-40 w-64 bg-[#11131c] border-r border-[#222533] flex flex-col transition-transform duration-200 ease-in-out md:translate-x-0`}
+        } fixed md:static top-14 md:top-auto bottom-0 md:bottom-auto left-0 z-40 md:z-auto w-64 bg-[#11131c] border-r border-[#222533] flex flex-col transition-transform duration-200 ease-in-out`}
       >
         <div className="p-3 border-b border-[#222533] flex items-center justify-between">
           <button

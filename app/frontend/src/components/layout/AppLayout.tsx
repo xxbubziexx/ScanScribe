@@ -5,7 +5,7 @@ import { TopNav } from './TopNav'
 export function AppLayout() {
   const { token, isLoading } = useAuth()
   const location = useLocation()
-  const isFullBleed = location.pathname === '/'
+  const isFullBleed = location.pathname === '/' || location.pathname.startsWith('/intel')
 
   if (isLoading) {
     return (

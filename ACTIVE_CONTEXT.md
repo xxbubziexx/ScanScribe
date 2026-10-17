@@ -763,18 +763,26 @@ This living document is the **shared memory** between different AI models, human
   - `pytest tests/`: **137/137 passed in 23.9s**.
   - `npx tsc --noEmit -p tsconfig.app.json`: **0 errors**.
 - **Next Tasks / Unfinished Work:**
-  - Optional Phase 5 optimizations: evaluate adding an Alembic index migration on `(timestamp, is_deleted)` if large date-range queries become slow on production hardware.
-
-<!-- 
-### TEMPLATE FOR NEXT MODEL (Copy & Fill Below):
-### [YYYY-MM-DD HH:MM] | <Model Name> (<Machine: Windows/Ubuntu>)
-- **Work Performed:** <Summary of changes made>
-- **Live Ingestion Impact:** <Any changes to ingest/, workers, or ports?>
-- **Gotchas / Warnings for Next Model:** <Gotchas, quirks, or pitfalls discovered>
-- **Verification Performed:** <pytest / typecheck / live testing results>
-- **Next Tasks / Unfinished Work:** <What should the next agent work on?>
--->
-
-
-
-
+### 2026-10-17 15:15 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Resolved cosmetic bug on `/app/intel` where in-page sidebar and button overlapped the sticky TopNav header when scrolling or viewing the page.
+  - Root cause:
+    1. `AppLayout.tsx` had `isFullBleed = location.pathname === '/'`, which excluded `/intel`. As a result, `IntelPage` (designed for fixed 100dvh height with internal scrolling) was wrapped in padded `ss-app-main`, creating unnecessary page overflow and causing the whole window to scroll.
+    2. `.ss-top` in `layout.css` used `z-40`, identical to the in-page sidebar in `IntelPage.tsx` (`z-40`). Due to DOM order, elements inside `<main>` stacked on top of `<header>` during scroll.
+    3. In `IntelPage.tsx`, the mobile sidebar drawer used `fixed inset-y-0` (top 0 to bottom 0), bleeding over the header, and lacked a backdrop overlay.
+  - Fixes:
+    - Updated `AppLayout.tsx` so `isFullBleed` includes `location.pathname === '/' || location.pathname.startsWith('/intel')`.
+    - Elevated `.ss-top` in `layout.css` to `z-50` with `bg-[#0f1117]/95 backdrop-blur-md` to ensure global navigation always sits strictly above scrolling in-page content.
+    - Updated `IntelPage.tsx` thread sidebar to `fixed top-14 md:top-auto bottom-0 md:bottom-auto left-0 z-40 md:z-auto` with a mobile backdrop overlay (`z-30`).
+    - Adjusted `TransmissionAudioModal.tsx` to `z-[60]` to render cleanly over `TopNav`.
+    - Added comprehensive unit test in `app/frontend/src/test/AppLayout.test.tsx` verifying fullbleed vs standard main container assignment.
+- **Live Ingestion Impact:** None. Frontend cosmetic and stacking layout fix only.
+- **Gotchas / Warnings for Next Model:**
+  - Any future 100dvh full-viewport app pages (with internal scrolling like CommandCenter and Intel) should be registered in `AppLayout.tsx` under `isFullBleed` to avoid double scrollbars and unwanted window scrolling.
+- **Verification Performed:**
+  - `npm test`: **33/33 passed** (including new `AppLayout.test.tsx`).
+  - `npx tsc --noEmit -p tsconfig.app.json`: **0 errors**.
+  - `npm run build`: built cleanly in 1.52s.
+  - `pytest tests/`: **137/137 passed in 23.79s**.
+- **Next Tasks / Unfinished Work:**
+  - Ready to commit and push to `snapshot`.

@@ -1,7 +1,7 @@
 @layer components {
   .ss-top {
-    @apply sticky top-0 z-40 border-b border-white/10;
-    @apply bg-[#0f1117]/90 backdrop-blur-md;
+    @apply sticky top-0 z-50 border-b border-white/10;
+    @apply bg-[#0f1117]/95 backdrop-blur-md;
   }
 
   .ss-top-inner {
