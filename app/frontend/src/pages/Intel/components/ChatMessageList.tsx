@@ -14,9 +14,10 @@ interface ChatMessageListProps {
   streamError: string | null
   showTools: boolean
   showThinking: boolean
-  onSelectTx: (txId: number) => void
+  onSelectTx: (txId: number, incidentTxIds?: number[]) => void
   onPromptSuggestion: (prompt: string) => void
   onOpenAudioPanel?: () => void
+  onScopeIncident?: (txIds: number[], title?: string) => void
 }
 
 const STARTER_PROMPTS = [
@@ -61,6 +62,25 @@ function extractCitedIds(content: string, explicitIds?: number[] | null): number
   return Array.from(ids)
 }
 
+function findIncidentScopeForTx(txId: number, content: string, messageCitedIds: number[]): number[] {
+  // Check if content has scope:tx: directives containing this txId
+  const scopeMatches = content.matchAll(/scope:tx:([0-9,]+)/gi)
+  for (const match of scopeMatches) {
+    const ids = match[1]
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n) && n > 0)
+    if (ids.includes(txId)) {
+      return ids
+    }
+  }
+  // Otherwise, return all cited IDs in this incident response
+  if (messageCitedIds.includes(txId) && messageCitedIds.length > 0) {
+    return messageCitedIds
+  }
+  return [txId]
+}
+
 export function ChatMessageList({
   messages,
   streamingToken,
@@ -74,12 +94,13 @@ export function ChatMessageList({
   onSelectTx,
   onPromptSuggestion,
   onOpenAudioPanel,
+  onScopeIncident,
 }: ChatMessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [copiedMsgId, setCopiedMsgId] = useState<number | null>(null)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' })
   }, [messages.length, streamingToken, streamThought, streamToolCalls.length, isStreaming])
 
   const handleCopyText = async (msgId: number, text: string) => {
@@ -99,12 +120,58 @@ export function ChatMessageList({
       ? 'Reasoning over transcripts...'
       : 'Assembling intelligence...'
 
-  const renderMarkdown = (content: string) => {
+  const renderMarkdown = (content: string, messageCitedIds: number[] = []) => {
     return (
       <div className="text-[13px] leading-relaxed text-gray-200 select-text font-normal space-y-2">
         <ReactMarkdown
+          urlTransform={(url) => url}
           components={{
             a: ({ href, children }) => {
+              // Check for Incident Scope action link: scope:tx:123,456 or scope:incident
+              if (href?.startsWith('scope:')) {
+                let scopeIds: number[] = []
+                if (href.startsWith('scope:tx:')) {
+                  const raw = href.slice(9)
+                  scopeIds = raw
+                    .split(/[,+]/)
+                    .map((s) => parseInt(s.trim(), 10))
+                    .filter((n) => !isNaN(n) && n > 0)
+                } else {
+                  const m = href.match(/\d+/g)
+                  if (m) {
+                    scopeIds = m.map((s) => parseInt(s, 10)).filter((n) => !isNaN(n) && n > 0)
+                  }
+                }
+
+                const label = typeof children === 'string' ? children : 'Scope Incident Audio'
+                return (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (onScopeIncident && scopeIds.length > 0) {
+                        onScopeIncident(scopeIds, label)
+                      } else if (onSelectTx && scopeIds[0]) {
+                        onSelectTx(scopeIds[0], scopeIds)
+                        if (onOpenAudioPanel) onOpenAudioPanel()
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 mx-1 my-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-indigo-950 via-indigo-900 to-indigo-950 hover:from-indigo-900 hover:to-indigo-800 text-indigo-200 hover:text-white border border-indigo-500/70 hover:border-indigo-400 transition-all cursor-pointer select-none shadow-md group align-middle active:scale-[0.98]"
+                    title={`Load ${scopeIds.length > 0 ? `${scopeIds.length} ` : ''}incident transmissions into the audio deck for chronological playback`}
+                  >
+                    <span className="text-amber-400 text-xs group-hover:scale-110 transition-transform">⚡</span>
+                    <span className="font-semibold">{children}</span>
+                    {scopeIds.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-800/90 text-indigo-200 border border-indigo-600/50">
+                        {scopeIds.length} TX
+                      </span>
+                    )}
+                    <span className="text-[10px] text-indigo-400 group-hover:text-indigo-200">▶</span>
+                  </button>
+                )
+              }
+
               // Extract target ID from href (tx:12345) or from child text
               let targetId: number | null = null
               if (href?.startsWith('tx:')) {
@@ -121,13 +188,14 @@ export function ChatMessageList({
 
               if (targetId !== null) {
                 const finalId = targetId
+                const incidentIds = findIncidentScopeForTx(finalId, content, messageCitedIds)
                 return (
                   <button
                     type="button"
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
-                      onSelectTx(finalId)
+                      onSelectTx(finalId, incidentIds)
                       if (onOpenAudioPanel) onOpenAudioPanel()
                     }}
                     className="inline-flex items-center gap-1 mx-0.5 my-0.5 px-2 py-0.5 rounded font-mono text-[11px] font-semibold bg-indigo-950/80 hover:bg-indigo-700 text-indigo-300 hover:text-white border border-indigo-700/60 hover:border-indigo-400 transition-all cursor-pointer select-none align-baseline shadow-xs"
@@ -295,21 +363,34 @@ export function ChatMessageList({
                     {showTools && msg.tool_calls && msg.tool_calls.length > 0 && (
                       <ToolCallCard calls={msg.tool_calls} />
                     )}
-                    {renderMarkdown(msg.content)}
+                    {renderMarkdown(msg.content, citedIds)}
 
                     {/* Cited Audio Quick Bar */}
                     {citedIds.length > 0 && (
                       <div className="pt-2 flex items-center gap-2 flex-wrap">
+                        {onScopeIncident && (
+                          <button
+                            type="button"
+                            onClick={() => onScopeIncident(citedIds, 'Incident Audio')}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-indigo-950/90 hover:bg-indigo-900 text-indigo-200 hover:text-white border border-indigo-700/70 hover:border-indigo-400 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                            title="Load all transmissions cited in this incident response into the audio deck for chronological playback"
+                          >
+                            <span className="text-amber-400 text-xs">⚡</span>
+                            <span>Scope Incident Audio ({citedIds.length})</span>
+                            <span className="text-[10px] text-indigo-400">▶</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
-                            if (citedIds[0]) onSelectTx(citedIds[0])
+                            if (citedIds[0]) onSelectTx(citedIds[0], citedIds)
                             if (onOpenAudioPanel) onOpenAudioPanel()
                           }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#161a29] hover:bg-[#20263b] text-indigo-300 hover:text-white border border-[#2b324a] hover:border-indigo-500/60 transition-all cursor-pointer shadow-xs"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[#161a29] hover:bg-[#20263b] text-gray-400 hover:text-gray-200 border border-[#2b324a] hover:border-gray-500 transition-all cursor-pointer shadow-xs"
+                          title="Open audio deck scoped to this incident"
                         >
                           <span>📻</span>
-                          <span>Open Cited Audio ({citedIds.length})</span>
+                          <span>Deck ({citedIds.length})</span>
                         </button>
                       </div>
                     )}
@@ -349,7 +430,7 @@ export function ChatMessageList({
 
               <div>
                 {streamingToken ? (
-                  renderMarkdown(streamingToken)
+                  renderMarkdown(streamingToken, extractCitedIds(streamingToken))
                 ) : (
                   <div className="text-gray-500 italic text-xs animate-pulse">
                     {streamMeta?.agentic

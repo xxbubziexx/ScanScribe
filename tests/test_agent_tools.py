@@ -272,3 +272,35 @@ def test_unscoped_query_is_refused(seeded):
     assert not res_after.is_error
     assert res_after.count >= 1
 
+
+def test_scope_incident_audio_valid(seeded):
+    ctx = ToolContext()
+    # seeded has tx IDs from 1 to 5
+    res, _ = asyncio.run(
+        execute_tool(
+            "scope_incident_audio",
+            {"incident_title": "Structure Fire Response", "tx_ids": [3, 1, 2]},
+            ctx,
+        )
+    )
+    assert not res.is_error
+    assert "INCIDENT AUDIO SCOPE STAGED: 'Structure Fire Response'" in res.content
+    assert res.count == 3
+    # Ordered chronologically by timestamp (ID 1, 2, 3 in seed)
+    assert res.cited_ids == [1, 2, 3]
+    assert "[⚡ Scope Incident Audio (3 Transmissions)](scope:tx:1,2,3)" in res.content
+
+
+def test_scope_incident_audio_nonexistent(seeded):
+    ctx = ToolContext()
+    res, _ = asyncio.run(
+        execute_tool(
+            "scope_incident_audio",
+            {"incident_title": "Fake Incident", "tx_ids": [99999, 99998]},
+            ctx,
+        )
+    )
+    assert res.is_error
+    assert "None of the provided transmission IDs" in res.content
+
+

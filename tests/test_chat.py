@@ -195,3 +195,15 @@ def test_system_prompt_domain_exclusivity():
     assert "DOMAIN EXCLUSIVITY & SOLE JOB" in agent
     assert "OUT-OF-SCOPE INQUIRIES" in agent
 
+
+def test_system_prompt_chronological_order_rules():
+    base = build_system_prompt()
+    agent = build_agent_system_prompt()
+    assert "CHRONOLOGICAL ORDERING" in base
+    assert "chronological order" in base
+    assert "Scope Incident Audio" in base
+    assert "CHRONOLOGICAL ORDERING" in agent
+    assert "scope_incident_audio" in agent
+
+
+

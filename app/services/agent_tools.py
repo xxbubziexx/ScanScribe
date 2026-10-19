@@ -135,6 +135,21 @@ class LookupNerEntitiesArgs(BaseModel):
     limit: int = Field(default=30, ge=1, le=60, description="Max matching entity observations or top entities to return (default 30).")
 
 
+class ScopeIncidentAudioArgs(BaseModel):
+    incident_title: str = Field(
+        ...,
+        min_length=1,
+        max_length=150,
+        description="Concise descriptive title of the incident, e.g. 'Pursuit & Collision on I-95' or 'Structure Fire at 500 Oak St'.",
+    )
+    tx_ids: List[int] = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Chronological list of transmission IDs belonging to this incident timeline.",
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
@@ -694,6 +709,64 @@ def execute_lookup_ner_entities(db: Session, ctx: ToolContext, args: LookupNerEn
     )
 
 
+def execute_scope_incident_audio(
+    db: Session, ctx: ToolContext, args: ScopeIncidentAudioArgs
+) -> ToolResult:
+    """Stage and verify a chronological playlist of transmission IDs for an incident into the operator audio deck."""
+    if not args.tx_ids:
+        raise ToolArgumentError("At least one transmission ID is required to scope incident audio.")
+
+    seen = set()
+    deduped_ids = []
+    for tid in args.tx_ids:
+        if tid not in seen and tid > 0:
+            seen.add(tid)
+            deduped_ids.append(tid)
+
+    if not deduped_ids:
+        raise ToolArgumentError("No valid positive transmission IDs provided.")
+
+    records = (
+        db.query(LogEntry)
+        .filter(LogEntry.id.in_(deduped_ids), LogEntry.is_deleted.is_(False))
+        .order_by(LogEntry.timestamp.asc(), LogEntry.id.asc())
+        .all()
+    )
+
+    if not records:
+        return ToolResult(
+            content=f"None of the provided transmission IDs ({deduped_ids}) exist or remain active in the database.",
+            summary=f"No matching transmissions found for '{args.incident_title}'",
+            count=0,
+            is_error=True,
+        )
+
+    lines = []
+    ordered_ids = []
+    for r in records:
+        ordered_ids.append(r.id)
+        formatted = format_tx_line(r)
+        if formatted:
+            lines.append(f"- {formatted}")
+        else:
+            ts_str = r.timestamp.strftime("%Y-%m-%d %H:%M:%S") if r.timestamp else "UNKNOWN"
+            lines.append(f"- [TX-{r.id} | {ts_str} | TG: {r.talkgroup or 'N/A'}]")
+
+    header = [
+        f"INCIDENT AUDIO SCOPE STAGED: '{args.incident_title}'",
+        f"Total {len(ordered_ids)} transmissions ordered chronologically for playback in the Audio Deck.",
+        "Timeline Transmissions:",
+    ]
+    footer = f"\nAction Button for Response: [⚡ Scope Incident Audio ({len(ordered_ids)} Transmissions)](scope:tx:{','.join(map(str, ordered_ids))})"
+
+    return ToolResult(
+        content=_join_capped(header, lines) + footer,
+        summary=f"Scoped {len(ordered_ids)} incident audio clips for '{args.incident_title}'",
+        count=len(ordered_ids),
+        cited_ids=ordered_ids,
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Registry and provider declarations
 # --------------------------------------------------------------------------- #
@@ -849,6 +922,30 @@ TOOL_REGISTRY: Dict[str, ToolSpec] = {
             },
         },
         executor=execute_lookup_ner_entities,
+    ),
+    "scope_incident_audio": ToolSpec(
+        name="scope_incident_audio",
+        description=(
+            "Stage and verify a chronological playlist of transmission IDs for an incident into the operator audio deck. "
+            "Validates that the transmission IDs exist, sorts them chronologically by timestamp, and confirms them for continuous playback."
+        ),
+        args_model=ScopeIncidentAudioArgs,
+        parameters={
+            "type": "object",
+            "properties": {
+                "incident_title": {
+                    "type": "string",
+                    "description": "Descriptive title of the incident, e.g. 'Pursuit & Collision on I-95' or 'Structure Fire at 500 Oak St'.",
+                },
+                "tx_ids": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": "List of transmission IDs ([TX-<id>]) belonging to this incident timeline in chronological order.",
+                },
+            },
+            "required": ["incident_title", "tx_ids"],
+        },
+        executor=execute_scope_incident_audio,
     ),
 }
 

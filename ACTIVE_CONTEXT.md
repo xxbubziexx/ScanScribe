@@ -864,4 +864,51 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Ready for user testing on mobile and desktop devices.
 
+---
 
+### 2026-10-18 22:05 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Implemented **Incident Scope Action Button**, **Mandatory Chronological Ordering Rules**, **Auto-Clearing Incident Audio Deck Queues**, and **Audio Player Skip/Back Transport Controls** for `/intel` Scanner Intelligence:
+    1. **LLM Prompt Rules & Operational Protocol ([`app/services/chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py))**:
+       - Added Rule 2 to `build_system_prompt()`: "MANDATORY CHRONOLOGICAL ORDERING (ALWAYS ORDER TRANSMISSIONS BY TIME)" instructing the model to always arrange, analyze, and present transmissions, unit callouts, and incident events in strict chronological order from earliest to latest.
+       - Added Rule 8 to `build_system_prompt()` and updated `AGENT_TOOL_RULES` requiring the model to conclude chronological timelines with an `[⚡ Scope Incident Audio (N Transmissions)](scope:tx:ID1,ID2,ID3...)` action button.
+    2. **Agent Tool (`scope_incident_audio`) ([`app/services/agent_tools.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/agent_tools.py))**:
+       - Implemented `ScopeIncidentAudioArgs` (`incident_title`, `tx_ids`) and `execute_scope_incident_audio`.
+       - Validates transmission IDs against active database records, sorts them chronologically by timestamp, formats them for display, and returns a verified timeline with staged citation IDs and the action button.
+       - Registered in `TOOL_REGISTRY` and declared for OpenAI/OpenRouter and Gemini function-calling schemas.
+    3. **Auto-Clearing Incident Audio Deck Queues ([`ChatMessageList.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/ChatMessageList.tsx), [`IntelPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/IntelPage.tsx))**:
+       - Added `findIncidentScopeForTx` in `ChatMessageList.tsx` to detect the specific incident scope for any clicked transmission tag (`[TX #...]`).
+       - When selecting another incident's audio file tag or citation button, `handleSelectTx(txId, incidentTxIds)` clears out the old incident's recordings and populates the audio deck strictly with the new incident's recordings (preventing audio clips from piling on top of each other).
+       - Custom markdown anchor renderer renders `scope:tx:` directives as interactive `⚡ Scope Incident Audio (N TX) ▶` buttons.
+       - Added primary "⚡ Scope Incident Audio (N)" action button in assistant message footers next to "Deck (N)".
+    4. **Audio Deck Skip/Back & Keyboard Ergonomics ([`AudioControlPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Intel/components/AudioControlPanel.tsx))**:
+       - Added Previous Transmission (`⏮`, disabled on first track) and Next Transmission (`⏭`, disabled on last track) buttons to transport bar.
+       - Retained `-5s` / `+5s` intra-clip seeking and tactical play/pause.
+       - Added secondary playback control bar for speed pill, scoped tag, and volume/mute slider.
+       - Added keyboard shortcuts: `[` (Previous track), `]` (Next track), `Space` (Play/Pause).
+       - Header displays scoped incident title with badge and a "Show All" button to restore full conversation queue.
+- **Live Ingestion Impact:** Zero impact. Read-only database queries, non-blocking async execution.
+- **Gotchas / Warnings for Next Model:**
+  - `onSelectTx(txId, incidentTxIds)` automatically clears out the old incident and stages the new incident's transmissions into `scopedPlaylist`. Calling `onSelectTx` without `incidentTxIds` (e.g. from within the Audio Deck itself) preserves the currently active incident scope.
+  - Active branch is `snapshot`.
+- **Verification Performed:**
+  - `pytest tests/`: **140/140 passed in 23.26s** (including new tests for `scope_incident_audio` and prompt chronological ordering rules).
+  - `vitest`: **46/46 passed** (including 9 in `AudioControlPanel.test.tsx` and 3 in `ChatMessageList.test.tsx`).
+  - `npm run typecheck`: **0 errors**.
+  - `npm run build`: built cleanly in 1.38s.
+- **Next Tasks / Unfinished Work:**
+  - Ready for user testing on mobile and desktop devices.
+
+---
+
+### 2026-10-18 22:15 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Softened `/intel` system prompt rules in [`app/services/chat_context.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/chat_context.py) in response to user feedback ("the rule is too strict"):
+    1. **Chronological Ordering Guidance**: Replaced heavy-handed "MANDATORY CHRONOLOGICAL ORDERING / YOU MUST ALWAYS / Never jump out of temporal order" with natural, pragmatic operational guidance: "Always try to arrange, analyze, and present transmissions, unit callouts, and incident events in chronological order from earliest to latest so operators can follow the event progression naturally."
+    2. **Incident Scoping Guidance**: Replaced mandatory dictations with helpful instructions to provide the `[⚡ Scope Incident Audio (N Transmissions)](scope:tx:...)` button when detailing incident timelines or sequences.
+    3. **Time Scoping & Refusal Protocol Relaxation**: Softened the strict time-scoping refusal rule. Instead of refusing to answer or execute tools when the operator does not provide an explicit date/time window, the agent now scopes recent transmissions (e.g. past 2-4 hours or today's activity) or recent active logs before searching, providing immediate assistance without artificial refusal walls.
+    4. Updated test assertions in [`tests/test_chat.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_chat.py) to match the softened prompt phrasing.
+- **Verification Performed:**
+  - `pytest tests/`: **140/140 passed in 23.23s** (100% green).
+  - `npm.cmd test -- --run`: **46/46 passed across 9 test files** (100% green).
+- **Next Tasks / Unfinished Work:** Ready for user testing.

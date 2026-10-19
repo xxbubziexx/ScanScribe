@@ -35,11 +35,23 @@ function extractAllTxIds(messages: ChatMessage[]): number[] {
       const parsed = parseInt(match[1], 10)
       if (!isNaN(parsed)) ids.add(parsed)
     }
+    const scopeMatches = m.content.matchAll(/scope:tx:([0-9,]+)/gi)
+    for (const match of scopeMatches) {
+      for (const num of match[1].split(',')) {
+        const parsed = parseInt(num.trim(), 10)
+        if (!isNaN(parsed)) ids.add(parsed)
+      }
+    }
     if (m.tool_calls) {
       for (const call of m.tool_calls) {
         if (call.arguments && typeof call.arguments === 'object') {
           if ('tx_id' in call.arguments && typeof call.arguments.tx_id === 'number') {
             ids.add(call.arguments.tx_id)
+          }
+          if ('tx_ids' in call.arguments && Array.isArray(call.arguments.tx_ids)) {
+            for (const id of call.arguments.tx_ids) {
+              if (typeof id === 'number') ids.add(id)
+            }
           }
         }
       }
@@ -85,6 +97,7 @@ export function IntelPage() {
   // Audio Deck state
   const [activeTxId, setActiveTxId] = useState<number | null>(null)
   const [transmissionsMap, setTransmissionsMap] = useState<Record<number, TransmissionLookup>>({})
+  const [scopedPlaylist, setScopedPlaylist] = useState<{ title: string; txIds: number[] } | null>(null)
 
   // Streaming state
   const [isStreaming, setIsStreaming] = useState(false)
@@ -148,6 +161,7 @@ export function IntelPage() {
   const handleSelectThread = (thread: ChatThread) => {
     if (isStreaming) handleStopStream()
     setActiveThreadId(thread.id)
+    setScopedPlaylist(null)
     setSidebarOpen(false)
   }
 
@@ -264,10 +278,31 @@ export function IntelPage() {
     setStreamToolCalls([])
   }
 
-  const handleSelectTx = async (txId: number) => {
+  const handleSelectTx = async (txId: number, incidentTxIds?: number[]) => {
     setActiveTxId(txId)
     setAudioPanelOpen(true)
-    if (!transmissionsMap[txId]) {
+
+    if (incidentTxIds && incidentTxIds.length > 0) {
+      // Clear out the previous incident audio files so the new incident populates cleanly
+      setScopedPlaylist({
+        title: 'Incident Transmissions',
+        txIds: incidentTxIds,
+      })
+
+      const missing = incidentTxIds.filter((id) => !transmissionsMap[id])
+      if (missing.length > 0) {
+        for (const id of missing) {
+          try {
+            const tx = await chatApi.getTransmission(id)
+            if (tx) {
+              setTransmissionsMap((prev) => ({ ...prev, [id]: tx }))
+            }
+          } catch {
+            // ignore lookup error
+          }
+        }
+      }
+    } else if (!transmissionsMap[txId]) {
       try {
         const tx = await chatApi.getTransmission(txId)
         if (tx) {
@@ -277,6 +312,46 @@ export function IntelPage() {
         setStreamError(`Failed to load transmission #${txId} details.`)
       }
     }
+  }
+
+  const handleScopeIncident = async (txIds: number[], title?: string) => {
+    if (!txIds || txIds.length === 0) return
+    const scopeTitle = title || 'Incident Scope'
+    setScopedPlaylist({ title: scopeTitle, txIds })
+    setAudioPanelOpen(true)
+
+    // Pre-fetch missing transmissions in background
+    const missing = txIds.filter((id) => !transmissionsMap[id])
+    if (missing.length > 0) {
+      for (const id of missing) {
+        try {
+          const tx = await chatApi.getTransmission(id)
+          if (tx) {
+            setTransmissionsMap((prev) => ({ ...prev, [id]: tx }))
+          }
+        } catch {
+          // ignore lookup error
+        }
+      }
+    }
+
+    // Sort known transmissions chronologically and select the first
+    const known = txIds.map((id) => transmissionsMap[id]).filter(Boolean)
+    if (known.length > 0) {
+      const sorted = [...known].sort((a, b) => {
+        const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0
+        const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0
+        if (timeA !== timeB) return timeA - timeB
+        return a.id - b.id
+      })
+      setActiveTxId(sorted[0].id)
+    } else {
+      setActiveTxId(txIds[0])
+    }
+  }
+
+  const handleClearScope = () => {
+    setScopedPlaylist(null)
   }
 
   const messages: ChatMessage[] = activeThreadDetail?.messages || []
@@ -307,9 +382,17 @@ export function IntelPage() {
     }
   }, [allCitedIds.join(',')])
 
-  const citedTransmissionsList: TransmissionLookup[] = allCitedIds
+  const activeIds = scopedPlaylist ? scopedPlaylist.txIds : allCitedIds
+
+  const citedTransmissionsList: TransmissionLookup[] = activeIds
     .map((id) => transmissionsMap[id])
     .filter((t): t is TransmissionLookup => Boolean(t))
+    .sort((a, b) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0
+      if (timeA !== timeB) return timeA - timeB
+      return a.id - b.id
+    })
 
   return (
     <div className="flex h-[calc(100dvh-56px)] bg-[#0c0e14] text-gray-100 overflow-hidden select-none">
@@ -433,6 +516,7 @@ export function IntelPage() {
           onSelectTx={handleSelectTx}
           onPromptSuggestion={handleSendPrompt}
           onOpenAudioPanel={() => setAudioPanelOpen(true)}
+          onScopeIncident={handleScopeIncident}
         />
 
         {/* Bottom Input Area */}
@@ -450,6 +534,9 @@ export function IntelPage() {
         isOpen={audioPanelOpen}
         onClose={() => setAudioPanelOpen(false)}
         onSelectTx={handleSelectTx}
+        scopedPlaylist={scopedPlaylist}
+        onClearScope={handleClearScope}
+        allTransmissionsCount={allCitedIds.length}
       />
     </div>
   )

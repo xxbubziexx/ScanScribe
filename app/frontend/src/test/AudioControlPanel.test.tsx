@@ -145,4 +145,86 @@ describe('AudioControlPanel mobile drawer and desktop docked behavior', () => {
     if (cardTx102) fireEvent.click(cardTx102)
     expect(onSelectTx).toHaveBeenCalledWith(102)
   })
+
+  it('supports previous and next transmission track transport controls', () => {
+    const onSelectTx = vi.fn()
+    const { rerender } = render(
+      <AudioControlPanel
+        transmissions={mockTransmissions}
+        activeTxId={101}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSelectTx={onSelectTx}
+      />,
+    )
+
+    const prevBtn = screen.getByRole('button', { name: /previous transmission/i })
+    const nextBtn = screen.getByRole('button', { name: /next transmission/i })
+
+    // On track 1 (index 0), Previous is disabled and Next is enabled
+    expect(prevBtn).toBeDisabled()
+    expect(nextBtn).toBeEnabled()
+
+    fireEvent.click(nextBtn)
+    expect(onSelectTx).toHaveBeenCalledWith(102)
+
+    // Re-render on track 2 (index 1)
+    rerender(
+      <AudioControlPanel
+        transmissions={mockTransmissions}
+        activeTxId={102}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSelectTx={onSelectTx}
+      />,
+    )
+
+    expect(prevBtn).toBeEnabled()
+    expect(nextBtn).toBeDisabled()
+
+    fireEvent.click(prevBtn)
+    expect(onSelectTx).toHaveBeenCalledWith(101)
+  })
+
+  it('supports [ and ] keyboard shortcuts for track skipping', () => {
+    const onSelectTx = vi.fn()
+    render(
+      <AudioControlPanel
+        transmissions={mockTransmissions}
+        activeTxId={101}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSelectTx={onSelectTx}
+      />,
+    )
+
+    // Press ] to advance to next
+    fireEvent.keyDown(window, { key: ']' })
+    expect(onSelectTx).toHaveBeenCalledWith(102)
+  })
+
+  it('renders scoped playlist header and calls onClearScope when Show All is clicked', () => {
+    const onClearScope = vi.fn()
+    render(
+      <AudioControlPanel
+        transmissions={mockTransmissions}
+        activeTxId={101}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSelectTx={vi.fn()}
+        scopedPlaylist={{ title: 'Pursuit Incident Timeline', txIds: [101, 102] }}
+        onClearScope={onClearScope}
+        allTransmissionsCount={15}
+      />,
+    )
+
+    expect(screen.getByText('Pursuit Incident Timeline')).toBeInTheDocument()
+    expect(screen.getByText('2 scoped')).toBeInTheDocument()
+
+    const showAllBtn = screen.getByRole('button', { name: /show all/i })
+    expect(showAllBtn).toBeInTheDocument()
+    fireEvent.click(showAllBtn)
+    expect(onClearScope).toHaveBeenCalledTimes(1)
+  })
 })
+

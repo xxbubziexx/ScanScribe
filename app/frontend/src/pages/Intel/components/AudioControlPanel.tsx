@@ -7,6 +7,9 @@ interface AudioControlPanelProps {
   isOpen: boolean
   onClose: () => void
   onSelectTx: (txId: number) => void
+  scopedPlaylist?: { title: string; txIds: number[] } | null
+  onClearScope?: () => void
+  allTransmissionsCount?: number
 }
 
 function formatTime(seconds: number): string {
@@ -24,6 +27,9 @@ export function AudioControlPanel({
   isOpen,
   onClose,
   onSelectTx,
+  scopedPlaylist,
+  onClearScope,
+  allTransmissionsCount,
 }: AudioControlPanelProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -196,15 +202,48 @@ export function AudioControlPanel({
     }
   }
 
-  // Keyboard Escape listener to close drawer when open
+  // Track skip (Next) and back (Previous) in queue
+  const handlePreviousTx = () => {
+    if (activeIndex > 0) {
+      onSelectTx(transmissions[activeIndex - 1].id)
+    }
+  }
+
+  const handleNextTx = () => {
+    if (activeIndex >= 0 && activeIndex < transmissions.length - 1) {
+      onSelectTx(transmissions[activeIndex + 1].id)
+    }
+  }
+
+  // Keyboard navigation & Escape listener
   useEffect(() => {
     if (!isOpen) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+
+      // Don't intercept if user is typing in an input or textarea
+      const el = e.target as HTMLElement | null
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+        return
+      }
+
+      if (e.key === '[' || (e.shiftKey && e.key === 'ArrowLeft')) {
+        e.preventDefault()
+        handlePreviousTx()
+      } else if (e.key === ']' || (e.shiftKey && e.key === 'ArrowRight')) {
+        e.preventDefault()
+        handleNextTx()
+      } else if (e.key === ' ' && activeTx) {
+        e.preventDefault()
+        handleTogglePlay()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, activeIndex, transmissions, activeTx, isPlaying])
 
   if (!isOpen) return null
 
@@ -227,11 +266,23 @@ export function AudioControlPanel({
       >
         {/* Top Header */}
         <div className="px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-[#222533] bg-[#141724] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-gray-200">Transmission Audio</span>
-            <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-medium bg-indigo-950 text-indigo-300 border border-indigo-800/60">
-              {transmissions.length} cited
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-semibold text-gray-200 truncate">
+              {scopedPlaylist ? scopedPlaylist.title : 'Transmission Audio'}
             </span>
+            <span className="px-1.5 py-0.5 rounded text-[11px] font-mono font-medium bg-indigo-950 text-indigo-300 border border-indigo-800/60 shrink-0">
+              {transmissions.length} {scopedPlaylist ? 'scoped' : 'cited'}
+            </span>
+            {scopedPlaylist && onClearScope && (
+              <button
+                type="button"
+                onClick={onClearScope}
+                className="text-[11px] text-indigo-400 hover:text-indigo-200 underline cursor-pointer shrink-0 ml-1"
+                title="Return to full conversation audio deck"
+              >
+                Show All{allTransmissionsCount ? ` (${allTransmissionsCount})` : ''}
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -321,13 +372,27 @@ export function AudioControlPanel({
               </div>
 
               {/* Transport & Control Buttons */}
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center justify-between gap-1 pt-1">
+                {/* Previous Transmission (Track Back) */}
+                <button
+                  type="button"
+                  onClick={handlePreviousTx}
+                  disabled={activeIndex <= 0}
+                  className="min-w-[40px] sm:min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-300 hover:text-white hover:bg-[#202438] active:bg-[#252a42] rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed group"
+                  title="Previous transmission in sequence ([)"
+                  aria-label="Previous transmission"
+                >
+                  <svg className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
+                    <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+                  </svg>
+                </button>
+
                 {/* Skip Back 5s */}
                 <button
                   type="button"
                   onClick={() => handleSkip(-5)}
                   disabled={!activeTx?.audio_url || activeTx.audio_available === false}
-                  className="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-300 hover:text-white hover:bg-[#202438] active:bg-[#252a42] rounded-lg font-mono text-xs transition-colors cursor-pointer disabled:opacity-40"
+                  className="min-w-[40px] sm:min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-300 hover:text-white hover:bg-[#202438] active:bg-[#252a42] rounded-lg font-mono text-xs transition-colors cursor-pointer disabled:opacity-40"
                   title="Rewind 5 seconds"
                   aria-label="Rewind 5 seconds"
                 >
@@ -339,7 +404,7 @@ export function AudioControlPanel({
                   type="button"
                   onClick={handleTogglePlay}
                   disabled={!activeTx?.audio_url || activeTx.audio_available === false}
-                  className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white flex items-center justify-center shadow-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white flex items-center justify-center shadow-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
                   title={isPlaying ? 'Pause' : 'Play'}
                   aria-label={isPlaying ? 'Pause' : 'Play'}
                 >
@@ -359,30 +424,54 @@ export function AudioControlPanel({
                   type="button"
                   onClick={() => handleSkip(5)}
                   disabled={!activeTx?.audio_url}
-                  className="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-300 hover:text-white hover:bg-[#202438] active:bg-[#252a42] rounded-lg font-mono text-xs transition-colors cursor-pointer disabled:opacity-40"
+                  className="min-w-[40px] sm:min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-300 hover:text-white hover:bg-[#202438] active:bg-[#252a42] rounded-lg font-mono text-xs transition-colors cursor-pointer disabled:opacity-40"
                   title="Forward 5 seconds"
                   aria-label="Forward 5 seconds"
                 >
                   +5s
                 </button>
 
-                {/* Playback Speed Pill */}
+                {/* Next Transmission (Track Skip) */}
                 <button
                   type="button"
-                  onClick={handleToggleSpeed}
-                  className="min-h-[44px] px-3 bg-[#1e2235] hover:bg-[#282d46] active:bg-[#2c334e] border border-[#2b3149] rounded-lg font-mono text-xs font-semibold text-indigo-300 transition-colors cursor-pointer flex items-center justify-center"
-                  title="Change playback speed"
-                  aria-label="Change playback speed"
+                  onClick={handleNextTx}
+                  disabled={activeIndex < 0 || activeIndex >= transmissions.length - 1}
+                  className="min-w-[40px] sm:min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-300 hover:text-white hover:bg-[#202438] active:bg-[#252a42] rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed group"
+                  title="Next transmission in sequence (])"
+                  aria-label="Next transmission"
                 >
-                  {playbackSpeed.toFixed(2).replace(/\.00$/, '')}x
+                  <svg className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
+                    <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+                  </svg>
                 </button>
+              </div>
+
+              {/* Secondary Playback Bar: Speed Pill + Scoped Tag + Volume Slider */}
+              <div className="flex items-center justify-between pt-1.5 border-t border-[#22273c]/60">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleSpeed}
+                    className="min-h-[36px] px-2.5 bg-[#1e2235] hover:bg-[#282d46] active:bg-[#2c334e] border border-[#2b3149] rounded-lg font-mono text-xs font-semibold text-indigo-300 transition-colors cursor-pointer flex items-center justify-center"
+                    title="Change playback speed"
+                    aria-label="Change playback speed"
+                  >
+                    {playbackSpeed.toFixed(2).replace(/\.00$/, '')}x
+                  </button>
+                  {scopedPlaylist && onClearScope && (
+                    <span className="text-[10px] font-mono text-amber-300 bg-amber-950/70 border border-amber-600/40 px-2 py-0.5 rounded-md flex items-center gap-1">
+                      <span>⚡</span>
+                      <span>Scoped</span>
+                    </span>
+                  )}
+                </div>
 
                 {/* Volume / Mute Control */}
                 <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={handleToggleMute}
-                    className="min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-200 active:bg-white/5 rounded-lg transition-colors cursor-pointer text-base"
+                    className="min-w-[36px] min-h-[36px] flex items-center justify-center text-gray-400 hover:text-gray-200 active:bg-white/5 rounded-lg transition-colors cursor-pointer text-base"
                     title={isMuted ? 'Unmute' : 'Mute'}
                     aria-label={isMuted ? 'Unmute' : 'Mute'}
                   >
@@ -396,7 +485,7 @@ export function AudioControlPanel({
                     value={isMuted ? 0 : volume}
                     onChange={handleVolumeChange}
                     aria-label="Volume level"
-                    className="w-14 sm:w-16 h-2 bg-[#252a3d] rounded appearance-none cursor-pointer accent-indigo-500"
+                    className="w-16 sm:w-20 h-2 bg-[#252a3d] rounded appearance-none cursor-pointer accent-indigo-500"
                     title={`Volume: ${Math.round((isMuted ? 0 : volume) * 100)}%`}
                   />
                 </div>
@@ -421,7 +510,10 @@ export function AudioControlPanel({
         {/* Cited Transmissions Queue List */}
         <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-2">
           <div className="px-2 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wider flex items-center justify-between">
-            <span>Cited Recordings ({transmissions.length})</span>
+            <div className="flex items-center gap-1.5">
+              <span>{scopedPlaylist ? 'Incident Queue' : 'Cited Recordings'} ({transmissions.length})</span>
+              <span className="text-[10px] text-gray-500 lowercase font-normal">(chronological)</span>
+            </div>
             {transmissions.length > 0 && activeIndex >= 0 && (
               <span className="font-mono text-xs text-indigo-400">
                 Playing {activeIndex + 1} of {transmissions.length}
