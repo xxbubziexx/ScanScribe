@@ -9,7 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/xxbubziexx/ScanScribe/releases"><img src="https://img.shields.io/badge/Release-v2.0.0-blue.svg?style=flat-square" alt="Release v2.0.0"></a>
+  <a href="https://scanscribe.io"><img src="https://img.shields.io/badge/Website-scanscribe.io-0284c7.svg?style=flat-square" alt="ScanScribe Website"></a>
+  <a href="https://github.com/xxbubziexx/ScanScribe/releases"><img src="https://img.shields.io/github/v/release/xxbubziexx/ScanScribe?style=flat-square&color=blue&label=Release" alt="Latest Release"></a>
+  <a href="https://github.com/xxbubziexx/ScanScribe/stargazers"><img src="https://img.shields.io/github/stars/xxbubziexx/ScanScribe?style=flat-square&color=yellow" alt="GitHub Stars"></a>
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=flat-square" alt="Python 3.10+"></a>
   <a href="https://github.com/astral-sh/uv"><img src="https://img.shields.io/badge/Runtime-uv%20Isolated-purple.svg?style=flat-square" alt="Runtime uv"></a>
   <a href="https://pytorch.org"><img src="https://img.shields.io/badge/Inference-CPU%20%7C%20CUDA-green.svg?style=flat-square" alt="Inference CPU | CUDA"></a>
@@ -22,6 +24,8 @@
 ## Overview
 
 **ScanScribe** is an enterprise-grade, end-to-end intelligence station purpose-built for public safety radio monitoring. It captures raw transmissions from SDR receivers (SDRTrunk) or hardware scanners (ProScan), runs high-throughput local speech-to-text with specialized public safety Whisper models, extracts incident entities (units, addresses, event types) using token-level NER, routes transmissions into real-time incident threads via single-pass LLMs, maps active calls live on a tactical Command Center, and powers conversational intelligence across historical radio traffic via the Scanner Intelligence Console.
+
+Official Website & Documentation: **[https://scanscribe.io](https://scanscribe.io)**
 
 Whether running as a dedicated field station on Windows or a 24/7 ingestion server on Linux, ScanScribe provides immediate situational awareness for dispatchers, researchers, and scanner hobbyists.
 

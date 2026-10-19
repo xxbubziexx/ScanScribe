@@ -1,0 +1,53 @@
+name: Bug Report
+description: Report an issue or bug encountered in ScanScribe
+title: "[BUG]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue with ScanScribe!
+  - type: input
+    id: version
+    attributes:
+      label: ScanScribe Version
+      description: What version of ScanScribe are you running? (Run `scanscribe version` or check the bottom of the UI)
+      placeholder: "e.g., v2.0.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Ubuntu / Debian Linux
+        - Windows 10 / 11
+        - Docker
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: audio_source
+    attributes:
+      label: Audio Source
+      options:
+        - SDRTrunk
+        - ProScan
+        - Trunk Recorder
+        - Manual Ingest Folder
+        - Other
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Please describe the issue clearly.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs & Output
+      description: Paste any error messages, terminal logs, or browser console errors here.
+      render: shell

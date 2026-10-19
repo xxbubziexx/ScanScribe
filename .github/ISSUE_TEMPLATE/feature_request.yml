@@ -1,0 +1,28 @@
+name: Feature Request
+description: Propose a new feature, integration, or improvement for ScanScribe
+title: "[FEATURE]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for ScanScribe? Let us know below!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Opportunity
+      description: Is your feature request related to a problem or a new capability?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe what you would like to see happen.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any screenshots, mockups, or context (e.g. scanner hardware, talkgroup setups).
