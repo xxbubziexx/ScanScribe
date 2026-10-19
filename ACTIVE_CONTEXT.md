@@ -912,3 +912,19 @@ This living document is the **shared memory** between different AI models, human
   - `pytest tests/`: **140/140 passed in 23.23s** (100% green).
   - `npm.cmd test -- --run`: **46/46 passed across 9 test files** (100% green).
 - **Next Tasks / Unfinished Work:** Ready for user testing.
+
+---
+
+### 2026-10-19 11:46 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Audited and updated GitHub repository metadata and search engine discoverability for ScanScribe:
+    1. **GitHub Repository Metadata**: Using `gh repo edit`, set official repository description (`ScanScribe: Open-source radio scanner speech-to-text transcription and incident intelligence pipeline (Whisper, SDRTrunk, ProScan)`), set homepage URL to `https://scanscribe.io`, and added 12 high-intent topics (`scanscribe`, `radio-scanner`, `sdrtrunk`, `proscan`, `whisper`, `speech-to-text`, `radioreference`, `police-scanner`, `sdr`, `self-hosted`, `fastapi`, `react`).
+    2. **GitHub Releases Published**: Converted existing git tags (`v2.0.0`, `v2.0.1`, `v2.0.2`, `v2.0.3`) into official published GitHub Releases with release notes, marking `v2.0.3` as Latest. (Google aggressively indexes GitHub release URLs).
+    3. **Community Profile & Templates**: Created GitHub issue templates (`.github/ISSUE_TEMPLATE/bug_report.yml`, `feature_request.yml`) and pull request template (`.github/PULL_REQUEST_TEMPLATE.md`) to boost GitHub Community Profile ranking.
+    4. **README Enhancements**: Added website shield, dynamic latest release badge, GitHub stars badge, and direct website and documentation links to `scanscribe.io`.
+- **Live Ingestion Impact:** Zero impact.
+- **Verification Performed:**
+  - Verified remote repository metadata via `gh repo view`.
+  - Verified `gh release list` showing 4 published releases with `v2.0.3` as Latest.
+  - Test suite sanity check passed. Changes pushed to `origin snapshot`.
+- **Next Tasks / Unfinished Work:** None.
