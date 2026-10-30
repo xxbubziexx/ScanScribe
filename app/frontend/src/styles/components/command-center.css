@@ -9,7 +9,7 @@
   }
 
   .ss-cc-header {
-    @apply flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-black/40 border-b border-white/10 backdrop-blur-md shrink-0;
+    @apply relative z-30 flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 sm:px-4 sm:py-2.5 bg-black/40 border-b border-white/10 backdrop-blur-md shrink-0;
   }
 
   .ss-cc-title-group {
@@ -49,7 +49,7 @@
   }
 
   .ss-cc-body {
-    @apply relative flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden;
+    @apply relative z-10 flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden;
   }
 
   .ss-cc-map-container {

@@ -11,6 +11,7 @@ export interface WatcherStatus {
   memory_total_gb: number
   memory_percent: number
   cpu_percent: number
+  model?: string
 }
 
 export interface TranscriptionCard {

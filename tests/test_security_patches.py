@@ -200,27 +200,34 @@ def test_events_debug_admin_guard(client, test_users):
     assert r_admin.status_code == 200
 
 
-def test_watcher_status_admin_guard(client, test_users):
-    """Verify GET /api/watcher/status requires admin access."""
-    # Unauthenticated -> 401
+def test_watcher_status_and_actions_guard(client, test_users):
+    """Verify /api/watcher/status requires authenticated user, while start/stop require admin."""
+    # Status: unauthenticated -> 401
     assert client.get("/api/watcher/status").status_code == 401
 
-    # Regular user -> 403
+    # Status: Regular active user -> 200
     r_user = client.get(
         "/api/watcher/status",
         headers={"Authorization": f"Bearer {test_users['user_token']}"}
     )
-    assert r_user.status_code == 403
-
-    # Admin user -> 200
-    r_admin = client.get(
-        "/api/watcher/status",
-        headers={"Authorization": f"Bearer {test_users['admin_token']}"}
-    )
-    assert r_admin.status_code == 200
-    data = r_admin.json()
+    assert r_user.status_code == 200
+    data = r_user.json()
     assert "memory_used_gb" in data
     assert "cpu_percent" in data
+    assert "model" in data
+
+    # Actions: Regular user cannot start/stop watcher -> 403
+    r_start_user = client.post(
+        "/api/watcher/start",
+        headers={"Authorization": f"Bearer {test_users['user_token']}"}
+    )
+    assert r_start_user.status_code == 403
+
+    r_stop_user = client.post(
+        "/api/watcher/stop",
+        headers={"Authorization": f"Bearer {test_users['user_token']}"}
+    )
+    assert r_stop_user.status_code == 403
 
 
 def test_auth_login_rate_limiting(client):

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { eventsApi } from '@/lib/events'
 import { insights } from '@/lib/insights'
+import { todayIso } from '@/lib/dateSelection'
 import { useToast } from '@/context/ToastContext'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import { errorMessage } from '@/types/api'
@@ -74,10 +75,10 @@ export function CommandCenterPage() {
   })
 
   // Fetch Insights Summary for today
-  const todayIso = new Date().toISOString().split('T')[0]
+  const today = todayIso()
   const insightsQuery = useQuery({
-    queryKey: ['insights-stats', todayIso, 'hourly'],
-    queryFn: () => insights.stats(todayIso, 'hourly'),
+    queryKey: ['insights-stats', today, 'hourly'],
+    queryFn: () => insights.stats(today, 'hourly'),
     staleTime: 30_000,
   })
 
@@ -230,11 +231,33 @@ export function CommandCenterPage() {
   const [timeframe, setTimeframe] = useState<Timeframe>('24h')
 
   const [mapOptionsOpen, setMapOptionsOpen] = useState(false)
+  const mapOptionsRef = useRef<HTMLDivElement>(null)
   const [mapOptions, setMapOptions] = useState({
     showLabels: true,
     clusterPins: false,
     unlockAllPins: false,
   })
+
+  // Dismiss Map Options dropdown on outside click or Escape key
+  useEffect(() => {
+    if (!mapOptionsOpen) return
+    const onMouseDown = (e: MouseEvent) => {
+      if (mapOptionsRef.current && !mapOptionsRef.current.contains(e.target as Node)) {
+        setMapOptionsOpen(false)
+      }
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMapOptionsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [mapOptionsOpen])
 
   // Transform raw event items into PipelineEvents with monitor names
   const rawItems: EventListItem[] = eventsQuery.data?.items ?? []
@@ -309,18 +332,26 @@ export function CommandCenterPage() {
           </div>
 
           <div className="ss-cc-controls">
-            <div className="relative shrink-0">
+            <div
+              ref={mapOptionsRef}
+              className={`relative shrink-0 ${mapOptionsOpen ? 'z-50' : ''}`}
+            >
               <button
                 type="button"
                 className="ss-btn-ghost text-xs py-2 px-3 flex items-center gap-1.5 whitespace-nowrap min-h-[44px] cursor-pointer"
                 onClick={() => setMapOptionsOpen(!mapOptionsOpen)}
                 aria-expanded={mapOptionsOpen}
+                aria-haspopup="dialog"
                 aria-label="Map Options"
               >
                 <span>⚙️</span> <span className="hidden sm:inline">Map Options</span>
               </button>
               {mapOptionsOpen && (
-                <div className="absolute top-full right-0 mt-1.5 w-56 bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl p-3 z-[9999] flex flex-col gap-2.5 backdrop-blur-md">
+                <div
+                  role="dialog"
+                  aria-label="Map Options Menu"
+                  className="absolute top-full right-0 mt-1.5 w-56 bg-gray-900/95 border border-white/10 rounded-xl shadow-2xl p-3 z-50 flex flex-col gap-2.5 backdrop-blur-md"
+                >
                   <label className="flex items-center gap-2 text-xs text-gray-200 cursor-pointer">
                     <input
                       type="checkbox"

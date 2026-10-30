@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { insights } from '@/lib/insights'
 import type { InsightsView } from '@/types/insights'
@@ -8,15 +8,30 @@ import { DiurnalHeatmap } from './components/DiurnalHeatmap'
 import { RtfThroughputWidget } from './components/RtfThroughputWidget'
 import { TacticalNerWidget } from './components/TacticalNerWidget'
 import { TrafficAnomalyWidget } from './components/TrafficAnomalyWidget'
-import { TalkgroupShareWidget } from './components/TalkgroupShareWidget'
+import { TalkgroupTrackerWidget } from './components/TalkgroupTrackerWidget'
 import { AsrConfidenceWidget } from './components/AsrConfidenceWidget'
-
-import { usePersistentDateRange } from '@/hooks/usePersistentDateRange'
-import { getSavedDateRange } from '@/lib/dateSelection'
+import { getInitialDateRange, isPageReload } from '@/lib/dateSelection'
 
 export function InsightsPage() {
   const navigate = useNavigate()
-  const { dateFrom, dateTo, setDateRange } = usePersistentDateRange()
+  const [searchParams] = useSearchParams()
+
+  // On page reload or fresh visit, current day is selected by default; reload always resets to today
+  const initialRange = useMemo(() => getInitialDateRange(searchParams), [])
+  const [dateFrom, setDateFrom] = useState(initialRange.from)
+  const [dateTo, setDateTo] = useState(initialRange.to)
+
+  // On page refresh/reload, strip any stale date params from URL
+  useEffect(() => {
+    if (isPageReload() && (searchParams.has('date_from') || searchParams.has('date_to') || searchParams.has('date'))) {
+      const clean = new URLSearchParams(searchParams)
+      clean.delete('date_from')
+      clean.delete('date_to')
+      clean.delete('date')
+      navigate({ search: clean.toString() ? `?${clean.toString()}` : '' }, { replace: true })
+    }
+  }, [searchParams, navigate])
+
   const isMultiDay = dateFrom !== dateTo && !!dateFrom && !!dateTo
 
   const view: InsightsView = useMemo(() => {
@@ -37,17 +52,6 @@ export function InsightsPage() {
   })
 
   const activeDates = datesData?.dates ?? []
-
-  const defaultRangeAppliedRef = useRef(false)
-  useEffect(() => {
-    if (defaultRangeAppliedRef.current || activeDates.length === 0) return
-    defaultRangeAppliedRef.current = true
-    const saved = getSavedDateRange()
-    if (!saved) {
-      const last = activeDates[activeDates.length - 1]
-      setDateRange(last, last)
-    }
-  }, [activeDates, setDateRange])
 
   const { data: statsData } = useQuery({
     queryKey: ['insights-stats', dateFrom, dateTo, view],
@@ -84,7 +88,8 @@ export function InsightsPage() {
   }
 
   const handleDateRangeChange = (from: string, to: string) => {
-    setDateRange(from, to)
+    setDateFrom(from)
+    setDateTo(to)
   }
 
   const summary = statsData?.summary ?? null
@@ -94,6 +99,7 @@ export function InsightsPage() {
   const ner = statsData?.ner
   const anomaly = statsData?.anomaly
   const talkgroups = statsData?.talkgroups ?? []
+  const talkgroupTracker = statsData?.talkgroup_tracker
   const asrQuality = statsData?.asr_quality
 
   return (
@@ -113,9 +119,14 @@ export function InsightsPage() {
       {/* Traffic Anomaly & Spike Detector */}
       <TrafficAnomalyWidget data={anomaly} onHourClick={onHourClick} />
 
-      {/* Talkgroup Share of Voice & ASR Quality Spectrum */}
+      {/* Talkgroup Intelligence Tracker & ASR Quality Spectrum */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <TalkgroupShareWidget data={talkgroups} dateFrom={dateFrom} dateTo={dateTo} />
+        <TalkgroupTrackerWidget
+          data={talkgroupTracker}
+          fallbackTalkgroups={talkgroups}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+        />
         <AsrConfidenceWidget data={asrQuality} />
       </div>
 
@@ -125,10 +136,16 @@ export function InsightsPage() {
         <TacticalNerWidget data={ner} />
       </div>
 
+      {/* Diurnal Heatmap (Disabled when multi-day range is active) */}
       <DiurnalHeatmap
         data={heatmap}
         dateFrom={dateFrom}
         dateTo={dateTo}
+        isMultiDay={isMultiDay}
+        onSelectSingleDay={(d) => {
+          setDateFrom(d)
+          setDateTo(d)
+        }}
       />
     </div>
   )

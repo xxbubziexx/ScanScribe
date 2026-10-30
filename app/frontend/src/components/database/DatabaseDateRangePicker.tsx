@@ -145,6 +145,11 @@ export function DatabaseDateRangePicker({
   }, [from, to])
 
   useEffect(() => {
+    setFromInput(from)
+    setToInput(to)
+  }, [from, to])
+
+  useEffect(() => {
     if (!open) return
     const onDoc = (e: MouseEvent) => {
       const path = e.composedPath ? e.composedPath() : []
@@ -217,7 +222,8 @@ export function DatabaseDateRangePicker({
       return
     }
 
-    onChange(trimmedFrom, trimmedTo)
+    const finalTo = trimmedTo || trimmedFrom
+    onChange(trimmedFrom, finalTo)
     setOpen(false)
   }
 

@@ -37,6 +37,20 @@ export interface TalkgroupEntry {
   duration?: number
   avg_duration?: number
   percentage?: number
+  is_new?: boolean
+  is_new_vs_yesterday?: boolean
+  first_seen?: string | null
+}
+
+export interface TalkgroupTrackerTelemetry {
+  total_talkgroups: number
+  total_calls: number
+  total_airtime: number
+  busiest_talkgroup: TalkgroupEntry | null
+  new_talkgroups_count: number
+  new_talkgroups: TalkgroupEntry[]
+  new_vs_yesterday: TalkgroupEntry[]
+  ranked_talkgroups: TalkgroupEntry[]
 }
 
 export interface AttachedEventInfo {
@@ -194,6 +208,7 @@ export interface InsightsStats {
   activity: ActivityPoint[]
   talkgroups: TalkgroupEntry[]
   talkgroups_all: TalkgroupEntry[]
+  talkgroup_tracker?: TalkgroupTrackerTelemetry
   recent: LogEntry[]
   heatmap?: DiurnalHeatmapData
   rtf?: RtfTelemetry

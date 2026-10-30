@@ -20,7 +20,7 @@ class RejectionReport(BaseModel):
 
 
 @router.get("/status")
-async def get_watcher_status(current_user: User = Depends(get_current_admin_user)):
+async def get_watcher_status(current_user: User = Depends(get_current_active_user)):
     """Get watcher status and statistics."""
     from ..config import get_settings
     settings = get_settings()
@@ -46,12 +46,13 @@ async def get_watcher_status(current_user: User = Depends(get_current_admin_user
         "memory_total_gb": round(memory_total_gb, 1),
         "memory_percent": memory_percent,
         "cpu_percent": cpu_percent,
-        "engine_device": engine_device
+        "engine_device": engine_device,
+        "model": settings.config.model.name,
     }
 
 
 @router.post("/start")
-async def start_watcher(current_user: User = Depends(get_current_active_user)):
+async def start_watcher(current_user: User = Depends(get_current_admin_user)):
     """Start the file watcher and transcription engine."""
     watcher_success = await watcher_service.start()
     
@@ -66,7 +67,7 @@ async def start_watcher(current_user: User = Depends(get_current_active_user)):
 
 
 @router.post("/stop")
-async def stop_watcher(current_user: User = Depends(get_current_active_user)):
+async def stop_watcher(current_user: User = Depends(get_current_admin_user)):
     """Stop the file watcher and transcription engine."""
     watcher_success = await watcher_service.stop()
     
@@ -81,7 +82,7 @@ async def stop_watcher(current_user: User = Depends(get_current_active_user)):
 
 
 @router.post("/pause")
-async def pause_watcher(current_user: User = Depends(get_current_active_user)):
+async def pause_watcher(current_user: User = Depends(get_current_admin_user)):
     """Pause the file watcher and transcription engine."""
     success = await watcher_service.pause()
     await queue_processor.pause()
@@ -93,7 +94,7 @@ async def pause_watcher(current_user: User = Depends(get_current_active_user)):
 
 
 @router.post("/resume")
-async def resume_watcher(current_user: User = Depends(get_current_active_user)):
+async def resume_watcher(current_user: User = Depends(get_current_admin_user)):
     """Resume the file watcher and transcription engine."""
     success = await watcher_service.resume()
     await queue_processor.resume()

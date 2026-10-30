@@ -772,6 +772,117 @@ def get_range_talkgroup_breakdown(db: Session, start_date: date, end_date: date,
     return out
 
 
+def get_talkgroup_tracker_telemetry(
+    db: Session,
+    start_date: date,
+    end_date: date,
+) -> Dict[str, Any]:
+    """
+    Extract comprehensive talkgroup tracking telemetry across [start_date, end_date].
+    Includes:
+    - Complete ranking of every observed talkgroup (count, airtime, avg duration, percentage share).
+    - Identification of newly seen talkgroups (first seen in DB during period).
+    - Newly active talkgroups compared to previous day.
+    - Identification of busiest talkgroup of the period.
+    """
+    start = datetime.combine(start_date, datetime.min.time())
+    end = datetime.combine(end_date, datetime.max.time())
+
+    results = db.query(
+        LogEntry.talkgroup,
+        func.count(LogEntry.id).label('count'),
+        func.sum(LogEntry.duration).label('duration'),
+        func.avg(LogEntry.duration).label('avg_duration')
+    ).filter(
+        LogEntry.timestamp >= start,
+        LogEntry.timestamp <= end,
+        LogEntry.is_deleted.is_(False),
+        LogEntry.talkgroup.isnot(None),
+        LogEntry.talkgroup != '',
+        LogEntry.talkgroup != 'N/A'
+    ).group_by(
+        LogEntry.talkgroup
+    ).order_by(
+        func.count(LogEntry.id).desc()
+    ).all()
+
+    total_calls = sum(int(r.count or 0) for r in results)
+    total_airtime = sum(float(r.duration or 0) for r in results)
+
+    tg_names = [str(r.talkgroup).strip() for r in results if r.talkgroup and str(r.talkgroup).strip()]
+
+    # First seen in DB
+    first_seen_map: Dict[str, datetime] = {}
+    if tg_names:
+        try:
+            first_rows = db.query(
+                LogEntry.talkgroup,
+                func.min(LogEntry.timestamp).label('first_seen')
+            ).filter(
+                LogEntry.talkgroup.in_(tg_names),
+                LogEntry.is_deleted.is_(False)
+            ).group_by(
+                LogEntry.talkgroup
+            ).all()
+            for r in first_rows:
+                if r.talkgroup:
+                    first_seen_map[str(r.talkgroup).strip()] = r.first_seen
+        except Exception as exc:
+            logger.warning("Failed querying first_seen talkgroups: %s", exc)
+
+    # Previous day talkgroups
+    prev_day = start_date - timedelta(days=1)
+    prev_start = datetime.combine(prev_day, datetime.min.time())
+    prev_end = datetime.combine(prev_day, datetime.max.time())
+    prev_day_tgs = set()
+    try:
+        prev_rows = db.query(LogEntry.talkgroup).distinct().filter(
+            LogEntry.timestamp >= prev_start,
+            LogEntry.timestamp <= prev_end,
+            LogEntry.is_deleted.is_(False),
+            LogEntry.talkgroup.isnot(None),
+            LogEntry.talkgroup != '',
+            LogEntry.talkgroup != 'N/A'
+        ).all()
+        prev_day_tgs = {str(r[0]).strip() for r in prev_rows if r[0]}
+    except Exception as exc:
+        logger.warning("Failed querying prev_day talkgroups: %s", exc)
+
+    ranked: List[Dict[str, Any]] = []
+    for r in results:
+        dur = round(float(r.duration or 0), 1)
+        pct = round((dur / max(total_airtime, 0.001)) * 100, 1) if total_airtime > 0 else 0.0
+        tg = str(r.talkgroup).strip()
+        first_dt = first_seen_map.get(tg)
+        is_first_seen = bool(first_dt and first_dt >= start)
+        is_new_yesterday = (tg not in prev_day_tgs)
+        ranked.append({
+            "talkgroup": tg,
+            "count": int(r.count or 0),
+            "duration": dur,
+            "avg_duration": round(float(r.avg_duration or 0), 1),
+            "percentage": pct,
+            "is_new": is_first_seen,
+            "is_new_vs_yesterday": is_new_yesterday,
+            "first_seen": first_dt.isoformat() if first_dt else None,
+        })
+
+    busiest = ranked[0] if ranked else None
+    new_tgs = [item for item in ranked if item.get("is_new")]
+    new_vs_yesterday = [item for item in ranked if item.get("is_new_vs_yesterday")]
+
+    return {
+        "total_talkgroups": len(ranked),
+        "total_calls": total_calls,
+        "total_airtime": round(total_airtime, 1),
+        "busiest_talkgroup": busiest,
+        "new_talkgroups_count": len(new_tgs),
+        "new_talkgroups": new_tgs,
+        "new_vs_yesterday": new_vs_yesterday,
+        "ranked_talkgroups": ranked,
+    }
+
+
 def get_all_range_talkgroups(db: Session, start_date: date, end_date: date) -> List[Dict[str, Any]]:
     """Pull all distinct talkgroups across date range."""
     start = datetime.combine(start_date, datetime.min.time())
@@ -1645,12 +1756,14 @@ def compute_insights_stats(
         events_db=events_db or db,
     )
     asr_quality = get_asr_quality_spectrum(db, start_date, end_date)
+    tracker_telemetry = get_talkgroup_tracker_telemetry(db, start_date, end_date)
 
     return {
         "summary": summary,
         "activity": activity,
-        "talkgroups": talkgroups,
+        "talkgroups": tracker_telemetry["ranked_talkgroups"],
         "talkgroups_all": all_talkgroups,
+        "talkgroup_tracker": tracker_telemetry,
         "recent": recent,
         "heatmap": heatmap,
         "rtf": rtf_telemetry,

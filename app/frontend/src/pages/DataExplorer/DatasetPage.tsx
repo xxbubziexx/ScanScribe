@@ -4,7 +4,6 @@ import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/context/ToastContext'
 import { buildListParams, downloadAudioFile, downloadDatasetExport, logsApi } from '@/lib/logs'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
-import { getSavedDateRange, saveDateRange } from '@/lib/dateSelection'
 import { errorMessage } from '@/types/api'
 import type { LogListEntry, LogsSortBy } from '@/types/logs'
 import { ScAudioPlayer } from '@/components/ui/ScAudioPlayer'
@@ -35,9 +34,8 @@ export function DatasetPage() {
   const [searchInput, setSearchInput] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
-  const saved = getSavedDateRange()
-  const [dateFrom, setDateFrom] = useState(saved?.dateFrom ?? '')
-  const [dateTo, setDateTo] = useState(saved?.dateTo ?? '')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   const activeDatesQuery = useQuery({
     queryKey: ['database-active-dates'],
@@ -163,7 +161,6 @@ export function DatasetPage() {
           onChange={(a, b) => {
             setDateFrom(a)
             setDateTo(b)
-            saveDateRange(a, b)
           }}
           activeDates={activeDateList}
         />

@@ -205,3 +205,42 @@ def test_parse_date_param_validation():
     with pytest.raises(HTTPException) as exc_info:
         parse_date_param("date", "not-a-valid-date")
     assert exc_info.value.status_code == 422
+
+
+def test_talkgroup_tracker_telemetry(db):
+    # Yesterday: TG_PATROL active
+    yesterday = date(2026, 10, 13)
+    _add(db, datetime(2026, 10, 13, 12, 0), talkgroup="TG_PATROL", duration=10.0)
+
+    # Today: TG_PATROL (3 calls), TG_DISPATCH (5 calls, first seen), TG_NEW_FIRE (1 call, first seen)
+    today = date(2026, 10, 14)
+    for _ in range(5):
+        _add(db, datetime(2026, 10, 14, 8, 30), talkgroup="TG_DISPATCH", duration=8.0)
+    for _ in range(3):
+        _add(db, datetime(2026, 10, 14, 9, 15), talkgroup="TG_PATROL", duration=12.0)
+    _add(db, datetime(2026, 10, 14, 11, 0), talkgroup="TG_NEW_FIRE", duration=20.0)
+    db.commit()
+
+    tracker = ie.get_talkgroup_tracker_telemetry(db, today, today)
+    assert tracker["total_talkgroups"] == 3
+    assert tracker["total_calls"] == 9
+    assert tracker["busiest_talkgroup"]["talkgroup"] == "TG_DISPATCH"
+    assert tracker["busiest_talkgroup"]["count"] == 5
+
+    ranked = tracker["ranked_talkgroups"]
+    assert len(ranked) == 3
+    assert ranked[0]["talkgroup"] == "TG_DISPATCH"
+    assert ranked[1]["talkgroup"] == "TG_PATROL"
+    assert ranked[2]["talkgroup"] == "TG_NEW_FIRE"
+
+    # TG_DISPATCH and TG_NEW_FIRE are brand new (first seen on today)
+    new_tgs = [t["talkgroup"] for t in tracker["new_talkgroups"]]
+    assert "TG_DISPATCH" in new_tgs
+    assert "TG_NEW_FIRE" in new_tgs
+    assert "TG_PATROL" not in new_tgs
+
+    # TG_PATROL was seen yesterday; TG_DISPATCH and TG_NEW_FIRE are new vs yesterday
+    vs_yesterday = [t["talkgroup"] for t in tracker["new_vs_yesterday"]]
+    assert "TG_DISPATCH" in vs_yesterday
+    assert "TG_NEW_FIRE" in vs_yesterday
+    assert "TG_PATROL" not in vs_yesterday

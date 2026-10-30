@@ -87,8 +87,13 @@ export function DashboardPage() {
       const s = await watcher.status()
       setWatcherStatus(s)
       setWatcherState(statusFromWatcher(s))
-    } catch {
-      // silently fail on poll; WS will catch transitions
+      if (s?.model) {
+        setModel(s.model.split('/').pop() ?? s.model)
+      }
+    } catch (err) {
+      if (import.meta.env.MODE !== 'test') {
+        console.warn('Could not refresh watcher status:', err)
+      }
     }
   }, [])
 

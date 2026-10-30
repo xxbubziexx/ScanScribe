@@ -226,7 +226,7 @@ class WatcherService:
         if self.stats['start_time']:
             uptime = int(time.time() - self.stats['start_time'])
             
-        return {
+        base_stats = {
             'running': self._running,
             'paused': self._paused,
             'is_running': self._running and not self._paused,
@@ -235,6 +235,8 @@ class WatcherService:
             'uptime_seconds': uptime,
             'monitoring_dir': str(self.ingest_dir)
         }
+        base_stats.update(self.get_live_stats())
+        return base_stats
         
     def increment_processed(self) -> None:
         """Increment processed file counter (called by transcription engine)."""

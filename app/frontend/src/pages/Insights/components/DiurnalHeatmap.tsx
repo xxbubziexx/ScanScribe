@@ -7,6 +7,8 @@ interface DiurnalHeatmapProps {
   data?: DiurnalHeatmapData
   dateFrom?: string
   dateTo?: string
+  isMultiDay?: boolean
+  onSelectSingleDay?: (date: string) => void
 }
 
 function MatrixIcon({ className = '' }: { className?: string }) {
@@ -25,7 +27,7 @@ function MatrixIcon({ className = '' }: { className?: string }) {
   )
 }
 
-export function DiurnalHeatmap({ data, dateFrom, dateTo }: DiurnalHeatmapProps) {
+export function DiurnalHeatmap({ data, dateFrom, dateTo, isMultiDay, onSelectSingleDay }: DiurnalHeatmapProps) {
   const navigate = useNavigate()
   const [hovered, setHovered] = useState<{
     day: string
@@ -33,6 +35,50 @@ export function DiurnalHeatmap({ data, dateFrom, dateTo }: DiurnalHeatmapProps) 
     x: number
     y: number
   } | null>(null)
+
+  const multiDayActive = isMultiDay ?? Boolean(dateFrom && dateTo && dateFrom !== dateTo)
+
+  if (multiDayActive) {
+    return (
+      <div className="ss-glass-panel space-y-3 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <MatrixIcon className="h-4 w-4 text-gray-500" />
+            <h2 className="text-sm font-semibold text-gray-300">Diurnal Activity Pattern</h2>
+            <WidgetInfoTooltip
+              title="Diurnal Activity Pattern"
+              description="The 24-hour diurnal activity heatmap inspects shift cycles and dispatch intensity across hours of the day."
+            />
+            <span className="rounded bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-medium text-amber-300">
+              Disabled (Multi-Day Selection)
+            </span>
+          </div>
+          <span className="text-xs text-gray-500 font-mono">
+            {dateFrom} → {dateTo}
+          </span>
+        </div>
+        <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-800 bg-gray-900/60 text-gray-500 mb-3">
+            <MatrixIcon className="h-5 w-5" />
+          </div>
+          <h3 className="text-sm font-medium text-gray-200">Diurnal Pattern Disabled</h3>
+          <p className="mt-1 max-w-md text-xs text-gray-400">
+            The 24-hour diurnal heatmap analyzes 24-hour shift patterns for a single operational day. When multiple dates are selected, diurnal plotting is disabled.
+          </p>
+          {dateFrom && onSelectSingleDay && (
+            <button
+              type="button"
+              onClick={() => onSelectSingleDay(dateFrom)}
+              className="mt-3.5 inline-flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 transition cursor-pointer"
+            >
+              <span>View single day ({dateFrom})</span>
+              <span>→</span>
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   if (!data || !data.matrix || data.matrix.length === 0) {
     return (

@@ -241,6 +241,7 @@ def _add_lifecycle_commands(sub: argparse._SubParsersAction) -> None:
     p_update.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompts and auto-restart if running")
     p_update.add_argument("--restart", action="store_true", help="Automatically restart background service after updating")
     p_update.add_argument("--force", action="store_true", help="Re-sync dependencies and migrations even if already up to date")
+    p_update.add_argument("--port", type=int, default=sc.DEFAULT_PORT, help="Port to target (default: 8000)")
     p_update.set_defaults(func=sc.cmd_update)
 
     p_logs = sub.add_parser("logs", help="View or stream live logs")
@@ -305,7 +306,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_migrate.set_defaults(func=cmd_migrate)
 
+    p_admin = sub.add_parser(
+        "promote-admin",
+        help="Promote an existing user account to administrator",
+    )
+    p_admin.add_argument("username", help="Username of the account to grant administrator status")
+    p_admin.set_defaults(func=cmd_promote_admin)
+
     return parser
+
+
+def cmd_promote_admin(args: argparse.Namespace) -> int:
+    """Grant administrator privileges to a user."""
+    from .database import SessionLocal, init_db
+    from .models.user import User
+
+    init_db()
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == args.username).first()
+        if not user:
+            print(f"❌ User '{args.username}' not found.")
+            return 1
+        user.is_admin = True
+        db.commit()
+        print(f"✅ User '{args.username}' successfully granted administrator privileges.")
+        return 0
+    finally:
+        db.close()
 
 
 def cmd_migrate(args: argparse.Namespace) -> int:

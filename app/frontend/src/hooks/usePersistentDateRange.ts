@@ -1,31 +1,24 @@
-import { useCallback, useEffect, useState } from 'react'
-import { getSavedDateRange, saveDateRange } from '@/lib/dateSelection'
+import { useCallback, useState } from 'react'
+import { isPageReload, todayIso } from '@/lib/dateSelection'
 
+/**
+ * In-memory date range hook defaulting to the current day.
+ * Cross-page persistence has been retired per operational requirement.
+ */
 export function usePersistentDateRange(defaultFrom?: string, defaultTo?: string) {
   const [range, setRange] = useState(() => {
-    const saved = getSavedDateRange()
-    if (saved) return saved
+    const today = todayIso()
+    if (isPageReload()) {
+      return { dateFrom: today, dateTo: today }
+    }
     return {
-      dateFrom: defaultFrom ?? '',
-      dateTo: defaultTo ?? (defaultFrom ?? ''),
+      dateFrom: defaultFrom ?? today,
+      dateTo: defaultTo ?? (defaultFrom ?? today),
     }
   })
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const handler = (e: Event) => {
-      const customEvent = e as CustomEvent<{ dateFrom: string; dateTo: string }>
-      if (customEvent.detail) {
-        setRange(customEvent.detail)
-      }
-    }
-    window.addEventListener('scanscribe:date_range_changed', handler)
-    return () => window.removeEventListener('scanscribe:date_range_changed', handler)
-  }, [])
-
   const setDateRange = useCallback((from: string, to: string) => {
     setRange({ dateFrom: from, dateTo: to })
-    saveDateRange(from, to)
   }, [])
 
   return {

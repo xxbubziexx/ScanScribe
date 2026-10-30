@@ -189,8 +189,8 @@ def _check_health(port: int, timeout: float = 1.0) -> bool:
 
 def cmd_start(args):
     """Start ScanScribe server."""
-    port = args.port or DEFAULT_PORT
-    host = args.host or DEFAULT_HOST
+    port = getattr(args, "port", None) or DEFAULT_PORT
+    host = getattr(args, "host", None) or DEFAULT_HOST
     silent = getattr(args, "silent", False)
     foreground = getattr(args, "foreground", False)
     no_update_check = getattr(args, "no_update_check", False)
@@ -692,13 +692,32 @@ def cmd_update(args) -> int:
     branch = getattr(args, "branch", "main") or "main"
     force = getattr(args, "force", False)
     auto_yes = getattr(args, "yes", False)
-    auto_restart = getattr(args, "restart", False) or auto_yes
+    auto_restart = getattr(args, "restart", False)
 
     print(f"\n========================================================")
     print(f"               ScanScribe Update Manager                ")
     print(f"========================================================")
     print(f"  Target Branch : {branch}")
     print(f"  Install Root  : {BASE_DIR}\n")
+
+    # Check if instance is running before executing any update operations
+    target_port = getattr(args, "port", None) or DEFAULT_PORT
+    pid, port = _get_stored_pid(fallback_port=target_port)
+    if not pid:
+        pid = _find_pid_listening_on_port(target_port)
+        if pid:
+            port = target_port
+
+    is_running = bool(pid and _is_pid_running(pid))
+    if not is_running and _check_health(port, timeout=0.5):
+        is_running = True
+
+    if is_running:
+        pid_info = f" (PID: {pid})" if pid else ""
+        print(f"[X] Error: ScanScribe is currently running on port {port}{pid_info}.")
+        print("[X] The instance must be stopped before executing the update to prevent file locking and database corruption.")
+        print("[!] Please run 'scanscribe stop' before running 'scanscribe update'.\n")
+        return 1
 
     git_dir = BASE_DIR / ".git"
     is_git = git_dir.is_dir()
@@ -818,26 +837,11 @@ def cmd_update(args) -> int:
     except Exception as e:
         print(f"[!] Warning: Alembic migration warning: {e}")
 
-    # Check if ScanScribe is running and handle restart
-    pid, port = _get_stored_pid()
-    if pid and _is_pid_running(pid):
-        print(f"\n[*] ScanScribe is currently running on port {port} (PID: {pid}).")
-        do_restart = auto_restart
-        if not do_restart and not auto_yes:
-            try:
-                resp = input("Restart ScanScribe now to apply updates? (Y/n): ").strip().lower()
-                do_restart = resp in ("", "y", "yes")
-            except (EOFError, KeyboardInterrupt):
-                do_restart = False
+    if auto_restart:
+        print("\n[*] Starting updated ScanScribe service...")
+        return cmd_start(args)
 
-        if do_restart:
-            print("[*] Restarting ScanScribe service...")
-            return cmd_restart(args)
-        else:
-            print("[!] Please run 'scanscribe restart' when ready to reload the updated service.")
-    else:
-        print("\n[✓] Update complete! Start ScanScribe anytime with: scanscribe start\n")
-
+    print("\n[✓] Update complete! Start ScanScribe anytime with: scanscribe start\n")
     return 0
 
 

@@ -6,7 +6,7 @@ import { TimeRangePicker } from '@/components/ui/TimeRangePicker'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { DatabaseDateSinglePicker } from '@/components/database/DatabaseDateSinglePicker'
 import type { TimeRangeValue } from '@/components/ui/timeRange'
-import { clearSavedDateRange, getSavedDateRange, saveDateRange } from '@/lib/dateSelection'
+import { clearSavedDateRange, getInitialDateRange, getSavedDateRange, isPageReload, saveDateRange, todayIso } from '@/lib/dateSelection'
 
 describe('RangeCalendar component', () => {
   it('renders days and completes range selection across two clicks', async () => {
@@ -219,16 +219,40 @@ describe('DatabaseDateSinglePicker component', () => {
   })
 })
 
-describe('Persistent Date Range logic', () => {
-  it('saves, retrieves, and clears date range in localStorage', () => {
+describe('Date Range Persistence (Retired)', () => {
+  it('does not persist date ranges across pages, ensuring current day defaults', () => {
     localStorage.clear()
     expect(getSavedDateRange()).toBeNull()
 
     saveDateRange('2026-10-10', '2026-10-15')
-    const saved = getSavedDateRange()
-    expect(saved).toEqual({ dateFrom: '2026-10-10', dateTo: '2026-10-15' })
+    // Per operational protocol, date ranges do not persist across pages
+    expect(getSavedDateRange()).toBeNull()
 
     clearSavedDateRange()
     expect(getSavedDateRange()).toBeNull()
+  })
+
+  it('resets to strictly the current day (single day) on page reload', () => {
+    const today = todayIso()
+    // When no searchParams provided
+    expect(getInitialDateRange()).toEqual({ from: today, to: today })
+
+    // When query params specify a multi-day range on initial navigation
+    const sp = new URLSearchParams({ date_from: '2026-10-10', date_to: '2026-10-15' })
+    const res = getInitialDateRange(sp)
+    // If not reloading, returns query params
+    if (!isPageReload()) {
+      expect(res).toEqual({ from: '2026-10-10', to: '2026-10-15' })
+    }
+
+    // When performance.getEntriesByType reports reload, must always reset to today
+    const origGetEntries = performance.getEntriesByType
+    try {
+      performance.getEntriesByType = vi.fn().mockReturnValue([{ type: 'reload' }]) as any
+      expect(isPageReload()).toBe(true)
+      expect(getInitialDateRange(sp)).toEqual({ from: today, to: today })
+    } finally {
+      performance.getEntriesByType = origGetEntries
+    }
   })
 })

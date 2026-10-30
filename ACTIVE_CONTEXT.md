@@ -928,3 +928,132 @@ This living document is the **shared memory** between different AI models, human
   - Verified `gh release list` showing 4 published releases with `v2.0.3` as Latest.
   - Test suite sanity check passed. Changes pushed to `origin snapshot`.
 - **Next Tasks / Unfinished Work:** None.
+
+---
+
+### 2026-10-23 18:55 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Implemented **Talkgroup Intelligence & Tracker** module on the Insights page, retiring and merging the legacy Talkgroup Share of Voice widget:
+    1. **Ranking System for Every Talkgroup**: Backend (`get_talkgroup_tracker_telemetry` in [`app/services/insights_engine.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/insights_engine.py)) computes comprehensive ordered ranking of every talkgroup observed in the scoped date selection (calls count, airtime duration, avg call duration, % share of total voice traffic). Frontend [`TalkgroupTrackerWidget.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/TalkgroupTrackerWidget.tsx) displays a scrollable ranked list with rank badges (`#1`, `#2`, `#3`), client-side channel name search filtering, and metric toggles (Airtime Share % vs Call Volume).
+    2. **Busiest Talkgroup Hero Card**: Prominently highlights the #1 dominant channel of the selected window with call count, share of voice, and direct 1-click drilldown into Search.
+    3. **New Seen Talkgroups Tracking**: Detects channels first observed in the system during the selected window (`is_new`), as well as newly active channels compared to the prior day (`is_new_vs_yesterday`). Sub-tabs allow filtering specifically to newly discovered talkgroups.
+    4. **Direct Search Drilldown**: Clicking any talkgroup row or hero badge navigates to `/search?date_from=...&date_to=...&talkgroup=...`. Enhanced [`SearchPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Search/SearchPage.tsx) to automatically pre-filter matching talkgroups across both `talkgroup` and `talkgroups` URL query parameter formats.
+    5. **Retire / Merge Talkgroup Share of Voice**: [`TalkgroupShareWidget.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/TalkgroupShareWidget.tsx) was updated to act as a backward-compatible adapter wrapping `TalkgroupTrackerWidget`.
+  - Removed Impractical / Bug-Prone Date Behaviors:
+    1. **Retired Date Range Cross-Page Persistence**: Removed `localStorage` syncing (`scanscribe_active_date_range`) from [`dateSelection.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/lib/dateSelection.ts), [`usePersistentDateRange.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/hooks/usePersistentDateRange.ts), [`SearchPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Search/SearchPage.tsx), [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx), [`Events/Incidents/index.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/Incidents/index.tsx), [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx), and [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx). Date selections now stay isolated to their specific page.
+    2. **Current Day Selected on Page Reload**: On fresh page load or browser reload, every page defaults independently to today's local date (`todayIso()`). Removed the `InsightsPage` effect that previously forced selection of the historical last active date.
+    3. **Disabled Diurnal Activity Pattern on Multi-Day Selection**: When multiple days are selected (`dateFrom !== dateTo`), [`DiurnalHeatmap.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/DiurnalHeatmap.tsx) disables interactive hour inspection and displays an instrument-grade banner indicating diurnal patterns are specialized for single-day operational shift analysis, complete with a quick-action button to switch to single-day viewing.
+- **Live Ingestion Impact:** Zero impact. Read-only database aggregations, non-blocking async execution.
+- **Gotchas / Warnings for Next Model:**
+  - Date selections no longer sync through `localStorage`. Any drilldowns between pages (e.g. from Insights to Search) should pass explicit `date_from` and `date_to` URL query parameters.
+  - Active branch is `snapshot`.
+- **Verification Performed:**
+  - `pytest tests/`: **141/141 passed in 23.31s** (including new `test_talkgroup_tracker_telemetry` test).
+  - `vitest`: **51/51 passed across 10 test files** (including 5 new tests in `TalkgroupTrackerWidget.test.tsx`).
+  - `npm run build`: built production client cleanly in 6.49s.
+- **Next Tasks / Unfinished Work:** Ready for deployment or user testing on `snapshot`.
+
+---
+
+### 2026-10-23 20:02 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Updated `scanscribe update` command in [`app/server_control.py`](file:///a:/Scanscribe_Projects/scanscribe/app/server_control.py) and [`app/cli.py`](file:///a:/Scanscribe_Projects/scanscribe/app/cli.py) to check if a ScanScribe instance is running **before** executing any update operations (git fetch, git pull, dependency sync, Alembic migrations):
+    1. **Pre-Execution Running Instance Guard**: If an instance is active (via stored PID, process inspection, or port listener/health probe), `scanscribe update` strictly aborts execution, prints an explicit error and guidance (`Please run 'scanscribe stop' before running 'scanscribe update'`), and exits with code 1.
+    2. Added `--port` argument to `p_update` subparser so non-default ports can be explicitly targeted.
+    3. Re-aligned `cmd_start` argument extraction to safely default missing namespace attributes.
+    4. Added automated unit tests in [`tests/test_cli_update.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_cli_update.py) verifying that `cmd_update` aborts immediately when an instance is running by PID, port listener, or health probe, preventing any subprocess calls.
+- **Live Ingestion Impact:** Protects live databases and file locks from mid-update corruption.
+- **Gotchas / Warnings for Next Model:**
+  - Active branch is `snapshot`.
+  - When running `scanscribe update` in production or scripts, stop the service beforehand (`scanscribe stop`), or run `scanscribe update --restart` if you want it to automatically start the updated service once update operations finish.
+- **Verification Performed:**
+  - `pytest tests/`: **145/145 passed in 23.44s** (100% green).
+- **Next Tasks / Unfinished Work:** None.
+
+---
+
+### 2026-10-23 20:25 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Diagnosed and resolved issue where page refresh/reload preserved multi-day date ranges (double days) instead of resetting strictly to only the current day:
+    1. **Page Reload Detection & Reset (`getInitialDateRange` / `isPageReload`)**: Added `isPageReload()` and `getInitialDateRange()` helpers in [`app/frontend/src/lib/dateSelection.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/lib/dateSelection.ts). On browser refresh/reload, date state is unconditionally reset to `{ from: today, to: today }` (`todayIso()`).
+    2. **Stale Query Param Cleanup on Reload**: In [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx) and [`SearchPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Search/SearchPage.tsx), added reload hooks that strip stale `date_from`, `date_to`, or `date` query parameters from the browser address bar upon reload so previous ranges cannot leak back in.
+    3. **Prevented Default URL Pollution in Search**: In [`SearchPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Search/SearchPage.tsx), updated `searchParams` sync effect so default single-day selections (`dateFrom === today && dateTo === today`) are not written as query parameters, preventing accidental multi-day persistence across refreshes.
+    4. **Fixed Local vs UTC Date Discrepancies**: In [`StatsPanel.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/components/StatsPanel.tsx) and [`CommandCenterPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/CommandCenter/CommandCenterPage.tsx), replaced `new Date().toISOString().slice(0, 10)` with local `todayIso()`, preventing evening UTC rollovers from creating 2-day mismatches against local date selections.
+    5. **Input State Synchronization in Date Range Picker**: In [`DatabaseDateRangePicker.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/database/DatabaseDateRangePicker.tsx), added `useEffect` syncing props to internal input state, and ensured `handleApply` defaults single `From` date inputs to `finalTo = trimmedTo || trimmedFrom` (avoiding open-ended single inputs).
+    6. **Comprehensive Unit Testing**: Added tests in [`DatePickers.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatePickers.test.tsx) verifying `isPageReload` and ensuring `getInitialDateRange` strictly returns `{ from: today, to: today }` on page reloads even if multi-day query parameters were present.
+- **Live Ingestion Impact:** None. Zero schema changes or impact on background transcription pipelines.
+- **Gotchas / Warnings for Next Model:**
+  - Active branch is `snapshot`.
+  - Date selections default strictly to today's local date (`todayIso()`), and reloading any page guarantees resetting to a single current day.
+- **Verification Performed:**
+  - `pytest tests/`: **145/145 passed in 29.01s** (100% green).
+  - `vitest`: **52/52 passed across 10 test files**.
+  - `npm run build`: Production client bundle built cleanly (`tsc -b && vite build`) in 4.33s.
+- **Next Tasks / Unfinished Work:** Ready for deployment or user testing on `snapshot`.
+
+---
+
+### 2026-10-29 20:10 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Diagnosed and resolved issues reported by user running on Windows install from `main`:
+    1. **WhisperProcessor Initialization & Fallback Failure**:
+       - Fixed `sepiaapps/whisper-small.en-police-radio` processor loading failure in [`app/services/transcription_engine.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/transcription_engine.py). Because `processor_config.json` embeds `"feature_extractor"`, `WhisperProcessor.from_pretrained` passes it twice in modern `transformers`.
+       - Updated component-wise fallback to instantiate slow `WhisperTokenizer` (or `AutoTokenizer(..., use_fast=False)`). This prevents `WhisperProcessor` from throwing `TypeError: Received a WhisperTokenizerFast for argument tokenizer, but a WhisperTokenizer was expected` and guarantees 100% local, offline loading without falling back to remote Hugging Face endpoints.
+       - Added regression test `test_component_wise_processor_fallback` in [`tests/test_transcription_engine_alignment.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_transcription_engine_alignment.py).
+    2. **Telemetry Permission & Dashboard Header Blank State**:
+       - Changed `/api/watcher/status` in [`app/routes/watcher.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/watcher.py) dependency from `get_current_admin_user` to `get_current_active_user`. This allows active non-admin operators to view live telemetry (memory, CPU, ingest count, queue count, engine device) without receiving HTTP 403 Forbidden.
+       - Restricted mutating actions (`/start`, `/stop`, `/pause`, `/resume`) strictly to `get_current_admin_user`.
+       - Updated `get_stats()` in [`app/services/watcher.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/watcher.py) to merge `get_live_stats()`, ensuring WebSocket status messages (`watcher_started`) broadcast complete counters rather than partial dicts.
+       - Added `"model": settings.config.model.name` to `/api/watcher/status` response and synced frontend [`DashboardPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Dashboard/DashboardPage.tsx) to populate the `🎯 Model` card.
+    3. **Admin Promotion CLI**:
+       - Added `scanscribe promote-admin <username>` subcommand in [`app/cli.py`](file:///a:/Scanscribe_Projects/scanscribe/app/cli.py) so operators can easily promote existing user accounts to administrators from terminal/PowerShell.
+    4. **Frontend & Security Test Alignment**:
+       - Rebuilt production frontend bundle (`npm run build`).
+       - Updated [`tests/test_security_patches.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_security_patches.py) and added [`tests/test_watcher_telemetry.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_watcher_telemetry.py).
+- **Live Ingestion Impact:** Zero impact. Fixes ensure transcription model loads locally and queue processor starts reliably.
+- **Gotchas / Warnings for Next Model:**
+  - Active branch is `snapshot`. To propagate fixes to users installing from `main`, promote `snapshot` to `main` via clean fast-forward merge once approved.
+- **Verification Performed:**
+  - `pytest tests/`: **148/148 passed in 23.28s** (100% green).
+  - `npm.cmd test -- --run`: **52/52 passed across 10 test files**.
+  - `npm.cmd run build`: 0 errors.
+- **Next Tasks / Unfinished Work:** Ready for promotion to `main`.
+
+
+---
+
+### 2026-10-29 20:25 | Antigravity (Windows Dev Workstation)
+- **Work Performed:**
+  - **Fixed Map Options Menu Rendering Behind Map**:
+    - Identified CSS stacking context root cause: `.ss-cc-header` in [`app/frontend/src/styles/components/command-center.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/command-center.css) had `position: static` without a z-index, while sibling `.ss-cc-body` had `position: relative`. As a result, positioned elements within `.ss-cc-body` (including Leaflet map panes with z-indexes 400-1000) painted on top of the Map Options dropdown regardless of its local `z-[9999]`.
+    - Added `@apply relative z-30` to `.ss-cc-header` and `@apply relative z-10` to `.ss-cc-body` in [`command-center.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/command-center.css). This establishes an explicit parent stacking context where header dropdowns strictly paint above the map container and all Leaflet panes in both fullscreen and standard modes.
+    - Updated [`CommandCenterPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/CommandCenter/CommandCenterPage.tsx):
+      - Added `mapOptionsRef` and click-outside / `Escape` key handlers to dismiss the popup when clicking outside or pressing Escape.
+      - Attached `role="dialog"`, `aria-label="Map Options Menu"`, and `aria-haspopup="dialog"`.
+    - Fixed Vite typecheck error in [`DashboardPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Dashboard/DashboardPage.tsx) by replacing Node `process.env.NODE_ENV` with `import.meta.env.MODE`.
+- **Live Ingestion Impact:** None. Strictly frontend UI presentation and interaction.
+- **Gotchas / Warnings for Next Model:**
+  - Header controls now live in `z-30` stacking context; any popovers or modal dialogs within `.ss-cc-header` will cleanly render above `.ss-cc-body` (`z-10`).
+- **Verification Performed:**
+  - `npm run build`: Production client bundle built cleanly (`tsc -b && vite build`) with 0 errors.
+  - `npm test -- --run`: **52/52 vitest tests passed** across 10 test files.
+  - `pytest tests/`: **148/148 passed** in 23.99s (100% green).
+- **Next Tasks / Unfinished Work:** Production release promotion to `main`.
+
+---
+
+### 2026-10-30 16:15 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Diagnosed and resolved Whisper processor component-wise fallback failure on fine-tuned models:
+    - Updated component-wise fallback in [`app/services/transcription_engine.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/transcription_engine.py) to load `WhisperTokenizer` (or `AutoTokenizer(..., use_fast=False)`), preventing fast-tokenizer rejection and guaranteeing offline loading of local models.
+  - Rebuilt production React bundle in `app/frontend/dist` (`tsc -b && vite build`).
+  - Executed full test verification: **148/148 backend pytest tests passed** and **52/52 frontend vitest tests passed**. Verified Alembic schema is at head.
+  - Promoted `snapshot` to `main` via clean fast-forward merge and tagged `v2.1.0`.
+- **Live Ingestion Impact:** Zero ingestion regression. Transcription engine handles local Whisper models without network fallbacks.
+- **Gotchas / Warnings for Next Model:**
+  - Active development continues strictly on `snapshot`.
+- **Verification Performed:**
+  - `pytest tests/`: **148/148 passed**.
+  - `vitest`: **52/52 passed**.
+  - `alembic upgrade head`: confirmed up to date.
+- **Next Tasks / Unfinished Work:** System operational on `main` and `snapshot`.

@@ -123,6 +123,20 @@ class TalkgroupEntry(BaseModel):
     duration: Optional[float] = None
     avg_duration: Optional[float] = None
     percentage: Optional[float] = None
+    is_new: Optional[bool] = False
+    is_new_vs_yesterday: Optional[bool] = False
+    first_seen: Optional[str] = None
+
+
+class TalkgroupTrackerTelemetry(BaseModel):
+    total_talkgroups: int = 0
+    total_calls: int = 0
+    total_airtime: float = 0.0
+    busiest_talkgroup: Optional[TalkgroupEntry] = None
+    new_talkgroups_count: int = 0
+    new_talkgroups: List[TalkgroupEntry] = Field(default_factory=list)
+    new_vs_yesterday: List[TalkgroupEntry] = Field(default_factory=list)
+    ranked_talkgroups: List[TalkgroupEntry] = Field(default_factory=list)
 
 
 class HeatmapHourCell(BaseModel):
@@ -264,6 +278,7 @@ class InsightsStatsResponse(BaseModel):
     activity: List[ActivityPoint]
     talkgroups: List[TalkgroupEntry]
     talkgroups_all: List[TalkgroupEntry]
+    talkgroup_tracker: Optional[TalkgroupTrackerTelemetry] = None
     recent: List[RecentTranscriptionItem]
     heatmap: DiurnalHeatmapData
     rtf: RtfTelemetry

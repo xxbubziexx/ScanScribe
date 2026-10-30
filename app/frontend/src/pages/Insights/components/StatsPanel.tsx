@@ -3,6 +3,7 @@ import type { InsightsSummary, InsightsView, TrendData, ActivityPoint } from '@/
 import { OdometerValue } from '@/components/ui/OdometerValue'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { ActivityChart } from './ActivityChart'
+import { todayIso } from '@/lib/dateSelection'
 
 interface MetricCardItem {
   label: string
@@ -63,7 +64,7 @@ export function StatsPanel({
 }: StatsPanelProps) {
   const s = summary
   const isMultiDay = Boolean(s?.is_multi_day ?? (dateFrom && dateTo && dateFrom !== dateTo))
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const todayStr = todayIso()
   const isToday = !isMultiDay && (dateFrom === todayStr || (!dateFrom && !dateTo))
   const cpm = liveCpm ?? s?.calls_per_minute ?? 0
   const activeDateLabel = dateTo || dateFrom

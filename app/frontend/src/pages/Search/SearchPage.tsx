@@ -1,17 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { insights } from '@/lib/insights'
 import type { LogEntry, SearchFilters, TalkgroupEntry } from '@/types/insights'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { useAdminCapability } from '@/hooks/useAdminCapability'
-import { getSavedDateRange, saveDateRange } from '@/lib/dateSelection'
-
-function todayIso(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
+import { getInitialDateRange, isPageReload, todayIso } from '@/lib/dateSelection'
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -111,15 +105,28 @@ export function SearchPage() {
   const { canAdmin } = useAdminCapability()
   const viewOnly = !canAdmin
 
-  const saved = getSavedDateRange()
-  const initialFrom = searchParams.get('date_from') || searchParams.get('date') || saved?.dateFrom || todayIso()
-  const initialTo = searchParams.get('date_to') || searchParams.get('date') || saved?.dateTo || initialFrom
-  const [dateFrom, setDateFrom] = useState(initialFrom)
-  const [dateTo, setDateTo] = useState(initialTo)
+  const initialRange = useMemo(() => getInitialDateRange(searchParams), [])
+  const [dateFrom, setDateFrom] = useState(initialRange.from)
+  const [dateTo, setDateTo] = useState(initialRange.to)
+
+  // On page refresh/reload, strip any stale date params from URL
+  useEffect(() => {
+    if (isPageReload() && (searchParams.has('date_from') || searchParams.has('date_to') || searchParams.has('date'))) {
+      const clean = new URLSearchParams(searchParams)
+      clean.delete('date_from')
+      clean.delete('date_to')
+      clean.delete('date')
+      setSearchParams(clean, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const [filters, setFilters] = useState<SearchFilters>({
     keyword: searchParams.get('keyword') || '',
-    talkgroups: searchParams.getAll('talkgroup'),
+    talkgroups: Array.from(new Set([
+      ...searchParams.getAll('talkgroup'),
+      ...searchParams.getAll('talkgroups'),
+      ...(searchParams.get('talkgroups') ? searchParams.get('talkgroups')!.split(',') : []),
+    ])).filter(Boolean),
     hour: searchParams.get('hour') || '',
     sort: (searchParams.get('sort') as SearchFilters['sort']) || 'newest',
     limit: Number(searchParams.get('limit')) || 50,
@@ -220,8 +227,15 @@ export function SearchPage() {
   // Sync with searchParams
   useEffect(() => {
     const params = new URLSearchParams()
-    if (dateFrom) params.set('date_from', dateFrom)
-    if (dateTo) params.set('date_to', dateTo)
+    const today = todayIso()
+    if (dateFrom && dateTo && (dateFrom !== today || dateTo !== today)) {
+      if (dateFrom === dateTo) {
+        params.set('date', dateFrom)
+      } else {
+        params.set('date_from', dateFrom)
+        params.set('date_to', dateTo)
+      }
+    }
     if (filters.keyword) params.set('keyword', filters.keyword)
     if (filters.hour) params.set('hour', filters.hour)
     if (filters.sort && filters.sort !== 'newest') params.set('sort', filters.sort)
@@ -338,7 +352,6 @@ export function SearchPage() {
               onChange={(f, t) => {
                 setDateFrom(f)
                 setDateTo(t)
-                saveDateRange(f, t)
               }}
             />
             {!viewOnly && (

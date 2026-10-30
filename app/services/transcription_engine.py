@@ -185,10 +185,14 @@ class TranscriptionEngine:
                     "attempting component-wise fallback"
                 )
                 try:
-                    from transformers import AutoFeatureExtractor, AutoTokenizer
+                    from transformers import AutoFeatureExtractor, AutoTokenizer, WhisperTokenizer
                     fe = AutoFeatureExtractor.from_pretrained(load_target)
-                    tok = AutoTokenizer.from_pretrained(load_target)
+                    try:
+                        tok = WhisperTokenizer.from_pretrained(load_target)
+                    except Exception:
+                        tok = AutoTokenizer.from_pretrained(load_target, use_fast=False)
                     self.processor = WhisperProcessor(feature_extractor=fe, tokenizer=tok)
+                    logger.info(f"✅ Component-wise processor initialized successfully from {load_target}")
                 except Exception as comp_err:
                     logger.warning(
                         f"Component initialization failed ({comp_err}); "
