@@ -1056,4 +1056,29 @@ This living document is the **shared memory** between different AI models, human
   - `pytest tests/`: **148/148 passed**.
   - `vitest`: **52/52 passed**.
   - `alembic upgrade head`: confirmed up to date.
-- **Next Tasks / Unfinished Work:** System operational on `main` and `snapshot`.
+- **Next Tasks / Unfinished Work:** Multi-day date selector reset and Clear button update.
+
+---
+
+### 2026-10-30 16:32 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  - Resolved multi-day date selector persistence across page reloads and cross-page navigation:
+    1. **Clear Button Applies Current Day**: In [`DatabaseDateRangePicker.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/database/DatabaseDateRangePicker.tsx), updated `handleClear` and empty `handleApply` to apply today's date (`onChange(today, today)`) and reset internal inputs to `today`, satisfying user requirement that clearing the picker returns strictly to the current day.
+    2. **Strict Multi-Day Rejection on Navigation & Reload**: In [`dateSelection.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/lib/dateSelection.ts), updated `getInitialDateRange()` to strictly reject multi-day query parameters (`pFrom !== pTo`), returning `{ from: today, to: today }`. Multi-day ranges are never restored on page reload or fresh page navigation.
+    3. **Query Parameter Cleaning & URL Desynchronization**:
+       - In [`InsightsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Insights/InsightsPage.tsx), stripped any `date_from`, `date_to`, or `date` query parameters on mount/refresh.
+       - In [`SearchPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Search/SearchPage.tsx), stripped any multi-day parameters on mount/refresh and stopped writing multi-day ranges to `searchParams` so they cannot leak into URL history.
+       - In [`Events/Incidents/index.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/Incidents/index.tsx), prevented multi-day query parameters from initializing incident filters.
+    4. **Storage Cleanup**: Added `sessionStorage` and legacy `scanscribe_selected_date_range` key removals to `clearSavedDateRange()`.
+    5. **Unit Tests & Production Bundle**:
+       - Updated [`DatePickers.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatePickers.test.tsx) asserting that "Clear" applies `today` and `getInitialDateRange` strictly rejects multi-day query strings.
+       - Recompiled production frontend bundle to `app/frontend/dist` (`tsc -b && vite build` in 1.41s).
+- **Live Ingestion Impact:** None. Frontend date range interaction and query formatting only.
+- **Gotchas / Warnings for Next Model:**
+  - Date pickers always reset to current day (`todayIso()`) on page reload or navigating between pages.
+  - Multi-day date filtering in Search and Insights operates in in-memory component state and does not pollute the address bar.
+- **Verification Performed:**
+  - `npm.cmd test -- --run`: **52/52 vitest tests passed** across 10 test files.
+  - `npm.cmd run build`: 0 errors in 1.41s.
+  - `pytest tests/`: **148/148 passed** in 23.53s.
+- **Next Tasks / Unfinished Work:** Ready for review on `snapshot`.

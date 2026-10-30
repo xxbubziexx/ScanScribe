@@ -109,14 +109,20 @@ export function SearchPage() {
   const [dateFrom, setDateFrom] = useState(initialRange.from)
   const [dateTo, setDateTo] = useState(initialRange.to)
 
-  // On page refresh/reload, strip any stale date params from URL
+  // On page mount/refresh, strip any multi-day or reload date params to enforce current day only
   useEffect(() => {
-    if (isPageReload() && (searchParams.has('date_from') || searchParams.has('date_to') || searchParams.has('date'))) {
+    const pFrom = searchParams.get('date_from') || searchParams.get('date')
+    const pTo = searchParams.get('date_to') || searchParams.get('date')
+    const isMultiDay = Boolean(pFrom && pTo && pFrom !== pTo)
+    if (isPageReload() || isMultiDay) {
       const clean = new URLSearchParams(searchParams)
       clean.delete('date_from')
       clean.delete('date_to')
       clean.delete('date')
       setSearchParams(clean, { replace: true })
+      const today = todayIso()
+      setDateFrom(today)
+      setDateTo(today)
     }
   }, [searchParams, setSearchParams])
 
@@ -228,13 +234,8 @@ export function SearchPage() {
   useEffect(() => {
     const params = new URLSearchParams()
     const today = todayIso()
-    if (dateFrom && dateTo && (dateFrom !== today || dateTo !== today)) {
-      if (dateFrom === dateTo) {
-        params.set('date', dateFrom)
-      } else {
-        params.set('date_from', dateFrom)
-        params.set('date_to', dateTo)
-      }
+    if (dateFrom && dateTo && dateFrom === dateTo && dateFrom !== today) {
+      params.set('date', dateFrom)
     }
     if (filters.keyword) params.set('keyword', filters.keyword)
     if (filters.hour) params.set('hour', filters.hour)

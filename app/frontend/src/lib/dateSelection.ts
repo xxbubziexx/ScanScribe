@@ -46,13 +46,13 @@ export function getInitialDateRange(searchParams?: URLSearchParams): { from: str
   const pFrom = searchParams.get('date_from') || searchParams.get('date')
   const pTo = searchParams.get('date_to') || searchParams.get('date')
 
-  if (!pFrom && !pTo) {
+  // Multi-day ranges are strictly rejected on new page navigation or reload
+  if (!pFrom || !pTo || pFrom !== pTo) {
     return { from: today, to: today }
   }
 
-  const from = pFrom || today
-  const to = pTo || from
-  return { from, to }
+  // Single-day explicit parameter only
+  return { from: pFrom, to: pTo }
 }
 
 /**
@@ -71,6 +71,11 @@ export function clearSavedDateRange() {
   if (typeof window === 'undefined') return
   try {
     localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem('scanscribe_selected_date_range')
+    localStorage.removeItem('scanscribe_date_range')
+    sessionStorage.removeItem(STORAGE_KEY)
+    sessionStorage.removeItem('scanscribe_selected_date_range')
+    sessionStorage.removeItem('scanscribe_date_range')
   } catch {
     /* ignore */
   }

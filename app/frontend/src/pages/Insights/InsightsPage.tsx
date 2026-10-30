@@ -10,7 +10,7 @@ import { TacticalNerWidget } from './components/TacticalNerWidget'
 import { TrafficAnomalyWidget } from './components/TrafficAnomalyWidget'
 import { TalkgroupTrackerWidget } from './components/TalkgroupTrackerWidget'
 import { AsrConfidenceWidget } from './components/AsrConfidenceWidget'
-import { getInitialDateRange, isPageReload } from '@/lib/dateSelection'
+import { getInitialDateRange } from '@/lib/dateSelection'
 
 export function InsightsPage() {
   const navigate = useNavigate()
@@ -21,9 +21,9 @@ export function InsightsPage() {
   const [dateFrom, setDateFrom] = useState(initialRange.from)
   const [dateTo, setDateTo] = useState(initialRange.to)
 
-  // On page refresh/reload, strip any stale date params from URL
+  // Strip any date params from URL on mount/refresh to enforce current day only
   useEffect(() => {
-    if (isPageReload() && (searchParams.has('date_from') || searchParams.has('date_to') || searchParams.has('date'))) {
+    if (searchParams.has('date_from') || searchParams.has('date_to') || searchParams.has('date')) {
       const clean = new URLSearchParams(searchParams)
       clean.delete('date_from')
       clean.delete('date_to')

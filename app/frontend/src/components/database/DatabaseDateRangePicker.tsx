@@ -199,7 +199,10 @@ export function DatabaseDateRangePicker({
     const trimmedTo = toInput.trim()
 
     if (!trimmedFrom && !trimmedTo) {
-      onChange('', '')
+      const today = toYmd(new Date())
+      setFromInput(today)
+      setToInput(today)
+      onChange(today, today)
       setOpen(false)
       return
     }
@@ -237,10 +240,11 @@ export function DatabaseDateRangePicker({
   }
 
   const handleClear = () => {
-    setFromInput('')
-    setToInput('')
+    const today = toYmd(new Date())
+    setFromInput(today)
+    setToInput(today)
     setError(null)
-    onChange('', '')
+    onChange(today, today)
     setOpen(false)
   }
 

@@ -8,7 +8,7 @@ import { isPageReload, todayIso } from '@/lib/dateSelection'
 export function usePersistentDateRange(defaultFrom?: string, defaultTo?: string) {
   const [range, setRange] = useState(() => {
     const today = todayIso()
-    if (isPageReload()) {
+    if (isPageReload() || (defaultFrom && defaultTo && defaultFrom !== defaultTo)) {
       return { dateFrom: today, dateTo: today }
     }
     return {

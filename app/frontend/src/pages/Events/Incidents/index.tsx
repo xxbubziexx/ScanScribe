@@ -34,8 +34,20 @@ export function EventsIncidentsPage() {
     if (s === 'all' || s === 'open' || s === 'closed') return s
     return 'open'
   })
-  const [dateFrom, setDateFrom] = useState(isPageReload() ? '' : (searchParams.get('date_from') ?? ''))
-  const [dateTo, setDateTo] = useState(isPageReload() ? '' : (searchParams.get('date_to') ?? ''))
+  const [dateFrom, setDateFrom] = useState(() => {
+    if (isPageReload()) return ''
+    const df = searchParams.get('date_from') ?? ''
+    const dt = searchParams.get('date_to') ?? ''
+    if (df && dt && df !== dt) return ''
+    return df
+  })
+  const [dateTo, setDateTo] = useState(() => {
+    if (isPageReload()) return ''
+    const df = searchParams.get('date_from') ?? ''
+    const dt = searchParams.get('date_to') ?? ''
+    if (df && dt && df !== dt) return ''
+    return dt
+  })
 
   useEffect(() => {
     const s = searchParams.get('status')

@@ -160,10 +160,11 @@ describe('DatabaseDateRangePicker component', () => {
     expect(screen.getByText('Today')).toBeInTheDocument()
     expect(screen.getByText('Last 7 days')).toBeInTheDocument()
 
-    // Clear dates
+    // Clear dates applies the current day
     const clearBtn = screen.getByRole('button', { name: /^clear$/i })
     await user.click(clearBtn)
-    expect(handleChange).toHaveBeenCalledWith('', '')
+    const today = todayIso()
+    expect(handleChange).toHaveBeenCalledWith(today, today)
   })
 
   it('immediately triggers onChange when two days are clicked on the calendar', async () => {
@@ -232,17 +233,19 @@ describe('Date Range Persistence (Retired)', () => {
     expect(getSavedDateRange()).toBeNull()
   })
 
-  it('resets to strictly the current day (single day) on page reload', () => {
+  it('resets to strictly the current day on page reload or fresh navigation with multi-day params', () => {
     const today = todayIso()
     // When no searchParams provided
     expect(getInitialDateRange()).toEqual({ from: today, to: today })
 
-    // When query params specify a multi-day range on initial navigation
-    const sp = new URLSearchParams({ date_from: '2026-10-10', date_to: '2026-10-15' })
-    const res = getInitialDateRange(sp)
-    // If not reloading, returns query params
+    // When query params specify a multi-day range, it strictly resets to today
+    const multiDaySp = new URLSearchParams({ date_from: '2026-10-10', date_to: '2026-10-15' })
+    expect(getInitialDateRange(multiDaySp)).toEqual({ from: today, to: today })
+
+    // When query params specify an explicit single-day drilldown
+    const singleDaySp = new URLSearchParams({ date_from: '2026-10-10', date_to: '2026-10-10' })
     if (!isPageReload()) {
-      expect(res).toEqual({ from: '2026-10-10', to: '2026-10-15' })
+      expect(getInitialDateRange(singleDaySp)).toEqual({ from: '2026-10-10', to: '2026-10-10' })
     }
 
     // When performance.getEntriesByType reports reload, must always reset to today
@@ -250,7 +253,7 @@ describe('Date Range Persistence (Retired)', () => {
     try {
       performance.getEntriesByType = vi.fn().mockReturnValue([{ type: 'reload' }]) as any
       expect(isPageReload()).toBe(true)
-      expect(getInitialDateRange(sp)).toEqual({ from: today, to: today })
+      expect(getInitialDateRange(singleDaySp)).toEqual({ from: today, to: today })
     } finally {
       performance.getEntriesByType = origGetEntries
     }
