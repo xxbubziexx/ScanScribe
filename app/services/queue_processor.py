@@ -400,6 +400,11 @@ class QueueProcessor:
             
         except Exception as e:
             logger.error(f"❌ Processing failed for {filename}: {e}")
+            # CUDA reports OOM asynchronously, so it can surface here at the
+            # await on the worker thread rather than inside the engine. Reclaim
+            # the allocator here too, otherwise the reservation persists and
+            # every subsequent file OOMs as well.
+            self.engine.release_gpu_memory()
             # Purge file on error (only if not already handled)
             if not file_handled:
                 deleted = await safe_async_unlink(audio_path)

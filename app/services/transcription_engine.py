@@ -28,6 +28,29 @@ CPU_COUNT = os.cpu_count() or 4
 # Transcript value when VAD detects no speech (audio kept, Whisper skipped)
 VAD_REJECTED_TRANSCRIPT = "VAD_REJECTED"
 
+# Reduce fragmentation-induced CUDA OOM on small-VRAM GPUs. PyTorch reads this
+# lazily when the caching allocator initialises, so setting it at import time
+# (before any device allocation) is sufficient.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+
+class TranscriptionOutOfMemoryError(RuntimeError):
+    """Raised when Whisper generation exhausts GPU memory despite retries."""
+
+
+def is_cuda_oom_error(exc: BaseException) -> bool:
+    """
+    Detect a CUDA out-of-memory error regardless of how it surfaces.
+
+    CUDA raises either `torch.cuda.OutOfMemoryError` or a plain `RuntimeError`
+    whose message contains "out of memory". Kernel errors are also reported
+    asynchronously, so matching the message text is required — the type alone
+    is not reliable.
+    """
+    if exc.__class__.__name__ in ("OutOfMemoryError", "CudaOutOfMemoryError"):
+        return True
+    return "out of memory" in str(exc).lower()
+
 
 class TranscriptionEngine:
     """Whisper transcription engine optimized for CPU/GPU."""
@@ -247,6 +270,10 @@ class TranscriptionEngine:
         if not self.model or not self.processor:
             logger.error("❌ Model not loaded")
             return None
+
+        # Reclaim any blocks still held from a previously reported (possibly
+        # asynchronous) CUDA OOM before allocating for this file.
+        self.release_gpu_memory()
         
         start_time = time.time()
         speech_only_audio_path = None  # Set when vad_save_speech_only and we wrote speech-only WAV
@@ -403,33 +430,93 @@ class TranscriptionEngine:
         except Exception as e:
             if speech_only_audio_path is not None:
                 safe_unlink(speech_only_audio_path)
-            if self.device == "cuda" and torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            logger.error(f"❌ Transcription failed: {e}")
+            self.release_gpu_memory()
+            if is_cuda_oom_error(e):
+                logger.error(
+                    "❌ Transcription failed: GPU out of memory. CUDA cache released; "
+                    "consider lowering transcription.beam_size or setting model.device "
+                    "to 'cpu'. (%s)", e
+                )
+            else:
+                logger.error(f"❌ Transcription failed: {e}")
             return None
 
-    def _transcribe_chunk(self, audio_chunk: np.ndarray, forced_decoder_ids=None) -> tuple:
-        """Transcribe a single audio chunk."""
-        # Prepare inputs
-        input_features = self.processor(
-            audio_chunk,
-            sampling_rate=16000,
-            return_tensors="pt"
-        ).input_features.to(device=self.device, dtype=self.model.dtype)        
-        # Generate transcription
-        gen_kwargs = {
-            "num_beams": self.config.transcription.beam_size,
+    def release_gpu_memory(self) -> None:
+        """
+        Return cached CUDA blocks to the driver.
+
+        Called before every transcription and on every failure path. CUDA reports
+        OOM asynchronously, so the error can surface at a later call site (e.g.
+        the queue processor's await on the worker thread) after the engine has
+        already returned. Without an unconditional reclaim the caching allocator
+        keeps its reserved blocks, so every following file OOMs in turn and the
+        ingest pipeline wedges. This is a no-op on CPU-only hosts and inside the
+        mocked test environment.
+        """
+        try:
+            if not torch.cuda.is_available():
+                return
+            torch.cuda.empty_cache()
+        except Exception as e:
+            logger.debug("CUDA cache release skipped: %s", e)
+
+    def _build_gen_kwargs(self, beam_size: int, forced_decoder_ids=None) -> Dict[str, Any]:
+        """
+        Build generation kwargs for a single chunk.
+
+        `output_scores=True` is REQUIRED and must not be dropped to save memory:
+        transformers nulls out `sequences_scores` when output_scores is False
+        (transformers/generation/utils.py: `if not output_scores:
+        sequence_outputs["sequence_scores"] = None`). Beam search derives its
+        confidence from `sequences_scores`, so omitting output_scores silently
+        reports confidence 0.0 for every transmission. Peak memory is instead
+        bounded by the OOM retry ladder in `_transcribe_chunk`.
+        """
+        gen_kwargs: Dict[str, Any] = {
+            "num_beams": beam_size,
             "max_length": 448,
             "return_dict_in_generate": True,
             "output_scores": True,
         }
         if forced_decoder_ids is not None:
             gen_kwargs["forced_decoder_ids"] = forced_decoder_ids
+        return gen_kwargs
 
-        generated_ids = self.model.generate(
-            input_features,
-            **gen_kwargs
-        )
+    def _transcribe_chunk(self, audio_chunk: np.ndarray, forced_decoder_ids=None,
+                          beam_size: Optional[int] = None) -> tuple:
+        """Transcribe a single audio chunk, degrading gracefully on CUDA OOM."""
+        beam = self.config.transcription.beam_size if beam_size is None else beam_size
+        beam = max(1, int(beam or 1))
+
+        # Prepare inputs
+        input_features = self.processor(
+            audio_chunk,
+            sampling_rate=16000,
+            return_tensors="pt"
+        ).input_features.to(device=self.device, dtype=self.model.dtype)        
+
+        # Generate transcription. A CUDA OOM is retried once with a smaller
+        # footprint (greedy decoding) before being handed up as a typed error.
+        generated_ids = None
+        for attempt in range(2):
+            try:
+                generated_ids = self.model.generate(
+                    input_features,
+                    **self._build_gen_kwargs(beam, forced_decoder_ids)
+                )
+                break
+            except Exception as gen_err:
+                if not is_cuda_oom_error(gen_err):
+                    raise
+                self.release_gpu_memory()
+                if attempt == 0 and beam > 1:
+                    logger.warning(
+                        "⚠️ CUDA OOM during generate (num_beams=%d); retrying with greedy decoding",
+                        beam,
+                    )
+                    beam = 1
+                    continue
+                raise TranscriptionOutOfMemoryError(str(gen_err)) from gen_err
         
         # Decode
         transcript = self.processor.batch_decode(

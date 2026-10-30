@@ -1082,3 +1082,27 @@ This living document is the **shared memory** between different AI models, human
   - `npm.cmd run build`: 0 errors in 1.41s.
   - `pytest tests/`: **148/148 passed** in 23.53s.
 - **Next Tasks / Unfinished Work:** Ready for review on `snapshot`.
+
+---
+
+### 2026-10-30 17:51 | Overseer (Kali Linux Dev Workstation)
+- **Work Performed:**
+  - Diagnosed and fixed CUDA out-of-memory failures that were wedging the live ingest pipeline. Reported symptom: `❌ Processing failed for <file>: CUDA error: out of memory` followed by `🗑️ Purged failed file`, after which every subsequent file failed and ingestion appeared dead.
+  - **Root cause (two defects):**
+    1. **Unreclaimed allocator after an asynchronously-reported OOM.** CUDA reports OOM at a *later* CUDA call, so the error surfaced at `QueueProcessor._process_file`'s `await asyncio.to_thread(self.engine.transcribe, ...)` — outside `TranscriptionEngine.transcribe()`'s `try/except`. The `torch.cuda.empty_cache()` on that path therefore never ran, the caching allocator kept its reserved blocks, and the next file OOM'd immediately. The pipeline had no way to self-heal.
+    2. **No degraded retry.** Nothing reduced the memory footprint after an OOM — beam search was retried with identical settings — and a genuine OOM simply purged the transmission.
+  - **Fixes:**
+    - `transcription_engine.py`: added `release_gpu_memory()` (safe no-op on CPU) called at the start of every `transcribe()` and on every failure path; added `TranscriptionOutOfMemoryError` and `is_cuda_oom_error()` (type-name + message matching, because the real-world OOM arrives as a plain `RuntimeError` asynchronously); `_transcribe_chunk()` now retries once with greedy decoding (`num_beams=1`) after releasing the cache, then raises a typed OOM error; OOM failures log explicit remediation guidance; `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` set at import to reduce fragmentation OOM.
+    - `queue_processor.py`: `self.engine.release_gpu_memory()` in the failure handler — reclaiming at the exact site where the async OOM surfaces and the purge is logged.
+    - `ner_service.py`: `load_ner_model()` now honors `model.device` instead of seizing the GPU whenever CUDA exists (previously always `device=0` + fp16), so setting `model.device: cpu` can actually relieve VRAM.
+  - **Correction during implementation (do not undo):** `output_scores=True` must stay in `generate()`. Dropping it to save memory is a trap — `transformers/generation/utils.py` sets `sequence_outputs["sequence_scores"] = None` when `output_scores` is False, so beam-search confidence would silently become 0.0 for every transmission. Verified against transformers 4.46.3 source. Peak memory is bounded by the retry ladder instead.
+- **Live Ingestion Impact:** Positive. Previously a single OOM wedged all subsequent transcription; now memory is reclaimed per file, the offending transmission is retried at reduced footprint, and the loop continues. No schema, migration, or API changes.
+- **Gotchas / Warnings for Next Model:**
+  - `is_cuda_oom_error()` matches on message text deliberately — do not narrow it to an `isinstance` check; the observed error is a generic `RuntimeError`.
+  - `release_gpu_memory()` is called before *every* file, not only after an OOM. Do not optimise it away.
+  - `transcription.beam_size` (default 5) remains the operator-facing lever for small-VRAM GPUs.
+- **Verification Performed:**
+  - Baseline confirmed at **148/148 passed** before any edit.
+  - `pytest tests/`: **162/162 passed** (148 pre-existing + 14 new in `tests/test_transcription_cuda_oom.py`), run in a CPU-only mocked-torch environment.
+  - `output_scores` / `sequences_scores` behaviour verified directly against `transformers==4.46.3` source rather than assumed.
+- **Next Tasks / Unfinished Work:** Not yet pushed to `origin snapshot` (this workstation has no GitHub credentials). Frontend untouched. Review on a CUDA host with the real Whisper model is still advisable.

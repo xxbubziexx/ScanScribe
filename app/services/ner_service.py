@@ -18,6 +18,8 @@ except ImportError:
     pipeline = None
     _TRANSFORMERS_AVAILABLE = False
 
+from ..config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -104,9 +106,14 @@ def load_ner_model(model_path: str) -> bool:
         device = -1
         model_kwargs = {}
         if _TORCH_AVAILABLE and torch is not None:
-            if torch.cuda.is_available():
-                device = 0
-                model_kwargs["torch_dtype"] = torch.float16
+            # Honor the configured device instead of seizing the GPU whenever
+            # one exists. Otherwise a CUDA OOM cannot be relieved by setting
+            # model.device: cpu, because NER keeps its own model resident on VRAM.
+            configured_device = get_settings().config.model.device.lower()
+            if configured_device == "cuda":
+                if torch.cuda.is_available():
+                    device = 0
+                    model_kwargs["torch_dtype"] = torch.float16
             elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 device = "mps"
 
