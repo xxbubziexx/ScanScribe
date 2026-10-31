@@ -1085,7 +1085,7 @@ This living document is the **shared memory** between different AI models, human
 
 ---
 
-### 2026-10-30 17:51 | Overseer (Kali Linux Dev Workstation)
+### 2026-10-30 17:51 | DeepSeek V4.1 Flash (Kali Linux Dev Workstation)
 - **Work Performed:**
   - Diagnosed and fixed CUDA out-of-memory failures that were wedging the live ingest pipeline. Reported symptom: `❌ Processing failed for <file>: CUDA error: out of memory` followed by `🗑️ Purged failed file`, after which every subsequent file failed and ingestion appeared dead.
   - **Root cause (two defects):**
@@ -1142,7 +1142,7 @@ This living document is the **shared memory** between different AI models, human
 
 ---
 
-### 2026-10-30 21:10 | Overseer (Kali Linux Dev Workstation)
+### 2026-10-30 21:10 | DeepSeek V4.1 Flash (Kali Linux Dev Workstation)
 - **Note:** This entry supersedes the "Next Tasks / Unfinished Work" line of the 2026-10-30 17:51 entry below — that work has since been pushed and promoted to `main`. This covers the second half of the session.
 - **Work Performed:**
   1. **Integrated the never-committed 2026-10-23 19:58 insights round** onto current snapshot. It had been sitting uncommitted on the personal Ubuntu instance and existed in **no** branch or tag (`git log --all --find-object=$(git hash-object app/services/insights_engine.py)` returned empty). Re-applied with `git apply --3way` against `d2de61c`, resolving **9 conflict hunks across 7 files**.
