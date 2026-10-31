@@ -4,6 +4,7 @@ import asyncio
 import shutil
 import re
 import os
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict
@@ -21,6 +22,20 @@ from .events_worker import get_matching_monitor_ids, process_transcript_for_moni
 from .redaction_service import redact_ssn
 
 logger = logging.getLogger(__name__)
+
+
+# A queued file must be untouched for this long before it is treated as
+# complete. Writers refresh mtime on every flush, so a file that is still being
+# written is never eligible. This single guard covers every producer: HTTP
+# uploads, the local watchdog and the startup sweep alike.
+MIN_QUEUE_AGE_SECONDS = 3.0
+
+# How many times a file that failed processing is re-queued before it is
+# purged. Failures are frequently a partial read rather than a bad recording,
+# so the file gets another chance once it has settled. The counter is
+# in-memory: a restart resets it, which is bounded by MIN_QUEUE_AGE_SECONDS
+# rather than becoming a hot retry loop.
+MAX_PROCESS_ATTEMPTS = 3
 
 
 def parse_timestamp_from_filename(filename: str) -> Optional[datetime]:
@@ -132,6 +147,11 @@ class QueueProcessor:
         self.paused = False
         self.engine = get_engine()
         self.websocket_manager = websocket_manager
+
+        # Completeness bookkeeping for the queue (see _get_next_file)
+        self._seen_sizes: Dict[str, int] = {}
+        # Bounded retry bookkeeping for failed files (see _handle_failed_file)
+        self._attempts: Dict[str, int] = {}
         
         # Ensure directories exist
         self.queue_dir.mkdir(parents=True, exist_ok=True)
@@ -211,25 +231,89 @@ class QueueProcessor:
                 await asyncio.sleep(5)
     
     def _get_next_file(self) -> Optional[Path]:
-        """Get next file from queue (FIFO order)."""
+        """
+        Get the next *complete* file from the queue (FIFO order).
+
+        Files that are still being written are skipped. A file is only eligible
+        once its mtime is older than MIN_QUEUE_AGE_SECONDS and it has not grown
+        since the previous poll. Reading a partial file is what produces
+        mutagen's "can't sync to MPEG frame" and truncated transcripts, and this
+        is the single funnel every producer passes through - HTTP uploads, the
+        local watchdog and the startup sweep.
+        """
         if not self.queue_dir.exists():
             return None
-        
+
         extensions = self.config.watchdog_client.extensions
-        files = [f for f in self.queue_dir.iterdir() 
-                if f.is_file() and f.suffix.lower() in extensions]
-        
-        if not files:
+        now = time.time()
+        eligible = []
+        present = set()
+
+        for file_path in self.queue_dir.iterdir():
+            if not file_path.is_file() or file_path.suffix.lower() not in extensions:
+                continue
+
+            try:
+                file_stat = file_path.stat()
+            except OSError as e:
+                logger.debug("Skipping unreadable queue entry %s: %s", file_path, e)
+                continue
+
+            key = str(file_path)
+            present.add(key)
+            previous_size = self._seen_sizes.get(key)
+            self._seen_sizes[key] = file_stat.st_size
+
+            # Still being written: too fresh, or it grew since the last poll
+            if now - file_stat.st_mtime < MIN_QUEUE_AGE_SECONDS:
+                continue
+            if previous_size is not None and previous_size != file_stat.st_size:
+                continue
+
+            eligible.append((file_stat.st_mtime, file_path))
+
+        # Drop bookkeeping for files that are gone
+        for stale_key in set(self._seen_sizes) - present:
+            self._seen_sizes.pop(stale_key, None)
+        for stale_key in set(self._attempts) - present:
+            self._attempts.pop(stale_key, None)
+
+        if not eligible:
             return None
-        
-        # Sort by modification time (FIFO)
-        if self.config.queue.fifo_order:
-            files.sort(key=lambda x: x.stat().st_mtime)
-        else:
-            files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        
-        return files[0]
+
+        eligible.sort(key=lambda item: item[0], reverse=not self.config.queue.fifo_order)
+        return eligible[0][1]
     
+    async def _handle_failed_file(self, audio_path: Path, filename: str) -> None:
+        """
+        Re-queue a failed file a bounded number of times before purging it.
+
+        A failure is frequently a partial read rather than a bad recording, so
+        the file is given another chance once it has settled. Touching mtime
+        restarts the completeness window in _get_next_file, which spaces the
+        retries out instead of spinning on the same file.
+        """
+        key = str(audio_path)
+        attempts = self._attempts.get(key, 0) + 1
+        self._attempts[key] = attempts
+
+        if attempts < MAX_PROCESS_ATTEMPTS:
+            try:
+                os.utime(audio_path, None)
+            except OSError as e:
+                logger.warning(f"Could not re-age {filename} for retry: {e}")
+            logger.warning(
+                f"♻️ Processing failed for {filename} "
+                f"(attempt {attempts}/{MAX_PROCESS_ATTEMPTS}) — re-queued"
+            )
+            return
+
+        deleted = await safe_async_unlink(audio_path)
+        if deleted:
+            logger.info(
+                f"🗑️ Purged failed file after {attempts} attempts: {filename}"
+            )
+
     async def _process_file(self, audio_path: Path):
         """
         Process a single audio file.
@@ -292,15 +376,15 @@ class QueueProcessor:
             # Extract metadata
             logger.info("📊 Extracting metadata...")
             metadata = await asyncio.to_thread(extract_audio_metadata, str(audio_path))
-            talkgroup = get_talkgroup_from_metadata(metadata)
+            talkgroup = get_talkgroup_from_metadata(metadata, filename)
             
             # Transcribe
             result = await asyncio.to_thread(self.engine.transcribe, audio_path)
             
             if not result:
-                logger.error("❌ Transcription failed, purging file")
-                await safe_async_unlink(audio_path)
+                logger.error(f"❌ Transcription failed for {filename}")
                 file_handled = True
+                await self._handle_failed_file(audio_path, filename)
                 return
             
             # Apply PII/SSN redaction immediately so raw SSNs are never stored, logged, or broadcasted
@@ -405,11 +489,10 @@ class QueueProcessor:
             # the allocator here too, otherwise the reservation persists and
             # every subsequent file OOMs as well.
             self.engine.release_gpu_memory()
-            # Purge file on error (only if not already handled)
+            # Re-queue with a bounded retry rather than deleting a file that may
+            # simply have been read while it was still being written.
             if not file_handled:
-                deleted = await safe_async_unlink(audio_path)
-                if deleted:
-                    logger.info(f"🗑️ Purged failed file: {filename}")
+                await self._handle_failed_file(audio_path, filename)
         
         finally:
             db.close()

@@ -56,9 +56,24 @@ async def upload_audio(
             queue_path = queue_dir / f"{original_stem}_{counter}{file_ext}"
             counter += 1
         
-        # Read uploaded bytes and write to disk in worker thread (non-blocking)
+        # Read uploaded bytes and publish atomically: write to a temp name in
+        # the queue directory, then os.replace() it into place. The queue
+        # processor therefore only ever sees a complete file, so a mid-write
+        # read is impossible. The ".part" suffix cannot match the audio
+        # extension filter, so a stray temp file is never picked up as a
+        # transmission.
         content = await file.read()
-        await asyncio.to_thread(queue_path.write_bytes, content)
+        tmp_path = queue_path.with_name(f".{queue_path.name}.part")
+        try:
+            await asyncio.to_thread(tmp_path.write_bytes, content)
+            await asyncio.to_thread(os.replace, str(tmp_path), str(queue_path))
+        except OSError as e:
+            logger.error(f"❌ Upload write failed for {file.filename}: {e}")
+            try:
+                await asyncio.to_thread(tmp_path.unlink)
+            except OSError as cleanup_err:
+                logger.debug("Temp upload cleanup failed for %s: %s", tmp_path, cleanup_err)
+            raise
         
         file_size_mb = len(content) / (1024 * 1024)
         

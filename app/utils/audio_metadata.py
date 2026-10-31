@@ -7,8 +7,11 @@ logger = logging.getLogger(__name__)
 
 try:
     from mutagen import File as MutagenFile
+    from mutagen import MutagenError
     MUTAGEN_AVAILABLE = True
 except ImportError:
+    MutagenFile = None
+    MutagenError = Exception
     MUTAGEN_AVAILABLE = False
     logger.warning("Mutagen not available - metadata extraction disabled")
 
@@ -90,27 +93,68 @@ def extract_audio_metadata(file_path: Union[str, Path]) -> Dict[str, Any]:
         
         logger.debug(f"Extracted metadata from {Path(file_path).name}: title={metadata['title']}, duration={metadata['duration']:.2f}s")
         
+    except MutagenError as e:
+        # Mutagen refuses files that are incomplete or malformed - normally a
+        # capture read while it was still being written. Not a reason to alarm:
+        # the audio still decodes for transcription, and the talkgroup falls
+        # back to the filename (see get_talkgroup_from_metadata).
+        logger.warning(
+            f"Could not parse audio metadata from {Path(file_path).name}: {str(e)}"
+        )
     except Exception as e:
         logger.error(f"Error extracting metadata from {Path(file_path).name}: {str(e)}")
     
     return metadata
 
 
-def get_talkgroup_from_metadata(metadata: Dict[str, Any]) -> str:
+def get_talkgroup_from_metadata(metadata: Dict[str, Any], filename: Optional[str] = None) -> str:
     """
-    Extract talkgroup/channel info from audio metadata dict.
-    
+    Extract talkgroup/channel info from an audio metadata dict.
+
+    Prefers the ID3 title. When mutagen could not parse the file, the channel
+    must not be lost: recorders encode it in the filename, so fall back to that
+    instead of reporting "N/A".
+
     Args:
         metadata: Metadata dictionary from extract_audio_metadata()
-    
+        filename: Optional source filename, used as the fallback
+
     Returns:
-        str: Talkgroup name or "N/A" if not found
+        str: Talkgroup name or "N/A" if it cannot be determined
     """
     if metadata and metadata.get("title"):
         # The title field usually contains talkgroup info in scanner recordings
         return metadata["title"]
-    
+
+    derived = _talkgroup_from_filename(filename) if filename else None
+    if derived:
+        return derived
+
     return "N/A"
+
+
+def _talkgroup_from_filename(filename: str) -> Optional[str]:
+    """
+    Derive a channel name from a recorder filename.
+
+    Handles the common ProScan shape
+    "<timestamp>_<system> - <channel>.mp3" -> "<channel>", degrading to the
+    post-timestamp segment when there is no " - " separator.
+    """
+    if not filename:
+        return None
+
+    stem = Path(filename).stem.strip()
+    if not stem:
+        return None
+
+    if "_" in stem:
+        stem = stem.split("_", 1)[1].strip()
+
+    if " - " in stem:
+        stem = stem.rsplit(" - ", 1)[1].strip()
+
+    return stem or None
 
 
 def get_audio_duration(file_path: Path) -> float:
