@@ -68,7 +68,7 @@ export function AsrConfidenceWidget({ data }: AsrConfidenceWidgetProps) {
         dot: 'bg-emerald-400',
       }
     }
-    if (score >= 75) {
+    if (score >= 70) {
       return {
         label: 'Moderate Clarity',
         color: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
@@ -158,7 +158,7 @@ export function AsrConfidenceWidget({ data }: AsrConfidenceWidgetProps) {
           <div className="mb-1.5 flex items-center justify-between text-xs text-gray-400">
             <span className="font-medium text-gray-300">Confidence Distribution</span>
             <span className="font-mono text-[11px]">
-              {high_percentage.toFixed(0)}% / {moderate_percentage.toFixed(0)}% / {low_percentage.toFixed(0)}%
+              {high_percentage.toFixed(1)}% / {moderate_percentage.toFixed(1)}% / {low_percentage.toFixed(1)}%
             </span>
           </div>
           <div className="flex h-3 w-full overflow-hidden rounded-full bg-gray-800/80 p-0.5">
@@ -235,7 +235,7 @@ export function AsrConfidenceWidget({ data }: AsrConfidenceWidgetProps) {
           <SparkleIcon className="h-3 w-3 text-emerald-400" />
           <span>Whisper token probabilities calibrated via log-mel spectrogram</span>
         </div>
-        <span className="font-mono text-gray-400">Score &gt; 85% = High</span>
+        <span className="font-mono text-gray-400">Score &ge; 85% = High</span>
       </div>
     </div>
   )

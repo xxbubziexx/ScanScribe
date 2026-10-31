@@ -187,7 +187,11 @@ export function TrafficAnomalyWidget({ data, onHourClick }: TrafficAnomalyWidget
             <span className="text-[11px] font-medium tracking-wide text-gray-400 uppercase">Statistical Z-Score</span>
           </div>
           <div className="mt-1 flex items-baseline gap-2">
-            <span className={`font-mono text-2xl font-bold tracking-tight ${Math.abs(z_score) >= 2.0 ? 'text-rose-400' : 'text-white'}`}>
+            <span
+              className={`font-mono text-2xl font-bold tracking-tight ${
+                z_score >= 2.0 ? 'text-rose-400' : z_score >= 1.0 ? 'text-amber-300' : 'text-white'
+              }`}
+            >
               {z_score > 0 ? `+${z_score.toFixed(2)}σ` : `${z_score.toFixed(2)}σ`}
             </span>
             <span className="text-xs text-gray-400">deviation</span>
@@ -267,7 +271,10 @@ export function TrafficAnomalyWidget({ data, onHourClick }: TrafficAnomalyWidget
           <div className="relative mt-3 h-24 w-full min-w-0">
             <div className="flex h-full items-end gap-1">
               {timeline.map((point) => {
-                const heightPct = Math.min(100, Math.max(6, (point.observed / maxTimelineVolume) * 100))
+                const isZero = point.observed === 0
+                const heightPct = isZero
+                  ? 2
+                  : Math.min(100, Math.max(6, (point.observed / maxTimelineVolume) * 100))
                 const baselinePct = Math.min(100, Math.max(6, (point.baseline / maxTimelineVolume) * 100))
 
                 return (
@@ -291,7 +298,9 @@ export function TrafficAnomalyWidget({ data, onHourClick }: TrafficAnomalyWidget
                       className={`w-full rounded-t transition-all ${
                         point.is_anomaly
                           ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.5)] group-hover:bg-amber-300'
-                          : 'bg-indigo-500/40 group-hover:bg-indigo-400/70'
+                          : isZero
+                            ? 'bg-white/10 group-hover:bg-white/25'
+                            : 'bg-indigo-500/40 group-hover:bg-indigo-400/70'
                       }`}
                     />
                   </div>

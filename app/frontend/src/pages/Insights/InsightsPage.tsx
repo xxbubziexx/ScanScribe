@@ -63,6 +63,14 @@ export function InsightsPage() {
   })
 
   useEffect(() => {
+    const now = new Date()
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    const isViewingToday = !isMultiDay && (!dateFrom || dateFrom === localToday)
+    if (!isViewingToday) {
+      setLiveCpm(null)
+      return
+    }
+
     const poll = async () => {
       if (document.hidden) return
       try {
@@ -77,7 +85,7 @@ export function InsightsPage() {
     return () => {
       if (cpmTimerRef.current) clearInterval(cpmTimerRef.current)
     }
-  }, [])
+  }, [dateFrom, isMultiDay])
 
   function onHourClick(hour: number) {
     const params = new URLSearchParams()
@@ -133,7 +141,7 @@ export function InsightsPage() {
       {/* Real-Time Factor & Tactical Semantics Intelligence Widgets */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <RtfThroughputWidget data={rtf} isMultiDay={isMultiDay} />
-        <TacticalNerWidget data={ner} />
+        <TacticalNerWidget data={ner} dateFrom={dateFrom} dateTo={dateTo} />
       </div>
 
       {/* Diurnal Heatmap (Disabled when multi-day range is active) */}

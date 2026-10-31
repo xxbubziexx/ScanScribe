@@ -142,7 +142,13 @@ export function RtfThroughputWidget({ data, isMultiDay }: RtfThroughputWidgetPro
           </div>
           <div className="mt-1 flex items-baseline gap-2">
             <span className="font-mono text-2xl font-bold text-white tracking-tight">{rtf.toFixed(2)}x</span>
-            <span className="text-xs text-emerald-400">{speedup}x speed</span>
+            <span
+              className={`text-xs ${
+                rtf > 1.0 ? 'text-rose-400' : rtf > 0.7 ? 'text-amber-400' : 'text-emerald-400'
+              }`}
+            >
+              {speedup}x speed
+            </span>
           </div>
           <p className="mt-0.5 text-[10px] text-gray-500">Processing seconds / audio second</p>
         </div>
@@ -206,8 +212,11 @@ export function RtfThroughputWidget({ data, isMultiDay }: RtfThroughputWidgetPro
         <div className="relative mt-3 h-20 w-full">
           <div className="flex h-full items-end gap-1">
             {timeline.map((point) => {
-              const heightPct = Math.min(100, Math.max(8, (point.rtf / maxRtfInTimeline) * 100))
-              const isHigh = point.rtf > 0.35
+              const isEmpty = point.count === 0
+              const heightPct = isEmpty
+                ? 2
+                : Math.min(100, Math.max(8, (point.rtf / maxRtfInTimeline) * 100))
+              const isHigh = !isEmpty && point.rtf > 0.35
               return (
                 <div
                   key={point.hour}
@@ -218,9 +227,11 @@ export function RtfThroughputWidget({ data, isMultiDay }: RtfThroughputWidgetPro
                   <div
                     style={{ height: `${heightPct}%` }}
                     className={`w-full rounded-t transition-all ${
-                      isHigh
-                        ? 'bg-amber-400/80 group-hover:bg-amber-300'
-                        : 'bg-emerald-500/50 group-hover:bg-emerald-400'
+                      isEmpty
+                        ? 'bg-white/10 group-hover:bg-white/25'
+                        : isHigh
+                          ? 'bg-amber-400/80 group-hover:bg-amber-300'
+                          : 'bg-emerald-500/50 group-hover:bg-emerald-400'
                     }`}
                   />
                 </div>

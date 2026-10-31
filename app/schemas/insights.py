@@ -123,6 +123,7 @@ class TalkgroupEntry(BaseModel):
     duration: Optional[float] = None
     avg_duration: Optional[float] = None
     percentage: Optional[float] = None
+    call_percentage: Optional[float] = None
     is_new: Optional[bool] = False
     is_new_vs_yesterday: Optional[bool] = False
     first_seen: Optional[str] = None

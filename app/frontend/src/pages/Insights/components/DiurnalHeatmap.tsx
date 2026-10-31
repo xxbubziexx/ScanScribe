@@ -100,10 +100,38 @@ export function DiurnalHeatmap({ data, dateFrom, dateTo, isMultiDay, onSelectSin
     return `rgba(99, 102, 241, ${alpha})`
   }
 
-  const handleCellClick = (hour: number) => {
+  const handleCellClick = (dayOfWeek: number, hour: number) => {
     const params = new URLSearchParams()
-    if (dateFrom) params.set('date_from', dateFrom)
-    if (dateTo) params.set('date_to', dateTo)
+    const startStr = dateFrom || range_start
+    const endStr = dateTo || range_end
+
+    let resolvedDate: string | null = null
+    if (startStr && endStr) {
+      const startDt = new Date(startStr + 'T00:00:00')
+      const endDt = new Date(endStr + 'T00:00:00')
+      const spanDays = Math.round((endDt.getTime() - startDt.getTime()) / 86400000) + 1
+      if (spanDays >= 1 && spanDays <= 7) {
+        for (let i = 0; i < spanDays; i++) {
+          const candidate = new Date(startDt)
+          candidate.setDate(startDt.getDate() + i)
+          if (candidate.getDay() === dayOfWeek) {
+            const y = candidate.getFullYear()
+            const m = String(candidate.getMonth() + 1).padStart(2, '0')
+            const d = String(candidate.getDate()).padStart(2, '0')
+            resolvedDate = `${y}-${m}-${d}`
+            break
+          }
+        }
+      }
+    }
+
+    if (resolvedDate) {
+      params.set('date_from', resolvedDate)
+      params.set('date_to', resolvedDate)
+    } else {
+      if (dateFrom) params.set('date_from', dateFrom)
+      if (dateTo) params.set('date_to', dateTo)
+    }
     params.set('hour', String(hour))
     navigate(`/search?${params.toString()}`)
   }
@@ -182,7 +210,7 @@ export function DiurnalHeatmap({ data, dateFrom, dateTo, isMultiDay, onSelectSin
                       <button
                         key={cell.hour}
                         type="button"
-                        onClick={() => handleCellClick(cell.hour)}
+                        onClick={() => handleCellClick(row.day, cell.hour)}
                         onMouseEnter={(e) => {
                           const rect = e.currentTarget.getBoundingClientRect()
                           setHovered({

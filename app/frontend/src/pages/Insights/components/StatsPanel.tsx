@@ -115,7 +115,7 @@ export function StatsPanel({
 
     if (!isToday) {
       // Single historical day
-      const hourlyAvg = s?.total ? Math.round(s.total / 24) : 0
+      const hourlyAvg = s?.total ? Number((s.total / 24).toFixed(1)) : 0
       return [
         {
           label: 'Total Transcriptions',
@@ -126,7 +126,7 @@ export function StatsPanel({
           label: 'Avg Calls / Hour',
           value: hourlyAvg,
           title: 'Diurnal average transmissions per hour on this date',
-          decimals: 0,
+          decimals: 1,
         },
         {
           label: 'Calls / Minute (Avg)',

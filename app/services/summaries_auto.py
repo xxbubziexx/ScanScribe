@@ -25,7 +25,7 @@ def _hours_with_logs(db, target_date: date) -> Set[int]:
         .filter(
             LogEntry.timestamp >= start,
             LogEntry.timestamp <= end,
-            LogEntry.is_deleted == False,
+            LogEntry.is_deleted.is_not(True),
         )
         .group_by(extract("hour", LogEntry.timestamp))
         .all()
@@ -82,7 +82,7 @@ async def _auto_summary_loop() -> None:
                             .filter(
                                 LogEntry.timestamp >= start,
                                 LogEntry.timestamp <= end,
-                                LogEntry.is_deleted == False,
+                                LogEntry.is_deleted.is_not(True),
                             )
                             .order_by(LogEntry.timestamp.asc())
                             .all()
@@ -93,7 +93,7 @@ async def _auto_summary_loop() -> None:
                                 continue
                                 
                             transcript = r.corrected_transcript if getattr(r, 'corrected_transcript', None) else r.transcript
-                            if transcript and "[VAD_REJECTED]" in transcript:
+                            if transcript and (transcript.strip() == "VAD_REJECTED" or "[VAD_REJECTED]" in transcript):
                                 continue
                                 
                             entries.append(

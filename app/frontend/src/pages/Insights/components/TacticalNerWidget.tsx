@@ -5,6 +5,8 @@ import { WidgetInfoTooltip } from './WidgetInfoTooltip'
 
 interface TacticalNerWidgetProps {
   data?: TacticalNerSummary
+  dateFrom?: string
+  dateTo?: string
 }
 
 type TabCategory = 'all' | 'units' | 'call_types' | 'locations' | 'status'
@@ -35,7 +37,7 @@ function ExternalJumpIcon({ className = '' }: { className?: string }) {
   )
 }
 
-export function TacticalNerWidget({ data }: TacticalNerWidgetProps) {
+export function TacticalNerWidget({ data, dateFrom, dateTo }: TacticalNerWidgetProps) {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabCategory>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -130,7 +132,11 @@ export function TacticalNerWidget({ data }: TacticalNerWidgetProps) {
   }
 
   const handleEntityClick = (canonical: string) => {
-    navigate(`/search?keyword=${encodeURIComponent(canonical)}`)
+    const params = new URLSearchParams()
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    params.set('keyword', canonical)
+    navigate(`/search?${params.toString()}`)
   }
 
   return (

@@ -134,7 +134,7 @@ def search_transcriptions(
     query = db.query(LogEntry).filter(
         LogEntry.timestamp >= start,
         LogEntry.timestamp <= end,
-        LogEntry.is_deleted.is_(False),
+        LogEntry.is_deleted.is_not(True),
     )
 
     if keyword:
@@ -275,7 +275,7 @@ def get_summary_hours(
         .filter(
             LogEntry.timestamp >= start,
             LogEntry.timestamp <= end,
-            LogEntry.is_deleted.is_(False),
+            LogEntry.is_deleted.is_not(True),
         )
         .group_by(extract("hour", LogEntry.timestamp))
         .order_by(extract("hour", LogEntry.timestamp).asc())
@@ -373,7 +373,7 @@ def generate_hour_summary_endpoint(
         .filter(
             LogEntry.timestamp >= start,
             LogEntry.timestamp <= end,
-            LogEntry.is_deleted.is_(False),
+            LogEntry.is_deleted.is_not(True),
             extract("hour", LogEntry.timestamp) == payload.hour,
         )
         .order_by(LogEntry.timestamp.asc())
@@ -386,7 +386,7 @@ def generate_hour_summary_endpoint(
             continue
 
         transcript = r.corrected_transcript if getattr(r, "corrected_transcript", None) else r.transcript
-        if transcript and "[VAD_REJECTED]" in transcript:
+        if transcript and (transcript.strip() == "VAD_REJECTED" or "[VAD_REJECTED]" in transcript):
             continue
 
         entries.append(

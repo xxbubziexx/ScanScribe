@@ -1106,3 +1106,36 @@ This living document is the **shared memory** between different AI models, human
   - `pytest tests/`: **162/162 passed** (148 pre-existing + 14 new in `tests/test_transcription_cuda_oom.py`), run in a CPU-only mocked-torch environment.
   - `output_scores` / `sequences_scores` behaviour verified directly against `transformers==4.46.3` source rather than assumed.
 - **Next Tasks / Unfinished Work:** Not yet pushed to `origin snapshot` (this workstation has no GitHub credentials). Frontend untouched. Review on a CUDA host with the real Whisper model is still advisable.
+### 2026-10-23 19:58 | Gemini 3.8 Pro (Linux Server)
+- **Work Performed:**
+  - Audited and refined `/insights` and all analytics math across [`app/services/insights_engine.py`](file:///home/scanscribe/Desktop/projects/scanscribe/app/services/insights_engine.py), [`app/routes/insights.py`](file:///home/scanscribe/Desktop/projects/scanscribe/app/routes/insights.py), [`app/schemas/insights.py`](file:///home/scanscribe/Desktop/projects/scanscribe/app/schemas/insights.py), [`app/services/summaries_auto.py`](file:///home/scanscribe/Desktop/projects/scanscribe/app/services/summaries_auto.py), and all `/insights` frontend widgets:
+    1. **SQLite Index Trap Elimination (~25x–41x Faster `/api/insights/stats`)**:
+       - Discovered that `LogEntry.is_deleted.is_(False)` (`is_deleted IS 0`) caused SQLite's query planner to choose the low-selectivity equality index `ix_log_entries_is_deleted` (scanning all 228,648 rows) instead of the `idx_timestamp` range index.
+       - Replaced with `_not_deleted()` (`LogEntry.is_deleted.is_not(True)` / `is_deleted IS NOT 1`) and consolidated multi-query summary helpers (`get_summary_trends`, `get_daily_summary`, `get_weekly_summary`, `get_monthly_summary`, `get_range_summary`) into single-pass SQL aggregations.
+       - Live DB (`data/scanscribe.db`, 228,648 rows) `/api/insights/stats` latency dropped from **8,632 ms → 345 ms** (single day, 25x faster) and **26,184 ms → 639 ms** (7-day range, 41x faster).
+    2. **`VAD_REJECTED` Corruption Filter**:
+       - Added `_valid_speech()` excluding `VAD_REJECTED` / `[VAD_REJECTED]` non-speech rows (`17,453` rows in live DB with `confidence = 0.0` and `processing_time ~ 0.2s`) from `get_asr_quality_spectrum` and `get_rtf_telemetry`, as well as hour summary generators in `app/routes/insights.py` and `app/services/summaries_auto.py`.
+       - Restored true Whisper token confidence (`80.8%` Moderate Clarity on live data instead of a corrupted `74.5%` "Degraded RF" rating) and guaranteed rounded tier percentages (`high_percentage + moderate_percentage + low_percentage`) sum to `100.0%`.
+    3. **Traffic Anomaly & Spike Detector Overhaul (`get_traffic_anomaly_telemetry`)**:
+       - Replaced the hardcoded underdispersed Poisson formula ($\sigma = \max(2.5, \sqrt{\text{base}} \times 0.85)$) and broken single-DOW divisor with empirical diurnal mean & standard deviation across trailing 21-day active dates (`_compute_diurnal_baseline_stats`), blending same-weekday and all-day diurnal profiles with a regularized variance floor ($\sigma = \max(s_{\text{emp}}, \sqrt{\mu}, 0.25\mu, 2.5)$) and median/IQR fallback (`_robust_intraday_baseline`).
+       - Handled future hours on Today (`h > cur_h` $\rightarrow$ `z_score = 0.0, is_anomaly = False`) and pro-rated in-progress current hour (`h == cur_h`) so early minutes in an hour do not report false negative Z-scores.
+       - Eliminated the N+1 hourly talkgroup query storm via batch querying, fixed the multi-day top driver bug (previously hardcoded to `100.0%`), and added `_clean_incident_type` to strip punctuation/numeric/status-check noise (`"."`, `"92."`, `"status check."`) from `likely_incident`.
+    4. **Summary, Talkgroup Share, Diurnal Heatmap & NER Math Refinements**:
+       - Fixed Today's `calls_per_minute` in `get_daily_summary` and `get_range_summary` to divide by elapsed minutes since local midnight rather than full 1440 minutes.
+       - Fixed `_compute_talkgroup_share_list`, `get_all_talkgroups`, and `get_all_range_talkgroups` to compute `percentage` (airtime share) and `call_percentage` against full-period station totals rather than only the top-10 subset sum.
+       - Normalized `peak_day` in `get_diurnal_heatmap` by weekday occurrence count in multi-day ranges.
+       - Fixed `get_ner_tactical_summary` to compute true `total_entities_detected` across tactical labels (`UNIT`, `EVT_TYPE`, `LOC`, `ADDRESS`, `STATUS`), filter punctuation/single-char fragments (`_is_valid_ner_entity`), and slice top `limit` per category after querying up to `max(limit * 5, 250)` so `call_types` and `locations` are not starved by `UNIT` callsigns.
+    5. **Frontend `/insights` Widgets & UTC Date Bug Fixes**:
+       - Fixed `StatsPanel.tsx` and `InsightsPage.tsx` where `new Date().toISOString().slice(0, 10)` used UTC date instead of local `YYYY-MM-DD`, which caused `isToday` to evaluate to `false` every evening after 7 PM CDT.
+       - Updated `TalkgroupShareWidget.tsx` to display true station `Active Channels`, `Total Voice Airtime`, and `totalCalls`, sort channels by `duration` in `airtime` mode vs `count` in `volume` mode, and display `call_percentage` alongside call counts.
+       - Aligned `AsrConfidenceWidget.tsx` `Moderate Clarity` rating threshold to `>= 70%` (matching the `70–84%` Marginal RF tier) and displayed `.toFixed(1)%` in the distribution header.
+       - Updated `TrafficAnomalyWidget.tsx` and `RtfThroughputWidget.tsx` bar charts and badge colors for zero-count hours and positive-only surge highlighting.
+       - Updated `TacticalNerWidget.tsx` and `DiurnalHeatmap.tsx` drilldowns to preserve/resolve `date_from` and `date_to` when navigating to `/search`.
+- **Live Ingestion Impact:** Zero impact on audio ingestion; read-only `/insights` queries are now 25x–41x faster and avoid full table scans on `log_entries`.
+- **Gotchas / Warnings for Next Model:**
+  - Never use `LogEntry.is_deleted.is_(False)` or `LogEntry.is_deleted == False` alongside `LogEntry.timestamp` range filters in SQLite; always use `LogEntry.is_deleted.is_not(True)` (`_not_deleted()`) so SQLite uses `idx_timestamp` instead of scanning `ix_log_entries_is_deleted`.
+- **Verification Performed:**
+  - `pytest tests/test_insights_engine.py`: **14/14 passed in 2.45s**.
+  - Live database benchmark (`data/scanscribe.db`): 1d stats `345.8 ms`, 7d stats `639.7 ms`, Pydantic `InsightsStatsResponse` schema validation passed.
+  - `npm run build`: Built cleanly (`tsc -b && vite build`) in `app/frontend/dist`.
+- **Next Tasks / Unfinished Work:** Ready for user review.

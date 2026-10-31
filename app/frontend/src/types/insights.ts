@@ -29,6 +29,7 @@ export interface ActivityPoint {
   count: number
   events_count?: number
   hour?: number
+  date?: string
 }
 
 export interface TalkgroupEntry {
@@ -37,6 +38,7 @@ export interface TalkgroupEntry {
   duration?: number
   avg_duration?: number
   percentage?: number
+  call_percentage?: number
   is_new?: boolean
   is_new_vs_yesterday?: boolean
   first_seen?: string | null
