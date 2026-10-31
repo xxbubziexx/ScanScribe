@@ -1139,3 +1139,35 @@ This living document is the **shared memory** between different AI models, human
   - Live database benchmark (`data/scanscribe.db`): 1d stats `345.8 ms`, 7d stats `639.7 ms`, Pydantic `InsightsStatsResponse` schema validation passed.
   - `npm run build`: Built cleanly (`tsc -b && vite build`) in `app/frontend/dist`.
 - **Next Tasks / Unfinished Work:** Ready for user review.
+
+---
+
+### 2026-10-30 21:10 | Overseer (Kali Linux Dev Workstation)
+- **Note:** This entry supersedes the "Next Tasks / Unfinished Work" line of the 2026-10-30 17:51 entry below — that work has since been pushed and promoted to `main`. This covers the second half of the session.
+- **Work Performed:**
+  1. **Integrated the never-committed 2026-10-23 19:58 insights round** onto current snapshot. It had been sitting uncommitted on the personal Ubuntu instance and existed in **no** branch or tag (`git log --all --find-object=$(git hash-object app/services/insights_engine.py)` returned empty). Re-applied with `git apply --3way` against `d2de61c`, resolving **9 conflict hunks across 7 files**.
+  2. **Promoted to production:** `main` and `snapshot` are now both at **`3cc5c6d`**.
+  3. **Personal instance fast-forwarded onto `main`**, DB backed up first, verified healthy in Docker.
+  4. **Docs:** AGENTS.md expanded — §1.5 (degrade, never wedge), §2 GPU-memory + SQLite-planner guardrails, §3 claim-verification requirement, §4 Docker deployment reality, §5 stash-vs-discard and verify-push rules.
+- **Conflict resolution (the judgement calls, not mechanical merges):**
+  - `insights_engine.py`: kept the committed `get_talkgroup_tracker_telemetry()` — the incoming patch predates it.
+  - `TalkgroupShareWidget.tsx`: **kept the committed thin adapter**; dropped the incoming 235-line standalone rewrite. This follows the repo's own 2026-10-23 18:55 decision to retire the standalone widget.
+  - `InsightsPage.tsx` keeps `TalkgroupTrackerWidget`; `StatsPanel.tsx` keeps the committed `todayIso()` fix (the incoming diff carried a duplicate, weaker version of the same fix).
+  - `schemas/insights.py` and `types/insights.ts`: kept **both** — committed tracker types *and* incoming `call_percentage`.
+  - `ACTIVE_CONTEXT.md`: kept both handoff entries.
+- **Live Ubuntu Ingestion Impact:** None negative. Container healthy with 0 restarts on the new code; all changes are read-only query paths plus schema-compatible additive fields.
+- **Gotchas / Warnings for Next Model:**
+  - The personal instance has **no `alembic_version` table** — its schema came from the app's own table initialisation, so Alembic has never stamped it. Needs a one-time `alembic stamp <head>` before the next real migration, or that migration will attempt a from-base run and collide with existing tables.
+  - `_not_deleted()` (`IS NOT 1`) is load-bearing for `/insights` performance — see AGENTS.md §2. Do not revert it to `is_(False)`.
+  - **Frontend suite carries 3 pre-existing failures** (`App.test.tsx` ×2, `DatePickers.test.tsx`; `localStorage is undefined`). Reproduced identically on a pristine `d2de61c` worktree. Do not chase them as regressions, and do not quote "52/52 green" — that number is stale.
+  - The `TalkgroupShareWidget` resolution above is a *decision*, not a merge. If the Insights page looks wrong, look there first.
+- **Verification Performed:**
+  - `pytest tests/`: **165 passed**.
+  - `tsc -b --noEmit`: clean. `vite build`: clean.
+  - `vitest`: 49 passed / 3 failed — failures A/B-proven pre-existing against a pristine `d2de61c` worktree.
+  - Live DB `EXPLAIN QUERY PLAN`: `IS NOT 1` → `idx_timestamp` **3.8 ms**; `IS 0` → `ix_log_entries_is_deleted` **602.8 ms**; identical 6868 rows.
+  - Remote refs verified via `git ls-remote` **and** the GitHub API, not the local ref.
+- **Next Tasks / Unfinished Work:**
+  - One-time `alembic stamp` on the personal instance (see gotcha above).
+  - `cpu-only` branch holds 1 commit (`bb26112`) present nowhere on origin — unarchived by choice.
+  - A `git stash` on the personal instance still holds the original copy of the 2026-10-23 insights round.
