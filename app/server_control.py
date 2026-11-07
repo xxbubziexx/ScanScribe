@@ -231,7 +231,8 @@ def cmd_start(args):
         "--port", str(port),
     ]
 
-    log_fh = open(LOG_FILE, "a", encoding="utf-8", buffering=1)
+    boot_log_file = LOG_DIR / "scanscribe-boot.log"
+    boot_fh = open(boot_log_file, "a", encoding="utf-8", buffering=1)
 
     if not silent:
         print(f"[*] Spawning ScanScribe in background on port {port}...")
@@ -242,6 +243,7 @@ def cmd_start(args):
     env["PYTHONPATH"] = str(BASE_DIR) + (os.pathsep + env["PYTHONPATH"] if "PYTHONPATH" in env else "")
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
+    env["SCANSCRIBE_DAEMON"] = "1"
 
     if sys.platform == "win32":
         DETACHED_PROCESS = 0x00000008
@@ -249,7 +251,7 @@ def cmd_start(args):
         flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
         proc = subprocess.Popen(
             cmd,
-            stdout=log_fh,
+            stdout=boot_fh,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             creationflags=flags,
@@ -260,7 +262,7 @@ def cmd_start(args):
     else:
         proc = subprocess.Popen(
             cmd,
-            stdout=log_fh,
+            stdout=boot_fh,
             stderr=subprocess.STDOUT,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
@@ -268,6 +270,8 @@ def cmd_start(args):
             env=env,
             close_fds=True,
         )
+
+    boot_fh.close()
 
     _save_pid(proc.pid, port)
 

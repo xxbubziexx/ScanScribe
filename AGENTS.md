@@ -18,6 +18,7 @@ ScanScribe ingests live audio transmissions from radio recorders (e.g. Trunk Rec
 3. **Database Concurrency & WAL:** ScanScribe uses a single unified SQLite database (`data/scanscribe.db`) running with `PRAGMA journal_mode=WAL` and `PRAGMA foreign_keys=ON`. Never execute table-locking operations or ad-hoc `DROP TABLE` statements on runtime startup.
 4. **Data Preservation:** User audio in `audio_storage/`, active incidents, and transcription records must remain persistent and lossless. Never purge or wipe production directories.
 5. **Failures Degrade, Never Wedge:** A single bad transmission or hardware fault must cost, at most, that one transmission. It must never stall the queue processor or halt subsequent ingest. See §2 "GPU Memory Safety".
+6. **Zero Silent Fallbacks Policy:** Never introduce fallback mechanisms (e.g., retrying failed beam-search transcriptions with greedy decoding, silently swapping configured models/processors/devices on failure, or masking resource exhaustion with degraded execution modes) to make the application appear to function. Always diagnose and fix the underlying root cause, and never implement any fallback behavior without explicitly asking the user first.
 
 ---
 
@@ -25,6 +26,8 @@ ScanScribe ingests live audio transmissions from radio recorders (e.g. Trunk Rec
 
 The codebase has completed an extensive 5-phase modular refactor (documented in [`Plan/refactoring_master_plan.md`](file:///a:/Scanscribe_Projects/scanscribe/Plan/refactoring_master_plan.md)). Models must **NEVER** reintroduce legacy "Layer-Cake AI Archeology":
 
+* **Zero Silent Fallbacks:**
+  * Configured models and generation settings (such as beam search) must be executed deterministically. Never implement degraded runtime fallbacks (e.g. falling back to greedy decoding on OOM) without explicit user instruction.
 * **Database Migrations via Alembic Only:**
   * All database schema alterations must be enacted strictly via Alembic revisions in [`alembic/versions/`](file:///a:/Scanscribe_Projects/scanscribe/alembic/versions/).
   * Never alter table columns through ad-hoc startup SQL probing or destructive auto-drops.
@@ -40,9 +43,9 @@ The codebase has completed an extensive 5-phase modular refactor (documented in 
 * **GPU Memory Safety (Whisper / CUDA):**
   * **A CUDA OOM is reported asynchronously**, at a *later* CUDA call — frequently outside the function that triggered it. Never rely on a single `try/except` around generation to reclaim memory; that is exactly how the pipeline wedges (allocator keeps its reserved blocks → every following file OOMs).
   * `TranscriptionEngine.release_gpu_memory()` is called before **every** `transcribe()` and on **every** failure path, and `QueueProcessor._process_file` reclaims in its own handler because that is where the async OOM actually surfaces. **Do not optimise these away.**
-  * On OOM, `_transcribe_chunk()` retries **once** with greedy decoding (`num_beams=1`) and then raises a typed `TranscriptionOutOfMemoryError`. Only OOM is retried; genuine errors must not be masked.
-  * **Never remove `output_scores=True`** from the Whisper `generate()` kwargs to reduce VRAM. `transformers` sets `sequences_scores = None` when `output_scores` is False (see `generation/utils.py`), which silently reports confidence `0.0` for *every* beam-search transcription. Bound peak memory via the retry ladder instead, not by dropping score collection.
-  * `load_ner_model()` must honour `model.device` from config. It previously seized the GPU (`device=0`) whenever CUDA existed, which meant setting `model.device: cpu` relieved nothing.
+  * Traceback frames on CUDA exceptions must be explicitly cleared (`traceback.clear_frames`) and local tensor references dereferenced before releasing CUDA cache, preventing failed generation tensors from remaining pinned in VRAM.
+  * **Never remove `output_scores=True`** from the Whisper `generate()` kwargs to reduce VRAM. `transformers` sets `sequences_scores = None` when `output_scores` is False (see `generation/utils.py`), which silently reports confidence `0.0` for *every* beam-search transcription.
+  * `load_ner_model()` must honour `model.device` from config. It previously seized the GPU (`device=0`) whenever CUDA existed, which meant setting `model.device: cpu` relieved nothing. When running NER alongside Whisper, NER inference must be thread-safe.
 * **SQLite Query Planning:**
   * Use `_not_deleted()` (`LogEntry.is_deleted.is_not(True)` → `is_deleted IS NOT 1`) — **never** `is_(False)` or `== False`.
   * On the live DB (261k rows, 2-day range) `IS NOT 1` keeps the planner on `idx_timestamp` at **3.8 ms**; `IS 0` falls back to the low-selectivity `ix_log_entries_is_deleted` and full-scans at **602.8 ms**. Both return identical rows.

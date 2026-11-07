@@ -299,6 +299,8 @@ def rate_limiter_config(cfg: Any = None) -> Any:
 class EventsPipelineConfig(BaseModel):
     """Events pipeline: NER entity extraction + Single-pass OpenRouter LLM router."""
     enabled: bool = False
+    # Hardware compute device for NER model ('cpu', 'cuda', or None to inherit from model.device)
+    ner_device: Optional[str] = None
     # Path to NER model folder (contains model.safetensors, config.json, tokenizer)
     ner_model_path: str = "./models/incident_ner_v1"
     # Strip ASCII commas from span text before NER only. false = revert to raw transcript for NER

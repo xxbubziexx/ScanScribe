@@ -1171,3 +1171,34 @@ This living document is the **shared memory** between different AI models, human
   - One-time `alembic stamp` on the personal instance (see gotcha above).
   - `cpu-only` branch holds 1 commit (`bb26112`) present nowhere on origin — unarchived by choice.
   - A `git stash` on the personal instance still holds the original copy of the 2026-10-23 insights round.
+
+---
+
+### 2026-11-07 10:55 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  1. **Strict Zero-Fallbacks Protocol Codified:**
+     - Enforced top-level Zero Silent Fallbacks policy in `AGENTS.md` (§1.6 & §2).
+     - Removed the `num_beams=1` (greedy decoding) degraded retry ladder from `TranscriptionEngine._transcribe_chunk()`. Whisper now executes deterministically at the configured beam size.
+  2. **Eliminated Windows CUDA OOM & 12 GB+ Pagefile Bloat:**
+     - Cleared traceback frames (`traceback.clear_frames`) and explicitly dereferenced `input_features` / `generated_ids` before calling `release_gpu_memory()` to prevent failed beam-search generation tensors from remaining pinned in VRAM.
+     - Removed `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` which was inflating Windows virtual commit charge (`pagefile.sys`).
+     - Added `torch.cuda.set_per_process_memory_fraction(0.85, device=0)` on Windows CUDA to cap allocator expansion below WDDM Shared GPU Memory spillover threshold.
+     - Wrapped Silero VAD in `torch.inference_mode()` with state resets and explicit buffer cleanup.
+     - Added `threading.Lock()` to `extract_entities()` and added `events_pipeline.ner_device` configuration in `EventsPipelineConfig` to allow running NER on CPU while Whisper runs on GPU, eliminating concurrent GPU VRAM contention across monitor processing threads.
+  3. **Eliminated Proxmox Ubuntu VM Swap Saturation (`99.97% / 8.00 GiB`):**
+     - Bounded glibc multi-threaded heap arenas with `MALLOC_ARENA_MAX=2` and `MALLOC_TRIM_THRESHOLD_=65536` in `docker/Dockerfile.cpu`, `docker/Dockerfile.gpu`, `docker/docker-compose.cpu.example`, and `docker/docker-compose.gpu.example`.
+     - Added `mem_swappiness: 0` to Docker Compose service definitions.
+     - Added `TranscriptionEngine.release_memory()`, invoking `libc.malloc_trim(0)` on Linux and `gc.collect()` in `transcribe()` and `QueueProcessor._process_file()`.
+  4. **Fixed `/settings` Auto-Restart & Windows `[WinError 32]` Log Lock:**
+     - Fixed `[WinError 32]` permission error on `scanscribe.log` by directing detached background daemon bootstrap output to `logs/uvicorn-startup.log` instead of binding `stdout`/`stderr` to `scanscribe.log`, and added `SafeRotatingFileHandler` to gracefully handle concurrent file readers.
+     - Implemented `_trigger_application_restart()` in `app/routes/settings.py` so `/restart` and `/api/settings/config?restart=true` spawn a detached `scanscribe restart` process on native Windows/Linux rather than terminating with bare `os.kill(os.getpid(), signal.SIGTERM)`.
+- **Live Ubuntu Ingestion Impact:**
+  - Zero ingestion downtime. Heap arena limits and `malloc_trim(0)` prevent multi-day memory leaks into swap.
+- **Gotchas / Warnings for Next Model:**
+  - Never reintroduce silent fallbacks (e.g. falling back to greedy decoding on OOM) without explicit user approval.
+  - On Ubuntu Proxmox nodes, ensure `sysctl vm.swappiness=1` is applied on the host if swap usage remains elevated from prior runs (`sudo swapoff -a && sudo swapon -a`).
+- **Verification Performed:**
+  - `pytest tests/`: **169 passed in 25.54s** (including new `tests/test_settings_restart.py` and updated `tests/test_transcription_cuda_oom.py`).
+  - `npm --prefix app/frontend run build`: **Built cleanly in 12.84s** (`tsc -b && vite build`).
+  - Tested `SafeRotatingFileHandler` Windows file lock rollover resilience and detached restart triggers.
+- **Next Tasks / Unfinished Work:** Ready for user review and testing on beta tester's Windows station and Proxmox node.

@@ -1,6 +1,7 @@
 """NER service: loads fine-tuned token classification model, extracts entities from transcripts."""
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -42,6 +43,7 @@ ENTITY_LABELS = frozenset(
 )
 
 _pipeline = None
+_ner_lock = threading.Lock()
 
 
 def is_loaded() -> bool:
@@ -106,16 +108,20 @@ def load_ner_model(model_path: str) -> bool:
         device = -1
         model_kwargs = {}
         if _TORCH_AVAILABLE and torch is not None:
-            # Honor the configured device instead of seizing the GPU whenever
-            # one exists. Otherwise a CUDA OOM cannot be relieved by setting
-            # model.device: cpu, because NER keeps its own model resident on VRAM.
-            configured_device = get_settings().config.model.device.lower()
+            # Honor configured device: check events_pipeline.ner_device first,
+            # falling back to model.device. This prevents NER from seizing GPU 0
+            # when the operator specifically runs NER on CPU to protect Whisper VRAM.
+            cfg = get_settings().config
+            pipe_cfg = getattr(cfg, "events_pipeline", None)
+            ner_dev = getattr(pipe_cfg, "ner_device", None)
+            configured_device = str(ner_dev or cfg.model.device or "cpu").lower()
             if configured_device == "cuda":
                 if torch.cuda.is_available():
                     device = 0
                     model_kwargs["torch_dtype"] = torch.float16
-            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-                device = "mps"
+            elif configured_device == "mps":
+                if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                    device = "mps"
 
         _pipeline = pipeline(
             "ner",
@@ -155,15 +161,16 @@ def extract_entities(transcript: str, threshold: float = 0.0) -> tuple[Dict[str,
     if not _pipeline or not transcript or not transcript.strip():
         return {}, []
 
-    try:
-        if _TORCH_AVAILABLE and torch is not None:
-            with torch.inference_mode():
+    with _ner_lock:
+        try:
+            if _TORCH_AVAILABLE and torch is not None:
+                with torch.inference_mode():
+                    results = _pipeline(transcript.strip()) or []
+            else:
                 results = _pipeline(transcript.strip()) or []
-        else:
-            results = _pipeline(transcript.strip()) or []
-    except Exception as e:
-        logger.warning("NER inference failed: %s", e)
-        return {}, []
+        except Exception as e:
+            logger.warning("NER inference failed: %s", e)
+            return {}, []
 
 
     if threshold > 0.0:

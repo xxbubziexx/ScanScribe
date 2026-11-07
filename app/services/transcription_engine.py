@@ -1,15 +1,19 @@
 """Whisper transcription engine with CPU/GPU optimization."""
+import ctypes
+import gc
 import logging
+import os
+from pathlib import Path
+import sys
 import tempfile
 import time
-import os
-import torch
-from pathlib import Path
+import traceback
 from typing import Optional, Dict, Any
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
 import librosa
 import numpy as np
 import soundfile as sf
+import torch
+from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
 from ..config import get_settings
 from ..utils.audio_file_ops import safe_unlink
@@ -28,14 +32,9 @@ CPU_COUNT = os.cpu_count() or 4
 # Transcript value when VAD detects no speech (audio kept, Whisper skipped)
 VAD_REJECTED_TRANSCRIPT = "VAD_REJECTED"
 
-# Reduce fragmentation-induced CUDA OOM on small-VRAM GPUs. PyTorch reads this
-# lazily when the caching allocator initialises, so setting it at import time
-# (before any device allocation) is sufficient.
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
-
 
 class TranscriptionOutOfMemoryError(RuntimeError):
-    """Raised when Whisper generation exhausts GPU memory despite retries."""
+    """Raised when Whisper generation exhausts GPU memory."""
 
 
 def is_cuda_oom_error(exc: BaseException) -> bool:
@@ -120,6 +119,11 @@ class TranscriptionEngine:
                 self.device = "cuda"
                 gpu_name = torch.cuda.get_device_name(0)
                 logger.info(f"🎮 GPU detected: {gpu_name}")
+                if sys.platform == "win32":
+                    try:
+                        torch.cuda.set_per_process_memory_fraction(0.85, device=0)
+                    except Exception as frac_err:
+                        logger.debug("set_per_process_memory_fraction skipped: %s", frac_err)
             else:
                 logger.warning("⚠️ CUDA requested but not available, falling back to CPU")
                 self.device = "cpu"
@@ -428,9 +432,11 @@ class TranscriptionEngine:
             return out
             
         except Exception as e:
+            if hasattr(e, "__traceback__") and e.__traceback__:
+                traceback.clear_frames(e.__traceback__)
             if speech_only_audio_path is not None:
                 safe_unlink(speech_only_audio_path)
-            self.release_gpu_memory()
+            self.release_memory()
             if is_cuda_oom_error(e):
                 logger.error(
                     "❌ Transcription failed: GPU out of memory. CUDA cache released; "
@@ -440,10 +446,16 @@ class TranscriptionEngine:
             else:
                 logger.error(f"❌ Transcription failed: {e}")
             return None
+        finally:
+            self.release_memory()
+            if "audio" in locals():
+                del audio
+            if "parts" in locals():
+                del parts
 
     def release_gpu_memory(self) -> None:
         """
-        Return cached CUDA blocks to the driver.
+        Return cached CUDA blocks to the driver and actively collect garbage.
 
         Called before every transcription and on every failure path. CUDA reports
         OOM asynchronously, so the error can surface at a later call site (e.g.
@@ -454,11 +466,22 @@ class TranscriptionEngine:
         mocked test environment.
         """
         try:
+            gc.collect()
             if not torch.cuda.is_available():
                 return
             torch.cuda.empty_cache()
         except Exception as e:
             logger.debug("CUDA cache release skipped: %s", e)
+
+    def release_memory(self) -> None:
+        """Release device VRAM and trim host heap memory back to the OS."""
+        self.release_gpu_memory()
+        if sys.platform.startswith("linux"):
+            try:
+                libc = ctypes.CDLL("libc.so.6")
+                libc.malloc_trim(0)
+            except Exception:
+                pass
 
     def _build_gen_kwargs(self, beam_size: int, forced_decoder_ids=None) -> Dict[str, Any]:
         """
@@ -469,8 +492,7 @@ class TranscriptionEngine:
         (transformers/generation/utils.py: `if not output_scores:
         sequence_outputs["sequence_scores"] = None`). Beam search derives its
         confidence from `sequences_scores`, so omitting output_scores silently
-        reports confidence 0.0 for every transmission. Peak memory is instead
-        bounded by the OOM retry ladder in `_transcribe_chunk`.
+        reports confidence 0.0 for every transmission.
         """
         gen_kwargs: Dict[str, Any] = {
             "num_beams": beam_size,
@@ -484,7 +506,7 @@ class TranscriptionEngine:
 
     def _transcribe_chunk(self, audio_chunk: np.ndarray, forced_decoder_ids=None,
                           beam_size: Optional[int] = None) -> tuple:
-        """Transcribe a single audio chunk, degrading gracefully on CUDA OOM."""
+        """Transcribe a single audio chunk deterministically without silent fallbacks."""
         beam = self.config.transcription.beam_size if beam_size is None else beam_size
         beam = max(1, int(beam or 1))
 
@@ -495,62 +517,57 @@ class TranscriptionEngine:
             return_tensors="pt"
         ).input_features.to(device=self.device, dtype=self.model.dtype)        
 
-        # Generate transcription. A CUDA OOM is retried once with a smaller
-        # footprint (greedy decoding) before being handed up as a typed error.
         generated_ids = None
-        for attempt in range(2):
+        try:
             try:
                 generated_ids = self.model.generate(
                     input_features,
                     **self._build_gen_kwargs(beam, forced_decoder_ids)
                 )
-                break
             except Exception as gen_err:
-                if not is_cuda_oom_error(gen_err):
-                    raise
+                if hasattr(gen_err, "__traceback__") and gen_err.__traceback__:
+                    traceback.clear_frames(gen_err.__traceback__)
                 self.release_gpu_memory()
-                if attempt == 0 and beam > 1:
-                    logger.warning(
-                        "⚠️ CUDA OOM during generate (num_beams=%d); retrying with greedy decoding",
-                        beam,
+                if is_cuda_oom_error(gen_err):
+                    raise TranscriptionOutOfMemoryError(str(gen_err)) from gen_err
+                raise
+
+            # Decode
+            transcript = self.processor.batch_decode(
+                generated_ids.sequences,
+                skip_special_tokens=True
+            )[0].strip()
+            
+            # Confidence calculation (token-level probability)
+            confidence = 0.0
+            if hasattr(generated_ids, "sequences_scores") and generated_ids.sequences_scores is not None:
+                # Beam search: length_penalty=1.0 equals avg_logprob; exp() gives geometric mean confidence
+                raw_score = generated_ids.sequences_scores[0]
+                if torch.isfinite(raw_score):
+                    confidence = float(torch.clamp(torch.exp(raw_score), 0.0, 1.0).item())
+            elif hasattr(generated_ids, "scores") and generated_ids.scores:
+                # Greedy decoding (beam_size=1): sequences_scores is absent, derive from logits
+                try:
+                    transition_scores = self.model.compute_transition_scores(
+                        generated_ids.sequences,
+                        generated_ids.scores,
+                        normalize_logits=True
                     )
-                    beam = 1
-                    continue
-                raise TranscriptionOutOfMemoryError(str(gen_err)) from gen_err
-        
-        # Decode
-        transcript = self.processor.batch_decode(
-            generated_ids.sequences,
-            skip_special_tokens=True
-        )[0].strip()
-        
-        # Confidence calculation (token-level probability)
-        confidence = 0.0
-        if hasattr(generated_ids, "sequences_scores") and generated_ids.sequences_scores is not None:
-            # Beam search: length_penalty=1.0 equals avg_logprob; exp() gives geometric mean confidence
-            raw_score = generated_ids.sequences_scores[0]
-            if torch.isfinite(raw_score):
-                confidence = float(torch.clamp(torch.exp(raw_score), 0.0, 1.0).item())
-        elif hasattr(generated_ids, "scores") and generated_ids.scores:
-            # Greedy decoding (beam_size=1): sequences_scores is absent, derive from logits
-            try:
-                transition_scores = self.model.compute_transition_scores(
-                    generated_ids.sequences,
-                    generated_ids.scores,
-                    normalize_logits=True
-                )
-                if transition_scores.numel() > 0:
-                    log_probs = transition_scores[0]
-                    valid = log_probs[torch.isfinite(log_probs)]
-                    if len(valid) > 0:
-                        confidence = float(torch.clamp(torch.exp(valid.mean()), 0.0, 1.0).item())
-                del transition_scores
-            except Exception as score_err:
-                logger.debug(f"Transition scores computation skipped: {score_err}")
-        
-        # Release tensor references explicitly to prevent caching allocator growth
-        del input_features, generated_ids
-        return transcript, confidence
+                    if transition_scores.numel() > 0:
+                        log_probs = transition_scores[0]
+                        valid = log_probs[torch.isfinite(log_probs)]
+                        if len(valid) > 0:
+                            confidence = float(torch.clamp(torch.exp(valid.mean()), 0.0, 1.0).item())
+                    del transition_scores
+                except Exception as score_err:
+                    logger.debug(f"Transition scores computation skipped: {score_err}")
+            
+            return transcript, confidence
+        finally:
+            if "input_features" in locals():
+                del input_features
+            if "generated_ids" in locals() and generated_ids is not None:
+                del generated_ids
 
     
     def _get_silence_removed_audio(self, audio: np.ndarray, sr: int) -> np.ndarray:
@@ -615,15 +632,19 @@ class TranscriptionEngine:
             threshold = self.config.transcription.vad_threshold
             speech_pad_ms = self.config.transcription.vad_speech_pad_ms
             min_speech_ms = self.config.transcription.vad_min_speech_duration_ms
-            timestamps = get_speech_timestamps(
-                wav,
-                self._vad_model,
-                threshold=threshold,
-                sampling_rate=sr,
-                return_seconds=True,
-                speech_pad_ms=speech_pad_ms,
-                min_speech_duration_ms=min_speech_ms,
-            )
+            with torch.inference_mode():
+                timestamps = get_speech_timestamps(
+                    wav,
+                    self._vad_model,
+                    threshold=threshold,
+                    sampling_rate=sr,
+                    return_seconds=True,
+                    speech_pad_ms=speech_pad_ms,
+                    min_speech_duration_ms=min_speech_ms,
+                )
+                if hasattr(self._vad_model, "reset_states"):
+                    self._vad_model.reset_states()
+            del wav
             if not timestamps:
                 return []
             return [(t["start"], t["end"]) for t in timestamps]

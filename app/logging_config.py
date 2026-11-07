@@ -1,8 +1,10 @@
 """Custom logging handlers for ScanScribe."""
-import logging
-import logging.handlers
 import asyncio
 from datetime import datetime, timezone
+import logging
+import logging.handlers
+import os
+import sys
 from typing import Optional
 
 from .services.websocket import websocket_manager
@@ -53,8 +55,6 @@ class WebSocketHandler(logging.Handler):
             self.handleError(record)
 
 
-import sys
-
 # Ensure standard console streams on Windows support UTF-8 characters without charmap UnicodeEncodeErrors
 if sys.platform == "win32":
     for _stream in (sys.stdout, sys.stderr):
@@ -99,6 +99,26 @@ class ColoredConsoleHandler(logging.StreamHandler):
             self.handleError(record)
 
 
+class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """RotatingFileHandler with Windows-safe rollover.
+    
+    On Windows NTFS, os.rename fails with PermissionError (WinError 32) if any handle
+    to the file is still held (e.g. by scanscribe logs following the file or another thread).
+    We gracefully catch PermissionError and defer rollover until the next size check.
+    """
+
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except PermissionError:
+            pass
+        except Exception:
+            try:
+                super().doRollover()
+            except Exception:
+                pass
+
+
 def setup_logging(app_name: str = "scanscribe", level: str = "INFO"):
     """
     Configure application logging with multiple handlers.
@@ -124,11 +144,15 @@ def setup_logging(app_name: str = "scanscribe", level: str = "INFO"):
         '%(levelname)s: %(message)s'
     )
     
-    # Console handler (colored, for Docker logs)
-    console_handler = ColoredConsoleHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(simple_formatter)
-    root_logger.addHandler(console_handler)
+    # Console handler (for interactive terminal or Docker stdout).
+    # When running as a background daemon on native installs (where stdout is redirected),
+    # omit ColoredConsoleHandler to avoid double logging and ANSI escape code contamination.
+    is_daemon = os.environ.get("SCANSCRIBE_DAEMON") == "1"
+    if not is_daemon:
+        console_handler = ColoredConsoleHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(simple_formatter)
+        root_logger.addHandler(console_handler)
     
     # WebSocket handler (for dashboard)
     ws_handler = WebSocketHandler()
@@ -144,7 +168,7 @@ def setup_logging(app_name: str = "scanscribe", level: str = "INFO"):
         settings = get_settings()
         log_file = settings.log_dir / "scanscribe.log"
         
-        file_handler = logging.handlers.RotatingFileHandler(
+        file_handler = SafeRotatingFileHandler(
             log_file,
             maxBytes=10 * 1024 * 1024,  # 10 MB
             backupCount=5,

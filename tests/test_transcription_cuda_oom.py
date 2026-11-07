@@ -135,36 +135,27 @@ def test_greedy_keeps_output_scores_for_transition_scores():
 
 
 # --------------------------------------------------------------------------
-# Recovery behaviour
+# Recovery behaviour (Zero Silent Fallbacks)
 # --------------------------------------------------------------------------
 
-def test_transient_oom_retries_greedy_and_succeeds():
-    """First attempt OOMs; the engine must retry degraded and still transcribe."""
+def test_oom_does_not_retry_greedy_and_fails_cleanly():
+    """Under Zero Fallbacks policy, OOM fails cleanly without degraded greedy retry."""
     engine = _make_engine(beam_size=5)
-    engine.model.generate.side_effect = [
-        RuntimeError(OOM_MESSAGE),
-        _ok_generate_result(),
-    ]
+    engine.model.generate.side_effect = RuntimeError(OOM_MESSAGE)
 
-    with _patch_audio():
+    with _patch_audio(), patch(
+        "app.services.transcription_engine.torch.cuda.empty_cache"
+    ) as empty_cache:
         result = engine.transcribe(MagicMock(name="a.mp3"))
 
-    assert result is not None
-    assert result["transcript"] == "hello"
-    assert engine.model.generate.call_count == 2
-
-    first = engine.model.generate.call_args_list[0].kwargs
-    second = engine.model.generate.call_args_list[1].kwargs
-    assert first["num_beams"] == 5
-    assert second["num_beams"] == 1, "retry must shrink the memory footprint"
+    assert result is None
+    assert engine.model.generate.call_count == 1, "must not silently fall back to greedy decoding"
+    assert empty_cache.called, "allocator must be reclaimed on OOM"
 
 
 def test_oom_releases_cuda_cache():
     engine = _make_engine(beam_size=5)
-    engine.model.generate.side_effect = [
-        RuntimeError(OOM_MESSAGE),
-        _ok_generate_result(),
-    ]
+    engine.model.generate.side_effect = RuntimeError(OOM_MESSAGE)
 
     with _patch_audio(), patch(
         "app.services.transcription_engine.torch.cuda.empty_cache"
@@ -190,7 +181,7 @@ def test_allocator_reclaimed_before_every_file():
 
 
 def test_persistent_oom_returns_none_and_never_raises():
-    """Exhausted retries must not propagate — an escaping OOM wedges the loop."""
+    """An OOM must not escape uncaught to wedge the queue processor."""
     engine = _make_engine(beam_size=5)
     engine.model.generate.side_effect = RuntimeError(OOM_MESSAGE)
 
@@ -200,7 +191,7 @@ def test_persistent_oom_returns_none_and_never_raises():
         result = engine.transcribe(MagicMock(name="a.mp3"))
 
     assert result is None
-    assert engine.model.generate.call_count == 2, "one degraded retry, then give up"
+    assert engine.model.generate.call_count == 1
 
 
 def test_non_oom_errors_still_propagate_internally():
@@ -279,3 +270,22 @@ def test_ner_uses_gpu_when_configured_cuda(monkeypatch):
         assert ner_service.load_ner_model("ignored") is True
 
     assert pipe.call_args.kwargs["device"] == 0
+
+
+def test_ner_uses_custom_ner_device_when_configured(monkeypatch):
+    from app.services import ner_service
+    from app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings.config.model, "device", "cuda")
+    monkeypatch.setattr(settings.config.events_pipeline, "ner_device", "cpu")
+    monkeypatch.setattr(
+        ner_service, "_resolve_ner_target", lambda path: "org/incident_ner_v1"
+    )
+
+    with patch("app.services.ner_service.pipeline") as pipe, patch(
+        "app.services.ner_service.torch.cuda.is_available", return_value=True
+    ):
+        assert ner_service.load_ner_model("ignored") is True
+
+    assert pipe.call_args.kwargs["device"] == -1, "NER must honor events_pipeline.ner_device"

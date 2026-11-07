@@ -489,12 +489,15 @@ class QueueProcessor:
             # the allocator here too, otherwise the reservation persists and
             # every subsequent file OOMs as well.
             self.engine.release_gpu_memory()
+            self.engine.release_memory()
             # Re-queue with a bounded retry rather than deleting a file that may
             # simply have been read while it was still being written.
             if not file_handled:
                 await self._handle_failed_file(audio_path, filename)
         
         finally:
+            self.engine.release_gpu_memory()
+            self.engine.release_memory()
             db.close()
 
 

@@ -49,6 +49,8 @@ COPY --from=frontend-builder /build/frontend/dist /opt/frontend_dist
 
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
+    MALLOC_ARENA_MAX=2 \
+    MALLOC_TRIM_THRESHOLD_=65536 \
     CONFIG_PATH=/app/config.yml \
     MODEL_PATH=/app/models \
     INGEST_DIR=/app/ingest \

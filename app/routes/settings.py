@@ -3,6 +3,8 @@ import asyncio
 import logging
 import os
 import signal
+import subprocess
+import sys
 import tempfile
 import zipfile
 from datetime import datetime
@@ -80,11 +82,7 @@ async def save_config_file(
         reload_settings()
         
         if restart:
-            async def _deferred_restart():
-                await asyncio.sleep(0.5)
-                os.kill(os.getpid(), signal.SIGTERM)
-
-            task_manager.spawn(_deferred_restart(), name="deferred-restart")
+            _trigger_application_restart(delay_seconds=0.5)
             return {
                 "message": "Configuration saved successfully. ScanScribe is auto-restarting to apply settings...",
                 "restarting": True,
@@ -96,14 +94,56 @@ async def save_config_file(
         raise HTTPException(status_code=500, detail=f"Failed to save config: {str(e)}")
 
 
+def _trigger_application_restart(delay_seconds: float = 0.5) -> None:
+    """Trigger application restart cleanly across Docker and native environments."""
+    async def _do_restart():
+        await asyncio.sleep(delay_seconds)
+        is_docker = Path("/.dockerenv").exists()
+        if is_docker:
+            # Under Docker with restart: unless-stopped, SIGTERM terminates PID 1 so container restarts
+            os.kill(os.getpid(), signal.SIGTERM)
+        else:
+            # Native environment (Windows / Linux): spawn detached CLI restart
+            try:
+                from ..server_control import _resolve_python_executable, DEFAULT_PORT
+                settings = get_settings()
+                port = getattr(settings, "port", DEFAULT_PORT) or DEFAULT_PORT
+                py_exe = _resolve_python_executable()
+                cmd = [py_exe, "-m", "app.cli", "restart", "--port", str(port), "--silent"]
+                
+                if sys.platform == "win32":
+                    DETACHED = 0x00000008 | 0x00000200
+                    subprocess.Popen(
+                        cmd,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        creationflags=DETACHED,
+                        close_fds=True,
+                    )
+                else:
+                    subprocess.Popen(
+                        cmd,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                        close_fds=True,
+                    )
+            except Exception as ex:
+                logger.warning("Spawning detached restart failed, falling back to SIGTERM: %s", ex)
+                os.kill(os.getpid(), signal.SIGTERM)
+
+    task_manager.spawn(_do_restart(), name="deferred-app-restart")
+
+
 @router.post("/restart")
 async def restart_application(
     current_user: User = Depends(get_current_admin_user)
 ):
     """Restart the application to apply config changes."""
     try:
-        pid = os.getpid()
-        os.kill(pid, signal.SIGTERM)
+        _trigger_application_restart(delay_seconds=0.5)
         return {"message": "Application restarting..."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to restart: {str(e)}")

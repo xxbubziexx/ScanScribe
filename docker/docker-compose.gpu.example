@@ -16,6 +16,7 @@ services:
         TORCH_VERSION: ${TORCH_VERSION:-2.5.1}
     container_name: scanscribe
     restart: unless-stopped
+    mem_swappiness: 0
     shm_size: '2gb'
     stop_grace_period: 30s
 
@@ -33,6 +34,8 @@ services:
       - /etc/localtime:/etc/localtime:ro
 
     environment:
+      - MALLOC_ARENA_MAX=2
+      - MALLOC_TRIM_THRESHOLD_=65536
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
       - TZ=${TZ:-America/Chicago}
