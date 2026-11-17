@@ -1202,3 +1202,38 @@ This living document is the **shared memory** between different AI models, human
   - `npm --prefix app/frontend run build`: **Built cleanly in 12.84s** (`tsc -b && vite build`).
   - Tested `SafeRotatingFileHandler` Windows file lock rollover resilience and detached restart triggers.
 - **Next Tasks / Unfinished Work:** Ready for user review and testing on beta tester's Windows station and Proxmox node.
+
+---
+
+### 2026-11-17 01:20 | deepseek-v4.1-flash (Overseer — native node 119)
+- **Work Performed:**
+  1. **Second node, native (no Docker):** Proxmox VM 119 `Scanscribe-Headless` on proxmox-r630 — Ubuntu 26.04 headless, 16 GB / 8 vCPU, `virtio-scsi-single` + `virtio-net`, 128 GB on `vm-storage`. The Ubuntu autoinstall left roughly half the VG unallocated (root came up as 62 GB); grown to 124 GB with `lvextend -l +100%FREE` + `resize2fs`.
+  2. **Native install** via `install.sh --native --non-interactive --branch main`: uv-managed Python 3.11 venv at `~/scanscribe/.venv`, models `sepiaapps/whisper-small.en-police-radio` and `xxbubziexx/incident_ner_v1`. The checkout was then switched to `snapshot` per §5.
+  3. **Root cause of the retention defect.** The purge reported "Removed 0 entries and 0 audio files" while old files remained on disk because it was **ORM-row-driven**: it selected `LogEntry.log_date < cutoff` and then deleted only files reachable from those rows. Every expired row had already been removed from the DB, so the selection was empty (both counters 0) and the leftover files had no row at all — permanently invisible to the tool. Secondary defects: `output_dir / Path(audio_path).name` discarded directory components (breaks under any sharded layout); the row was deleted even when the file could not be removed, silently manufacturing unreachable orphans; there was no logging; and pages were never reclaimed.
+  4. **New `app/services/retention.py`**, with `routes/maintenance.py` delegating to it:
+     - dependents are deleted outright — `span_store`, `entity_observations`, `event_transcript_links` — instead of relying on `ON DELETE SET NULL` to blank them;
+     - `events` purged by `created_at` (skipping `status='open'`); `hour_summaries` purged by `summary_date`;
+     - `users`, `monitors`, `system_settings`, `chat_threads`, `chat_messages`, `pipeline_debug_log` are never touched;
+     - orphaned audio older than the cutoff is swept; rows and files are reported separately; `VACUUM` is optional.
+     - CLI: `.venv/bin/python -m app.services.retention --days N [--apply] [--vacuum]` — dry run by default.
+- **Live Ubuntu Ingestion Impact:**
+  - Old Docker node (`.120`) left untouched; a temporary test copy of `retention.py` was removed after validation.
+  - New node has no ingest source wired yet and is not serving the uploader or the tunnel origin.
+- **Gotchas / Warnings for Next Model:**
+  - `install.sh` does **not** install FFmpeg (it only prints a notice). Decoding fails without `apt install ffmpeg`.
+  - `install.sh --autostart true` does **not** create a systemd unit; it leaves a detachable background process plus `.scanscribe.pid`. A real unit now exists at `/etc/systemd/system/scanscribe.service` (enabled, `Restart=on-failure`, `MemoryMax=13G`).
+  - `pytest` and `pytest-asyncio` are declared in `pyproject.toml` but are **not** installed by the installer; install them before running the suite.
+  - `retention --vacuum` takes an exclusive lock — never run it while ingest is active.
+  - New node is **192.168.10.147**; the uploader and the `scanscribe.macshomelab.online` tunnel origin still expect `.120`. Cutover not performed.
+  - The new node's DB is empty by design (clean start chosen, no data migration from `.120`).
+- **Verification Performed:**
+  - `pytest tests/`: **169 passed in 30.47s**.
+  - `app.services.retention` and `app.routes.maintenance` both import at module level — no circular import, no inline imports introduced.
+  - Retention dry run against the **old live DB**: 3,242 transmissions / 546.0 MB, 1,778 `span_store`, 812 `entity_observations`, 209 `event_transcript_links`, 3 orphan files (2.0 MB) at a 29-day cutoff; 3,405 events and 185 `hour_summaries` at 30 days.
+  - Retention dry run against the new empty DB: all zeroes.
+  - `systemctl restart scanscribe` → active; `GET /` → 307.
+- **Next Tasks / Unfinished Work:**
+  - Cutover: reclaim `.120` for the new node, or repoint uploader + tunnel origin to `.147`.
+  - Set `OPENROUTER_API_KEY` in `.env`; rotate the bootstrap admin password.
+  - Promote `snapshot` → `main` once the node is validated in production.
+  - Sharded audio writes (`audio_storage/YYYY/MM/DD/`) are still not implemented; `resolve_audio_file()` in the retention module already handles both flat and sharded layouts.

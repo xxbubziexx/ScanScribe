@@ -14,6 +14,7 @@ from ..config import get_settings
 from ..database import get_logs_db
 from ..models.log_entry import LogEntry
 from ..models.user import User
+from ..services.retention import run_retention
 from ..schemas.maintenance import (
     DatabaseStatsResponse,
     PurgeResponse,
@@ -88,46 +89,37 @@ def purge_old_data(
             cutoff_date=None
         )
     
-    # Calculate cutoff date
-    cutoff_date = (datetime.now() - timedelta(days=request.retention_days)).strftime('%Y-%m-%d')
-    
-    # Get entries to delete
-    entries_to_delete = db.query(LogEntry).filter(
-        LogEntry.log_date < cutoff_date
-    ).all()
-    
-    deleted_count = len(entries_to_delete)
-    audio_files_deleted = 0
-    
-    # Delete audio files and DB entries
-    audio_dir = Path(settings.output_dir)
-    for entry in entries_to_delete:
-        try:
-            if entry.audio_path and entry.audio_path != "file not saved":
-                path = audio_dir / Path(entry.audio_path).name
-                if not path.exists() and entry.filename:
-                    path = audio_dir / entry.filename
-                if path.exists():
-                    path.unlink()
-                    audio_files_deleted += 1
-            elif entry.filename:
-                path = audio_dir / entry.filename
-                if path.exists():
-                    path.unlink()
-                    audio_files_deleted += 1
-        except Exception as e:
-            logger.warning(f"Error deleting audio file: {e}")
-        
-        # Delete DB entry
-        db.delete(entry)
-    
-    db.commit()
-    
+    # Delegate to the date-driven retention service. The old implementation walked ORM
+    # rows, deleted the row even when the file could not be removed (creating orphans no
+    # later run can see), let the FK SET NULL rules blank dependents instead of removing
+    # them, and reported counters derived from row count only.
+    report = run_retention(request.retention_days, dry_run=False, session=db)
+
+    logger.info(
+        "retention purge by %s: transmissions=%d audio=%d (%.1f MB) orphans=%d "
+        "span_store=%d observations=%d links=%d events=%d summaries=%d cutoff=%s",
+        current_user.username,
+        report.log_entries,
+        report.audio_files_deleted,
+        report.audio_bytes_freed / 1e6,
+        report.orphan_files_deleted,
+        report.span_store,
+        report.entity_observations,
+        report.event_links,
+        report.events,
+        report.hour_summaries,
+        report.cutoff_date,
+    )
+
     return PurgeResponse(
-        message=f"Purged data older than {request.retention_days} days",
-        deleted_count=deleted_count,
-        audio_files_deleted=audio_files_deleted,
-        cutoff_date=cutoff_date
+        message=(
+            f"Purged {report.log_entries} transmissions, {report.events} events and "
+            f"{report.hour_summaries} hour summaries older than "
+            f"{request.retention_days} days (cutoff {report.cutoff_date})"
+        ),
+        deleted_count=report.log_entries + report.events + report.hour_summaries,
+        audio_files_deleted=report.audio_files_deleted + report.orphan_files_deleted,
+        cutoff_date=report.cutoff_date,
     )
 
 
