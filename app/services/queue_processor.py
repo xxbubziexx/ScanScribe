@@ -15,6 +15,7 @@ from ..database import SessionLocal, LogsSessionLocal, EventsSessionLocal
 from ..models.log_entry import LogEntry
 from ..utils.audio_metadata import extract_audio_metadata, get_talkgroup_from_metadata
 from ..utils.audio_file_ops import safe_async_unlink
+from ..utils.audio_paths import NOT_SAVED, shard_target
 from .transcription_engine import get_engine
 from .websocket import websocket_manager
 from .watcher import get_watcher_service
@@ -402,27 +403,31 @@ class QueueProcessor:
                 # VAD wrote speech-only WAV; use it instead of original
                 if save_audio:
                     stored_name = audio_path.stem + ".wav"
-                    audio_dest = self.audio_storage / stored_name
+                    audio_dest, audio_path_stored = shard_target(
+                        self.audio_storage, log_date, stored_name
+                    )
+                    await asyncio.to_thread(audio_dest.parent.mkdir, parents=True, exist_ok=True)
                     await asyncio.to_thread(shutil.move, speech_only_path, str(audio_dest))
                     file_size = audio_dest.stat().st_size
-                    audio_path_stored = f"audio_storage/{audio_dest.name}"
-                    logger.info(f"💾 Speech-only WAV saved: {stored_name}")
+                    logger.info(f"💾 Speech-only WAV saved: {audio_path_stored}")
                 else:
                     await safe_async_unlink(speech_only_path)
-                    audio_path_stored = "file not saved"
+                    audio_path_stored = NOT_SAVED
                 await safe_async_unlink(audio_path)
                 file_handled = True
             elif save_audio:
-                # Move original to audio_storage
-                audio_dest = self.audio_storage / filename
+                # Move original into its date directory
+                audio_dest, audio_path_stored = shard_target(
+                    self.audio_storage, log_date, filename
+                )
+                await asyncio.to_thread(audio_dest.parent.mkdir, parents=True, exist_ok=True)
                 await asyncio.to_thread(shutil.move, str(audio_path), str(audio_dest))
-                audio_path_stored = f"audio_storage/{audio_dest.name}"
                 file_handled = True
-                logger.info(f"💾 Audio saved: {audio_dest.name}")
+                logger.info(f"💾 Audio saved: {audio_path_stored}")
             else:
                 await safe_async_unlink(audio_path)
                 file_handled = True
-                audio_path_stored = "file not saved"
+                audio_path_stored = NOT_SAVED
                 logger.info("🗑️ Audio deleted (playback disabled)")
             
             # Save to database

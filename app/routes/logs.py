@@ -1,4 +1,5 @@
 """Logs routes."""
+import logging
 import re
 import zipfile
 from pathlib import Path
@@ -18,7 +19,10 @@ from ..database import get_logs_db
 from ..models.user import User
 from ..models.log_entry import LogEntry
 from ..services.redaction_service import redact_ssn
+from ..utils.audio_paths import is_saved, resolve_audio_file
 from .auth import get_current_active_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
@@ -232,14 +236,14 @@ async def delete_log(
         raise HTTPException(status_code=404, detail="Log entry not found")
     
     # Delete associated audio file if exists
-    if log.audio_path and log.audio_path != "file not saved":
+    if is_saved(log.audio_path):
         settings = get_settings()
-        audio_file = Path(settings.output_dir) / Path(log.audio_path).name
-        if audio_file.exists():
+        audio_file = resolve_audio_file(log.audio_path, Path(settings.output_dir))
+        if audio_file:
             try:
                 audio_file.unlink()
-            except Exception:
-                pass  # Continue even if file deletion fails
+            except OSError as exc:
+                logger.warning("could not delete audio %s: %s", audio_file, exc)
     
     db.delete(log)
     db.commit()
@@ -275,13 +279,13 @@ async def bulk_delete_logs(
         log = db.query(LogEntry).filter(LogEntry.id == log_id).first()
         if log:
             # Delete associated audio file if exists
-            if log.audio_path and log.audio_path != "file not saved":
-                audio_file = Path(settings.output_dir) / Path(log.audio_path).name
-                if audio_file.exists():
+            if is_saved(log.audio_path):
+                audio_file = resolve_audio_file(log.audio_path, Path(settings.output_dir))
+                if audio_file:
                     try:
                         audio_file.unlink()
-                    except Exception:
-                        pass
+                    except OSError as exc:
+                        logger.warning("could not delete audio %s: %s", audio_file, exc)
             
             db.delete(log)
             deleted_count += 1
@@ -343,9 +347,9 @@ async def bulk_download_logs(
             txt_arcname = f"{log.id}_{base}.txt"
             zf.writestr(txt_arcname, content.encode("utf-8"))
             # Audio file if present
-            if log.audio_path and log.audio_path != "file not saved":
-                audio_path = Path(settings.output_dir) / Path(log.audio_path).name
-                if audio_path.exists():
+            if is_saved(log.audio_path):
+                audio_path = resolve_audio_file(log.audio_path, Path(settings.output_dir))
+                if audio_path:
                     zf.write(audio_path, f"{log.id}_{base}{audio_path.suffix}")
 
     buf.seek(0)
@@ -424,9 +428,9 @@ async def export_dataset(
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         metadata = []
         for log in logs:
-            if log.audio_path and log.audio_path != "file not saved":
-                audio_file = Path(settings.output_dir) / Path(log.audio_path).name
-                if audio_file.exists():
+            if is_saved(log.audio_path):
+                audio_file = resolve_audio_file(log.audio_path, Path(settings.output_dir))
+                if audio_file:
                     arcname = f"audio/{audio_file.name}"
                     zf.write(audio_file, arcname)
                     

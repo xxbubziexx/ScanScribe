@@ -39,6 +39,7 @@ from ..services.chat_context import (
 from ..services.agent_tools import ToolContext
 from ..services.chat_streamer import AssistantTrace, stream_chat_completion
 from ..config import get_settings
+from ..utils.audio_paths import audio_url_for, is_saved, resolve_audio_file
 
 logger = logging.getLogger(__name__)
 
@@ -284,12 +285,10 @@ def get_transmission_detail(
     settings = get_settings()
     audio_url = ""
     audio_available = False
-    if log.audio_path and log.audio_path != "file not saved":
-        clean_path = log.audio_path.lstrip("/\\")
-        fname = Path(clean_path).name
-        target_file = Path(settings.output_dir) / fname
-        audio_available = target_file.is_file()
-        audio_url = f"/audio_storage/{urllib.parse.quote(fname)}"
+    if is_saved(log.audio_path):
+        target_file = resolve_audio_file(log.audio_path, Path(settings.output_dir))
+        audio_available = target_file is not None
+        audio_url = audio_url_for(log.audio_path)
 
     return TransmissionLookupOut(
         id=log.id,

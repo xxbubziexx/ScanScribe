@@ -1,4 +1,5 @@
 """Unified database configuration and session management with WAL mode and connection pooling."""
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
@@ -7,6 +8,8 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 
 from .config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def utcnow() -> datetime:
@@ -112,10 +115,53 @@ def auto_migrate_legacy_databases() -> None:
         logging.getLogger(__name__).warning("Legacy database auto-migration check note: %s", exc)
 
 
+AUDIO_LAYOUT_KEY = "audio_layout"
+
+
+def record_audio_layout() -> str:
+    """Record the audio storage layout once, for reporting and future tooling.
+
+    Resolution never consults this value: every row carries its own stored path, so
+    flat and sharded files resolve side by side whatever this says. A database holding
+    no stored audio is a fresh install and is marked ``sharded``; one that already holds
+    stored paths is marked ``mixed``, because new writes shard while those files remain
+    flat where they are. Existing data is never moved as a side effect.
+    """
+    with engine.begin() as conn:
+        row = conn.execute(
+            text("SELECT value FROM system_settings WHERE key = :key"),
+            {"key": AUDIO_LAYOUT_KEY},
+        ).first()
+        if row is not None:
+            return str(row[0])
+
+        stored = conn.execute(
+            text(
+                "SELECT COUNT(*) FROM log_entries "
+                "WHERE audio_path LIKE 'audio_storage/%'"
+            )
+        ).scalar() or 0
+        layout = "mixed" if stored else "sharded"
+        conn.execute(
+            text(
+                "INSERT INTO system_settings (key, value, updated_at) "
+                "VALUES (:key, :value, :updated_at) ON CONFLICT(key) DO NOTHING"
+            ),
+            {
+                "key": AUDIO_LAYOUT_KEY,
+                "value": layout,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        logger.info("audio layout recorded as %s (%d stored files present)", layout, stored)
+        return layout
+
+
 def init_db():
     """Initialize database tables with complete model metadata."""
     from . import models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
     auto_migrate_legacy_databases()
+    record_audio_layout()
 

@@ -52,6 +52,7 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..database import SessionLocal, engine
+from ..utils.audio_paths import NOT_SAVED, is_saved, resolve_audio_file
 
 logger = logging.getLogger(__name__)
 
@@ -92,34 +93,8 @@ class RetentionReport:
 
 
 # --------------------------------------------------------------------------- paths
-def resolve_audio_file(audio_path: Optional[str], output_dir: Path) -> Optional[Path]:
-    """Map a stored ``audio_path`` to an on-disk file.
-
-    Handles every layout in use or planned:
-      * ``audio_storage/foo.wav``            -> output_dir/foo.wav
-      * ``audio_storage/2026/11/16/foo.wav`` -> output_dir/2026/11/16/foo.wav  (sharded)
-      * bare ``foo.wav``                     -> output_dir/foo.wav
-      * absolute paths                       -> used as-is
-    Returns the first existing candidate, else ``None``.
-    """
-    if not audio_path:
-        return None
-    raw = str(audio_path).strip()
-    if not raw or raw == "file not saved":
-        return None
-
-    raw = raw.replace("\\", "/")
-    if os.path.isabs(raw) and Path(raw).is_file():
-        return Path(raw)
-
-    marker = "audio_storage/"
-    rel = raw[len(marker):] if raw.startswith(marker) else raw
-    rel = rel.lstrip("/")
-
-    for candidate in (output_dir / rel, output_dir / Path(rel).name):
-        if candidate.is_file():
-            return candidate
-    return None
+# resolve_audio_file() lives in utils/audio_paths so the write path, the routes and
+# this module share one definition of what a stored path may look like.
 
 
 def file_date(name: str, mtime: float) -> Optional[str]:
@@ -338,37 +313,49 @@ def run_retention(
         logger.info("hour_summaries: purged=%d", report.hour_summaries)
 
         # ---- phase 6: orphaned audio (on disk, no live row) older than cutoff ----
+        # Recursive on purpose: sharded stores nest audio under YYYY/MM/DD, so a
+        # single-level scan would leave every nested orphan in place forever.
         if sweep_orphans and out_dir.is_dir():
             known = {
                 Path(str(p).replace("\\", "/")).name
                 for (p,) in db.execute(text("SELECT audio_path FROM log_entries"))
-                if p
+                if is_saved(p)
             }
-            for entry in os.scandir(out_dir):
-                if not entry.is_file(follow_symlinks=False):
-                    continue
-                if Path(entry.name).suffix.lower() not in AUDIO_SUFFIXES:
-                    continue
-                if entry.name in known:
-                    continue
-                try:
-                    st = entry.stat()
-                except OSError as exc:
-                    logger.warning("cannot stat %s: %s", entry.path, exc)
-                    continue
-                fdate = file_date(entry.name, st.st_mtime)
-                if not fdate or fdate >= cutoff:
-                    continue
-                if dry_run:
-                    report.orphan_files_deleted += 1
-                    report.orphan_bytes_freed += st.st_size
-                    continue
-                try:
-                    os.unlink(entry.path)
-                    report.orphan_files_deleted += 1
-                    report.orphan_bytes_freed += st.st_size
-                except OSError as exc:
-                    logger.warning("could not remove orphan %s: %s", entry.path, exc)
+            for dirpath, _dirnames, filenames in os.walk(out_dir):
+                for name in filenames:
+                    if Path(name).suffix.lower() not in AUDIO_SUFFIXES:
+                        continue
+                    if name in known:
+                        continue
+                    entry = Path(dirpath) / name
+                    try:
+                        st = entry.stat()
+                    except OSError as exc:
+                        logger.warning("cannot stat %s: %s", entry, exc)
+                        continue
+                    fdate = file_date(name, st.st_mtime)
+                    if not fdate or fdate >= cutoff:
+                        continue
+                    if dry_run:
+                        report.orphan_files_deleted += 1
+                        report.orphan_bytes_freed += st.st_size
+                        continue
+                    try:
+                        entry.unlink()
+                        report.orphan_files_deleted += 1
+                        report.orphan_bytes_freed += st.st_size
+                    except OSError as exc:
+                        logger.warning("could not remove orphan %s: %s", entry, exc)
+            if not dry_run:
+                # Empty date directories left behind by the purge are noise; rmdir
+                # fails harmlessly on anything still populated.
+                for dirpath, _dirnames, _filenames in os.walk(out_dir, topdown=False):
+                    if Path(dirpath) == Path(out_dir):
+                        continue
+                    try:
+                        Path(dirpath).rmdir()
+                    except OSError as exc:
+                        logger.debug("kept non-empty directory %s: %s", dirpath, exc)
             logger.info(
                 "orphans: removed=%d (%.1f MB)",
                 report.orphan_files_deleted,

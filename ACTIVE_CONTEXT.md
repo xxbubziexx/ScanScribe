@@ -1237,3 +1237,33 @@ This living document is the **shared memory** between different AI models, human
   - Set `OPENROUTER_API_KEY` in `.env`; rotate the bootstrap admin password.
   - Promote `snapshot` → `main` once the node is validated in production.
   - Sharded audio writes (`audio_storage/YYYY/MM/DD/`) are still not implemented; `resolve_audio_file()` in the retention module already handles both flat and sharded layouts.
+
+---
+
+### 2026-11-19 22:55 | deepseek-v4.1-flash (Overseer — audio sharding)
+- **Work Performed:**
+  1. **Sharded audio writes.** New recordings are stored at `audio_storage/<YYYY>/<MM>/<DD>/<basename>.wav`. The shard date is the row's own `log_date`, which is derived from the file's capture timestamp at ingest — the same column retention filters on, so the directory tree and a purge can never disagree. Never use the wall clock or mtime here.
+  2. **One path contract.** `app/utils/audio_paths.py` now owns sharding, resolution and URL building. The six call sites that rebuilt a path from `Path(audio_path).name` were replaced. The stored value is the full storage-relative path with forward slashes, because the dev tree is Windows while every deployment is Linux.
+  3. **Layout-agnostic resolution.** Resolution follows the stored value, then falls back to the basename, so flat rows written before this change keep working and a store can be flat, sharded, or a mix. Every candidate is confined to `output_dir` — the old `.name` call was doubling as the path-traversal guard, so that had to be replaced rather than dropped.
+  4. **Layout marker.** `record_audio_layout()` writes `audio_layout` into `system_settings` at DB init: `sharded` when no stored audio exists, `mixed` when it does. Resolution never consults it; it exists for reporting and future tooling. Existing files are never moved as a side effect.
+  5. **Retention orphan sweep is recursive** (was a single-level `os.scandir`, which would have missed every nested orphan), and prunes empty date directories after a purge.
+- **Live Ubuntu Ingestion Impact:**
+  - **No migration exists and none is needed.** Existing installs pick up sharded writes immediately; their older files stay flat and resolve normally. They are now labelled `mixed`.
+  - Old Docker node (`.120`) untouched. New node (`.147`) has still not been given an ingest source.
+- **Gotchas / Warnings for Next Model:**
+  - The stored path is the authority. Do not reintroduce `Path(audio_path).name` anywhere — grep for it; the only remaining hit is a docstring describing the old defect.
+  - Resolution tries the exact relative path, then the basename **within `output_dir` only**. A file moved into a date directory while its row still says flat will not be found. Nothing in the app does that, but a manual reorganisation would.
+  - `"file not saved"` sentinels remain as literals in `models/log_entry.py`, `routes/settings.py`, `routes/events/*`. Functionally fine (same string), not yet consolidated onto `NOT_SAVED`.
+  - `output_dir` **is** the flat directory — date folders live inside it. There is no separate directory to delete and recreate, so a store never "converts"; it just ages out through retention.
+  - Anything outside the app that globs the top level (`cp audio_storage/*.wav`, rsync filters) will miss new nested files.
+- **Verification Performed:**
+  - `pytest tests/`: **169 passed, 3 warnings in 29.47s**.
+  - Path contract exercised directly, 20/20: dated shard, missing/malformed date falling back to flat, basename sanitising of `../../etc/passwd`, flat resolution, sharded resolution, backslash-folded path, traversal rejected, sentinel skipped, URL quoting with spaces.
+  - `audio_layout = sharded` written on startup with 0 rows (`journalctl`: "audio layout recorded as sharded (0 stored files present)").
+  - `py_compile` clean across all six touched files; service restarted, active, `GET /` → 307.
+  - Not yet verified end-to-end: a real transmission landing in a date directory. The first genuine ingest is the proof.
+- **Next Tasks / Unfinished Work:**
+  - Wire an ingest source to `.147` (uploader + tunnel origin still expect `.120`) and confirm the first file lands nested.
+  - Consolidate the remaining `"file not saved"` literals onto `NOT_SAVED`.
+  - `settings.py` storage-stats endpoints still `rglob` the whole tree; consider deriving from the DB once sharding is in production.
+  - Pre-existing inline imports and broad `except Exception` blocks remain in `queue_processor.py`, `logs.py`, `database.py`, `chat.py`, and the SSN-redaction endpoint — untouched by this change.
