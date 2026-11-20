@@ -187,6 +187,67 @@ def _check_health(port: int, timeout: float = 1.0) -> bool:
         return False
 
 
+SYSTEMD_UNIT = "scanscribe.service"
+
+
+def systemd_manages_service() -> bool:
+    """True when a systemd unit owns this install.
+
+    On a native/server install the unit is the supervisor. Spawning our own detached
+    process, or killing the unit's main process, would leave two managers fighting over
+    one service — and the CLI's SIGTERM would race the unit's restart policy. When the
+    unit exists every lifecycle command delegates to systemctl instead.
+    """
+    if sys.platform == "win32":
+        return False
+    try:
+        result = subprocess.run(
+            ["systemctl", "list-unit-files", SYSTEMD_UNIT],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and SYSTEMD_UNIT in result.stdout
+
+
+def _run_systemctl(action: str) -> int:
+    """Run a lifecycle action against the unit, elevating only when required."""
+    command = ["systemctl", action, SYSTEMD_UNIT]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=120)
+        if result.returncode == 0:
+            return 0
+        # Non-root installs need sudo; -n keeps it from hanging on a password prompt.
+        elevated = subprocess.run(
+            ["sudo", "-n", *command], capture_output=True, text=True, timeout=120
+        )
+        if elevated.returncode == 0:
+            return 0
+        detail = (elevated.stderr or result.stderr or "no output").strip()
+        print(f"[X] systemctl {action} {SYSTEMD_UNIT} failed: {detail}", file=sys.stderr)
+        return elevated.returncode or result.returncode
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"[X] could not run systemctl: {exc}", file=sys.stderr)
+        return 1
+
+
+def current_branch(default: str = "main") -> str:
+    """Branch this checkout is on, so update checks compare like with like."""
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=str(BASE_DIR),
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=3,
+        ).strip()
+        return out or default
+    except (OSError, subprocess.SubprocessError):
+        return default
+
+
 def cmd_start(args):
     """Start ScanScribe server."""
     port = getattr(args, "port", None) or DEFAULT_PORT
@@ -195,9 +256,20 @@ def cmd_start(args):
     foreground = getattr(args, "foreground", False)
     no_update_check = getattr(args, "no_update_check", False)
 
+    if not foreground and systemd_manages_service():
+        if not silent:
+            print(f"[*] ScanScribe is managed by systemd ({SYSTEMD_UNIT}); using systemctl.")
+        rc = _run_systemctl("start")
+        if rc == 0 and not silent:
+            active_pid, active_port = _get_stored_pid(fallback_port=port)
+            where = f"http://localhost:{active_port}"
+            pid_text = f" (PID: {active_pid})" if active_pid else ""
+            print(f"[✓] ScanScribe running at {where}{pid_text}")
+        return rc
+
     if not silent and not no_update_check:
         try:
-            update_info = check_for_updates(target_branch="main", timeout=3.0)
+            update_info = check_for_updates(target_branch=current_branch(), timeout=3.0)
             print_update_banner(update_info)
         except Exception as ex:
             logger.debug(f"Update check failed on start: {ex}")
@@ -313,6 +385,15 @@ def cmd_start(args):
 def cmd_stop(args):
     """Stop ScanScribe server."""
     target_port = getattr(args, "port", None) or DEFAULT_PORT
+
+    if systemd_manages_service():
+        print(f"[*] ScanScribe is managed by systemd ({SYSTEMD_UNIT}); using systemctl.")
+        rc = _run_systemctl("stop")
+        if rc == 0:
+            _remove_pid()
+            print("[✓] ScanScribe stopped.")
+        return rc
+
     pid, port = _get_stored_pid(fallback_port=target_port)
     if not pid:
         pid = _find_pid_listening_on_port(target_port)
@@ -385,6 +466,12 @@ def cmd_stop(args):
 
 def cmd_restart(args):
     """Restart ScanScribe server."""
+    if systemd_manages_service():
+        print(f"[*] ScanScribe is managed by systemd ({SYSTEMD_UNIT}); using systemctl.")
+        rc = _run_systemctl("restart")
+        if rc == 0:
+            print("[✓] ScanScribe restarted.")
+        return rc
     cmd_stop(args)
     time.sleep(1)
     return cmd_start(args)
@@ -393,11 +480,24 @@ def cmd_restart(args):
 def cmd_status(args):
     """Check ScanScribe status."""
     target_port = getattr(args, "port", None) or DEFAULT_PORT
+
+    if systemd_manages_service():
+        try:
+            probe = subprocess.run(
+                ["systemctl", "is-active", SYSTEMD_UNIT],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            print(f"[i] systemd: {SYSTEMD_UNIT} is {probe.stdout.strip() or 'unknown'}")
+        except (OSError, subprocess.SubprocessError):
+            pass
+
     pid, port = _get_stored_pid(fallback_port=target_port)
     if not pid:
         print("[X] ScanScribe is NOT running.")
         try:
-            update_info = check_for_updates(target_branch="main", timeout=2.0)
+            update_info = check_for_updates(target_branch=current_branch(), timeout=2.0)
             print_update_banner(update_info)
         except Exception as ex:
             logger.debug(f"Update check failed on status: {ex}")
@@ -483,7 +583,7 @@ def cmd_uninstall(args):
     print("This will:")
     print("  1. Stop any running ScanScribe background service")
     print("  2. Remove background tasks (Task Scheduler / systemd)")
-    print("  3. Remove ScanScribe from user PATH")
+    print("  3. Remove ScanScribe from user PATH and /usr/local/bin")
     print("  4. Clear all Python bytecode caches (__pycache__, *.pyc)")
     print("  5. Remove isolated virtual environment (.venv) & dependencies")
     if purge:
@@ -519,6 +619,32 @@ def cmd_uninstall(args):
         except Exception as e:
             print(f"[!] Note: Could not remove Task Scheduler task: {e}")
     else:
+        # System-level unit written by the native installer when --autostart true.
+        system_unit = Path("/etc/systemd/system/scanscribe.service")
+        if system_unit.is_file():
+            try:
+                subprocess.run(
+                    ["sudo", "-n", "systemctl", "disable", "--now", SYSTEMD_UNIT],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=120,
+                )
+                subprocess.run(
+                    ["sudo", "-n", "rm", "-f", str(system_unit)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=60,
+                )
+                subprocess.run(
+                    ["sudo", "-n", "systemctl", "daemon-reload"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=60,
+                )
+                print("[✓] Removed system-level systemd service.")
+            except (OSError, subprocess.SubprocessError) as e:
+                print(f"[!] Note: Could not remove system service: {e}")
+
         systemd_unit = Path.home() / ".config" / "systemd" / "user" / "scanscribe.service"
         if systemd_unit.is_file():
             try:
@@ -537,7 +663,21 @@ def cmd_uninstall(args):
             except Exception as e:
                 print(f"[!] Note: Could not remove systemd service: {e}")
 
-    # 3. Clean User PATH on Windows
+    # 3. Remove the /usr/local/bin symlink, then clean user PATH on Windows
+    if sys.platform != "win32":
+        cli_link = Path("/usr/local/bin/scanscribe")
+        if cli_link.is_symlink() or cli_link.exists():
+            try:
+                subprocess.run(
+                    ["sudo", "-n", "rm", "-f", str(cli_link)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=60,
+                )
+                print(f"[✓] Removed {cli_link}.")
+            except (OSError, subprocess.SubprocessError) as e:
+                print(f"[!] Note: Could not remove {cli_link}: {e}")
+
     if sys.platform == "win32":
         bin_dir = str(BASE_DIR / "bin")
         try:
@@ -842,8 +982,10 @@ def cmd_update(args) -> int:
         print(f"[!] Warning: Alembic migration warning: {e}")
 
     if auto_restart:
-        print("\n[*] Starting updated ScanScribe service...")
-        return cmd_start(args)
+        print("\n[*] Restarting updated ScanScribe service...")
+        # Restart, not start: on a systemd-managed install, `start` on an already-running
+        # unit is a no-op and would leave the old code serving.
+        return cmd_restart(args)
 
     print("\n[✓] Update complete! Start ScanScribe anytime with: scanscribe start\n")
     return 0

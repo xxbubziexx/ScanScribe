@@ -1267,3 +1267,28 @@ This living document is the **shared memory** between different AI models, human
   - Consolidate the remaining `"file not saved"` literals onto `NOT_SAVED`.
   - `settings.py` storage-stats endpoints still `rglob` the whole tree; consider deriving from the DB once sharding is in production.
   - Pre-existing inline imports and broad `except Exception` blocks remain in `queue_processor.py`, `logs.py`, `database.py`, `chat.py`, and the SSN-redaction endpoint — untouched by this change.
+
+---
+
+### 2026-11-20 00:30 | deepseek-v4.1-flash (Overseer — CLI/service consistency)
+- **Work Performed:**
+  1. **`scanscribe` was never on PATH.** `install.sh` only appended `export PATH="$BIN_DIR:$PATH"` to `~/.bashrc`, which interactive login shells read. Non-interactive shells, scripts and cron never resolved the command, and no symlink existed. The installer now links the launcher into `/usr/local/bin`.
+  2. **The installer never created a systemd unit.** It advertised a "systemd service" in its own menu text but started the app with `bin/scanscribe start` — a detached process plus `.scanscribe.pid`, nothing surviving reboot. With `--autostart true` it now writes and enables a system unit; otherwise it starts manually as before.
+  3. **The CLI fought systemd.** `cmd_stop` sent SIGTERM to the unit's main process; `Restart=on-failure` treated that as a failure and restarted it, so `scanscribe stop` looked like a no-op. `start`/`stop`/`restart` now delegate to `systemctl` whenever the unit exists, and `status` prints the unit state alongside PID and health.
+  4. **`update` used `start`**, which on an already-running unit is a no-op — an update would have kept serving the old code. It now restarts.
+  5. **Update nag compared against a hardcoded `main`** while the checkout was on `snapshot`, so every command printed a bogus "update available". It now uses the current branch.
+  6. **`uninstall` removed neither** the `/usr/local/bin` symlink nor the system unit; it handled only a legacy user-level unit.
+- **Live Ingestion Impact:** none. The service was bounced twice during verification (stop/start/restart); no audio was in flight.
+- **Gotchas / Warnings for Next Model:**
+  - Manual installs (no unit) still use the PID-file model — that path is unchanged and still works.
+  - `--autostart true` without passwordless sudo falls back to a background start and says so; it cannot install a system unit.
+  - The CLI must keep delegating when a unit exists. Do not add a code path that spawns a second supervised process.
+  - `sudo -n` is used throughout so nothing hangs on a password prompt.
+- **Verification Performed:**
+  - `scanscribe stop` → unit `inactive` after 8 s, zero listeners on :8000 (previously it came straight back).
+  - `scanscribe start` → `active`, HTTP 307. `scanscribe restart` → `active`, HTTP 307, new MainPID.
+  - `scanscribe status` resolves from a non-interactive shell via `/usr/local/bin/scanscribe` and reports unit state + health.
+  - `py_compile` clean, `bash -n install.sh` clean.
+- **Next Tasks / Unfinished Work:**
+  - Docker install path untouched (it manages its own stack).
+  - Re-run `install.sh --autostart true` on a scratch VM to exercise the new unit-writing branch end to end.

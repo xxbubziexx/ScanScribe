@@ -508,7 +508,19 @@ EOF
 
 chmod +x "$BIN_DIR/scanscribe"
 
-# PATH export suggestion
+# Publish the command system-wide. The .bashrc export below only reaches interactive
+# login shells, so scripts, cron jobs and non-interactive SSH never saw `scanscribe`.
+CLI_LINK="/usr/local/bin/scanscribe"
+if sudo -n true 2>/dev/null; then
+  if sudo -n ln -sf "$BIN_DIR/scanscribe" "$CLI_LINK"; then
+    echo "[+] Installed command: $CLI_LINK"
+  fi
+else
+  echo "[!] No passwordless sudo - skipping $CLI_LINK"
+  echo "    Add it later with: sudo ln -sf \"$BIN_DIR/scanscribe\" $CLI_LINK"
+fi
+
+# Keep the export for this shell session and future interactive ones
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$HOME/.bashrc"
   export PATH="$BIN_DIR:$PATH"
@@ -520,7 +532,45 @@ echo "               Installation Complete!                       "
 echo "============================================================"
 echo ""
 
-"$BIN_DIR/scanscribe" start --port "$PORT"
+# Autostart: install a system unit when asked for, otherwise start manually.
+# This used to always spawn a detached process and never create a unit, so the installer
+# advertised a systemd service it never wrote and nothing survived a reboot.
+if [ "$AUTOSTART" = "true" ] && sudo -n true 2>/dev/null; then
+  UNIT_PATH="/etc/systemd/system/scanscribe.service"
+  sudo -n tee "$UNIT_PATH" >/dev/null <<UNIT_EOF
+[Unit]
+Description=ScanScribe - public safety radio transcription
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$(id -un)
+Group=$(id -gn)
+WorkingDirectory=$INSTALL_DIR
+EnvironmentFile=$INSTALL_DIR/.env
+ExecStart=$INSTALL_DIR/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips=*
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
+  sudo -n systemctl daemon-reload
+  if sudo -n systemctl enable --now scanscribe.service; then
+    echo "[+] systemd unit installed, enabled and started (survives reboot)"
+  else
+    echo "[!] Could not start scanscribe.service - check: journalctl -u scanscribe"
+  fi
+else
+  if [ "$AUTOSTART" = "true" ]; then
+    echo "[!] Autostart requested but no passwordless sudo - starting in the background."
+    echo "    For boot persistence install a systemd unit for $INSTALL_DIR."
+  fi
+  "$BIN_DIR/scanscribe" start --port "$PORT"
+fi
 
 echo ""
 echo "Commands:"
