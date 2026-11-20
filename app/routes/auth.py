@@ -122,9 +122,23 @@ async def get_current_admin_user(
 
 
 # Routes
+MIN_PASSWORD_LENGTH = 8
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
-    """Register a new user."""
+    """Register a new user.
+
+    The first account created in an empty database is granted administrator rights;
+    that is how a fresh install is claimed now that no credentials are seeded. Every
+    later registration is a normal non-admin account.
+    """
+    if len(user_data.password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters",
+        )
+
     # Check if username exists
     if get_user_by_username(db, user_data.username):
         raise HTTPException(
@@ -140,7 +154,8 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
         )
     
     hashed_password = get_password_hash(user_data.password)
-    # The first user created in the database is automatically granted admin privileges
+    # The first user created in the database is automatically granted admin privileges,
+    # which is what claims a fresh install now that no credentials are seeded.
     is_first_user = db.query(User).count() == 0
 
     db_user = User(

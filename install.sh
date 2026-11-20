@@ -322,6 +322,7 @@ LOG_DIR=/app/logs
 DB_PATH=/app/data/scanscribe.db
 CONFIG_PATH=/app/config.yml
 EOF
+  chmod 600 "$INSTALL_DIR/.env"
 
   # Prepare initial config.yml if not existing
   if [ ! -f "$INSTALL_DIR/config.yml" ]; then
@@ -404,7 +405,21 @@ echo "    Verifying core runtime dependencies (uvicorn, fastapi, slowapi, alembi
 # 6. Check FFmpeg
 echo "[5/7] Verifying FFmpeg..."
 if ! command -v ffmpeg &>/dev/null; then
-  echo "    Notice: FFmpeg not detected in PATH. On Ubuntu/Debian run: sudo apt install -y ffmpeg"
+  echo "    FFmpeg not found - audio decoding fails without it."
+  if command -v apt-get &>/dev/null && sudo -n true 2>/dev/null; then
+    echo "    Installing ffmpeg via apt..."
+    if sudo -n apt-get update -qq && sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ffmpeg; then
+      echo "    [+] FFmpeg installed: $(ffmpeg -version 2>/dev/null | head -1)"
+    else
+      echo "    [!] FFmpeg install failed - run: sudo apt install -y ffmpeg"
+    fi
+  elif command -v dnf &>/dev/null && sudo -n true 2>/dev/null; then
+    echo "    Installing ffmpeg via dnf..."
+    sudo -n dnf install -y ffmpeg-free >/dev/null 2>&1 || sudo -n dnf install -y ffmpeg >/dev/null 2>&1 \
+      || echo "    [!] FFmpeg install failed - run: sudo dnf install -y ffmpeg"
+  else
+    echo "    [!] Install it manually: sudo apt install -y ffmpeg (Debian/Ubuntu)"
+  fi
 fi
 
 # 7. Model Pre-download
@@ -466,12 +481,14 @@ OUTPUT_DIR=$INSTALL_DIR/audio_storage
 LOG_DIR=$INSTALL_DIR/logs
 DB_PATH=$INSTALL_DIR/data/scanscribe.db
 CONFIG_PATH=$INSTALL_DIR/config.yml
-SCANSCRIBE_DEFAULT_ADMIN_USERNAME=admin
-SCANSCRIBE_DEFAULT_ADMIN_PASSWORD=admin
+# No admin credentials are seeded. Claim the install by registering the first account
+# in the web UI; it is granted administrator rights automatically.
 $([ -n "$OPENROUTER_API_KEY" ] && echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY")
 PYTHONIOENCODING=utf-8
 PYTHONUTF8=1
 EOF
+# The file holds the session-signing key and any API key: keep it to the owner.
+chmod 600 "$INSTALL_DIR/.env"
 
 if [ ! -f "$INSTALL_DIR/config.yml" ] && [ -f "$INSTALL_DIR/config.yml.example" ]; then
   cp "$INSTALL_DIR/config.yml.example" "$INSTALL_DIR/config.yml"

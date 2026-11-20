@@ -7,12 +7,14 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from . import __version__
 from .config import get_settings, init_directories
-from .database import init_db
+from .database import SessionLocal, init_db
+from .models.user import User
 from .bootstrap_admin import ensure_default_admin
 from .utils.limiter import limiter
 from .routes import auth_router, settings_router, logs_router, maintenance_router, watcher_router, upload_router, users_router, transcriptions_router, chat_router
@@ -229,8 +231,19 @@ def _redirect_to_app(path: str) -> RedirectResponse:
 
 @app.get("/", include_in_schema=False)
 def root():
-    """Send users to the React shell."""
-    return RedirectResponse(url="/app/", status_code=307)
+    """Send users to the React shell, or to account creation on a fresh install."""
+    try:
+        db = SessionLocal()
+        try:
+            claimed = db.query(User).count() > 0
+        finally:
+            db.close()
+    except SQLAlchemyError as exc:
+        # Never let a database blip turn the landing page into a 500.
+        logger.warning("Could not determine first-run state on '/': %s", exc)
+        claimed = True
+
+    return RedirectResponse(url="/app/" if claimed else "/app/register", status_code=307)
 
 
 @app.get("/login", include_in_schema=False)

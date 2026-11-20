@@ -1292,3 +1292,27 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Docker install path untouched (it manages its own stack).
   - Re-run `install.sh --autostart true` on a scratch VM to exercise the new unit-writing branch end to end.
+
+---
+
+### 2026-11-20 01:05 | deepseek-v4.1-flash (Overseer — first-run onboarding)
+- **Work Performed:**
+  1. **No credentials are seeded any more.** `install.sh` wrote `SCANSCRIBE_DEFAULT_ADMIN_USERNAME=admin` / `..._PASSWORD=admin`, and `bootstrap_admin.ensure_default_admin()` created that account at startup from the environment. Every install therefore shipped a guessable credential, and the "first user becomes admin" path in `register()` could never run, because a user always already existed.
+  2. `bootstrap_admin.ensure_default_admin()` now only reports whether the install has been claimed; it creates nothing.
+  3. `GET /` redirects to `/app/register` while the users table is empty, so a fresh install lands directly on account creation; it redirects to `/app/` once claimed, and falls back to `/app/` on a database error rather than 500ing.
+  4. `register()` rejects passwords shorter than 8 characters (`MIN_PASSWORD_LENGTH`). The 5-character seeded default is exactly the failure this prevents.
+  5. `install.sh` now **installs ffmpeg** (apt, or dnf) instead of printing a notice and continuing — without it decoding fails at runtime while the installer reports success.
+  6. Both `.env` write sites now `chmod 600`. The file holds `SECRET_KEY` and any OpenRouter key, and was being created group/world-readable.
+  7. **Live box:** deleted the sole seeded `admin` account (0 log entries, 0 chat threads, nothing else referenced it) so the install is genuinely unclaimed. `GET /` now redirects to `/app/register`.
+- **Live Ingestion Impact:** none. Service restarted to load the new code; no audio in flight.
+- **Gotchas / Warnings for Next Model:**
+  - **Registration stays open to anonymous callers.** `tests/test_security_patches.py::test_registration_does_not_grant_admin` asserts that, and closing it was rejected as scope creep. The consequence: an *unclaimed* install can be seized by whoever registers first. Claim a fresh instance immediately after it is exposed.
+  - The first-account-is-admin rule lives in `register()` and depends on the users table being empty. Anything that pre-creates a user (fixtures, scripts, a restored DB) disables it.
+  - `scanscribe promote-admin` remains the recovery path if the first registrant is the wrong account.
+- **Verification Performed:**
+  - `pytest tests/`: **169 passed**.
+  - First-run flow exercised on a throwaway DB, 11 assertions: `/` → `/app/register` with zero users, 5-char password → 400, first registration → 201 with `is_admin=True`, second registration → 201 with `is_admin=False`, `/` → `/app/` once claimed, admin login → 200, admin creates user → 201 non-admin.
+  - Live box: `users` count 0, service active, `GET /` → 307 → `/app/register`, `.env` now `-rw-------`.
+- **Next Tasks / Unfinished Work:**
+  - Register the first account on `.120` before exposing it further.
+  - Open-registration exposure should be revisited if the instance stays internet-reachable.
