@@ -1316,3 +1316,25 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Register the first account on `.120` before exposing it further.
   - Open-registration exposure should be revisited if the instance stays internet-reachable.
+
+---
+
+### 2026-11-20 01:35 | deepseek-v4.1-flash (Overseer — CLI launcher + polkit)
+- **Work Performed:**
+  1. **The launcher never used the venv.** `bin/scanscribe` derived its root from `BASH_SOURCE[0]`, but the command is invoked through the `/usr/local/bin/scanscribe` symlink, so `dirname` resolved to `/usr/local/bin` and `ROOT_DIR` became `/usr/local`. `.venv` was therefore never found and it fell through to the system `python3 -m app.cli`. That only worked when the caller happened to be standing in the install directory, because Python adds the CWD to `sys.path` for `-m`. It is now symlink-resolved with a portable `readlink` loop, so the venv interpreter is always used.
+  2. **`sudo scanscribe …` failed outright** with `ModuleNotFoundError: No module named 'app'` — the same root cause, plus sudo's environment reset. Fixed by (1).
+  3. **`scanscribe stop` raised an interactive polkit prompt** ("AUTHENTICATING FOR org.freedesktop.systemd1.manage-units") even though the user has passwordless sudo, because `_run_systemctl` tried the bare `systemctl` call first. It now tries `sudo -n` first (silent when NOPASSWD) and only falls back to plain `systemctl`, which can still satisfy polkit on a TTY. Running as root skips sudo entirely.
+  4. Failure output now names the action and prints the exact command to run.
+- **Live Ingestion Impact:** the service was bounced twice (stop/start) during verification. Note it had been left **down** by the user's failed `sudo scanscribe stop` sequence before the fix; it is running again.
+- **Gotchas / Warnings for Next Model:**
+  - Never derive the install root from `BASH_SOURCE[0]` without resolving symlinks; the published entry point is a symlink by design.
+  - Anything that invokes the CLI as root writes root-owned files under `logs/`.
+  - `install.sh` does not rewrite `bin/scanscribe`; it ships from the repo and is only `chmod +x`'d, so launcher fixes reach fresh installs via git.
+- **Verification Performed:**
+  - `scanscribe status` from `/tmp`: works (previously silent `ModuleNotFoundError`).
+  - `scanscribe stop`: no password prompt, unit `inactive` after 6 s.
+  - `scanscribe start`: unit `active`, HTTP 307.
+  - `sudo scanscribe status`: works, unit state shown.
+  - `pytest tests/`: **169 passed**.
+- **Next Tasks / Unfinished Work:**
+  - The `AUTOSTART` branch still needs one end-to-end run of `install.sh` on a scratch VM.

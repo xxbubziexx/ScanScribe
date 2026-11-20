@@ -213,24 +213,42 @@ def systemd_manages_service() -> bool:
 
 
 def _run_systemctl(action: str) -> int:
-    """Run a lifecycle action against the unit, elevating only when required."""
+    """Run a lifecycle action against the unit.
+
+    Non-interactive sudo is tried first: a plain `systemctl stop` makes polkit open a
+    text auth agent on the terminal and prompt for a password even when the user has
+    passwordless sudo, which looks like the command needs escalating. When sudo is not
+    available without a password we fall back to the plain call, which can still satisfy
+    polkit interactively.
+    """
     command = ["systemctl", action, SYSTEMD_UNIT]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=120)
+    attempts = []
+    if os.geteuid() != 0:
+        attempts.append((["sudo", "-n", *command], True))
+    attempts.append((command, False))
+
+    last_detail = "no output"
+    for argv, is_elevated in attempts:
+        try:
+            result = subprocess.run(argv, capture_output=True, text=True, timeout=120)
+        except (OSError, subprocess.SubprocessError) as exc:
+            last_detail = str(exc)
+            continue
         if result.returncode == 0:
             return 0
-        # Non-root installs need sudo; -n keeps it from hanging on a password prompt.
-        elevated = subprocess.run(
-            ["sudo", "-n", *command], capture_output=True, text=True, timeout=120
-        )
-        if elevated.returncode == 0:
-            return 0
-        detail = (elevated.stderr or result.stderr or "no output").strip()
-        print(f"[X] systemctl {action} {SYSTEMD_UNIT} failed: {detail}", file=sys.stderr)
-        return elevated.returncode or result.returncode
-    except (OSError, subprocess.SubprocessError) as exc:
-        print(f"[X] could not run systemctl: {exc}", file=sys.stderr)
-        return 1
+        detail = (result.stderr or result.stdout or "").strip()
+        if not is_elevated:
+            last_detail = detail or last_detail
+        elif detail:
+            # Keep the sudo failure only until a better one shows up.
+            last_detail = detail
+
+    print(
+        f"[X] could not {action} {SYSTEMD_UNIT}: {last_detail or 'unknown error'}\n"
+        f"    Try: sudo systemctl {action} {SYSTEMD_UNIT}",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def current_branch(default: str = "main") -> str:

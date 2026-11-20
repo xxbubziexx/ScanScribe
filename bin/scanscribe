@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks before deriving the install root. /usr/local/bin/scanscribe points at
+# this file, so BASH_SOURCE[0] is the *symlink* and dirname of it is /usr/local/bin —
+# that made ROOT_DIR=/usr/local, which silently skipped the venv and only worked when the
+# caller happened to be standing in the install directory.
+SELF="${BASH_SOURCE[0]}"
+while [ -L "$SELF" ]; do
+    LINK="$(readlink "$SELF")"
+    case "$LINK" in
+        /*) SELF="$LINK" ;;
+        *)  SELF="$(dirname "$SELF")/$LINK" ;;
+    esac
+done
+
+SCRIPT_DIR="$(cd "$(dirname "$SELF")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 export PYTHONPATH="$ROOT_DIR:${PYTHONPATH:-}"
 
