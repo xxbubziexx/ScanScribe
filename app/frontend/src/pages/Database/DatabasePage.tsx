@@ -18,6 +18,7 @@ import { LogRow } from './components/LogRow'
 import { LogExpandedRow } from './components/LogExpandedRow'
 import { MobileLogCard } from './components/MobileLogCard'
 import { ColResizeHandle, useResizableColumns } from '@/pages/DataExplorer/hooks/useResizableColumns'
+import { WorkbenchRefreshControl } from '@/pages/DataExplorer/components/WorkbenchRefreshControl'
 
 const DEFAULT_COL_WIDTHS = {
   time: 155,
@@ -283,14 +284,16 @@ export function DatabasePage() {
               Clear Filters
             </button>
           )}
-          <button
-            type="button"
-            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
-            onClick={() => void query.refetch()}
-            disabled={query.isFetching}
-          >
-            {query.isFetching ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <WorkbenchRefreshControl
+            total={data?.total}
+            dataUpdatedAt={query.dataUpdatedAt}
+            isFetching={query.isFetching}
+            filterKey={JSON.stringify([debouncedSearch, selectedTalkgroups, dateFrom, dateTo])}
+            onRefresh={async () => {
+              const res = await query.refetch()
+              return res.data?.total
+            }}
+          />
           <button
             type="button"
             className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"

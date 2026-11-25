@@ -8,6 +8,7 @@ import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import type { SpanStoreRow } from '@/types/events'
 import { ColResizeHandle, useResizableColumns } from '../hooks/useResizableColumns'
+import { WorkbenchRefreshControl } from '../components/WorkbenchRefreshControl'
 
 const PAGE_SIZES = [25, 50, 100] as const
 
@@ -224,14 +225,16 @@ export function SpansTable() {
               Clear Filters
             </button>
           )}
-          <button
-            type="button"
-            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
-            disabled={listQuery.isFetching}
-            onClick={() => void listQuery.refetch()}
-          >
-            {listQuery.isFetching ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <WorkbenchRefreshControl
+            total={listQuery.data?.total}
+            dataUpdatedAt={listQuery.dataUpdatedAt}
+            isFetching={listQuery.isFetching}
+            filterKey={JSON.stringify([monitorId, talkgroup, logEntryId, debouncedSearch, dateFrom, dateTo])}
+            onRefresh={async () => {
+              const res = await listQuery.refetch()
+              return res.data?.total
+            }}
+          />
         </div>
       </div>
 

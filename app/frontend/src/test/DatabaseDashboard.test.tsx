@@ -391,4 +391,79 @@ describe('Database Workbench Suite', () => {
     expect(screen.getAllByRole('button', { name: 'Accept & Save' }).length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByRole('textbox')[0]).toHaveValue('Two-five.')
   })
+
+  it('tracks relative last refreshed time and +N new entries delta on Refresh', async () => {
+    vi.mocked(logsApi.activeDates).mockResolvedValue({ dates: ['2026-11-24'] })
+    vi.mocked(logsApi.talkgroups).mockResolvedValue({ talkgroups: ['Fire Dispatch'] })
+    vi.mocked(logsApi.list).mockResolvedValueOnce({
+      total: 100,
+      page: 1,
+      page_size: 50,
+      total_pages: 2,
+      logs: [
+        {
+          id: 501,
+          filename: 'refresh_1.mp3',
+          talkgroup: 'Fire Dispatch',
+          timestamp: '2026-11-24T12:00:00',
+          duration: 3.1,
+          file_size: 1024,
+          confidence: 0.9,
+          transcript: 'Initial clip',
+          audio_path: 'audio_storage/2026/11/24/refresh_1.wav',
+          log_date: '2026-11-24',
+          created_at: '2026-11-24T12:00:00Z',
+          is_reviewed: false,
+          corrected_transcript: null,
+        },
+      ],
+    })
+
+    wrap(<DatabasePage />, ['/data/logs'])
+
+    expect(await screen.findByText('100 rows')).toBeInTheDocument()
+    expect(screen.getByText(/Last refreshed:/)).toBeInTheDocument()
+    expect(screen.getByText('just now')).toBeInTheDocument()
+    expect(screen.queryByText('+16')).not.toBeInTheDocument()
+
+    vi.mocked(logsApi.list).mockResolvedValueOnce({
+      total: 116,
+      page: 1,
+      page_size: 50,
+      total_pages: 3,
+      logs: [
+        {
+          id: 517,
+          filename: 'refresh_17.mp3',
+          talkgroup: 'Fire Dispatch',
+          timestamp: '2026-11-24T12:05:00',
+          duration: 4.0,
+          file_size: 2048,
+          confidence: 0.93,
+          transcript: 'Newer clip',
+          audio_path: 'audio_storage/2026/11/24/refresh_17.wav',
+          log_date: '2026-11-24',
+          created_at: '2026-11-24T12:05:00Z',
+          is_reviewed: false,
+          corrected_transcript: null,
+        },
+      ],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+
+    expect(await screen.findByText('+16')).toBeInTheDocument()
+    expect(screen.getByText('116 rows')).toBeInTheDocument()
+
+    vi.mocked(logsApi.list).mockResolvedValueOnce({
+      total: 116,
+      page: 1,
+      page_size: 50,
+      total_pages: 3,
+      logs: [],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    expect(await screen.findByText('+0')).toBeInTheDocument()
+  })
 })

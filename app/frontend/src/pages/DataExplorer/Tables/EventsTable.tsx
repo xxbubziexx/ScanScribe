@@ -8,6 +8,7 @@ import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import type { EventDetailResponse, EventListItem } from '@/types/events'
 import { ColResizeHandle, useResizableColumns } from '../hooks/useResizableColumns'
+import { WorkbenchRefreshControl } from '../components/WorkbenchRefreshControl'
 
 const PAGE_SIZES = [25, 50, 100] as const
 
@@ -375,14 +376,16 @@ export function EventsTable() {
               Clear Filters
             </button>
           )}
-          <button
-            type="button"
-            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
-            disabled={eventsQuery.isFetching}
-            onClick={() => void eventsQuery.refetch()}
-          >
-            {eventsQuery.isFetching ? 'Refreshing…' : 'Refresh'}
-          </button>
+          <WorkbenchRefreshControl
+            total={eventsQuery.data?.total}
+            dataUpdatedAt={eventsQuery.dataUpdatedAt}
+            isFetching={eventsQuery.isFetching}
+            filterKey={JSON.stringify([monitorId, status, debouncedSearch, dateFrom, dateTo])}
+            onRefresh={async () => {
+              const res = await eventsQuery.refetch()
+              return res.data?.total
+            }}
+          />
           <button
             type="button"
             className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"

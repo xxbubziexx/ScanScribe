@@ -1540,6 +1540,17 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Live UI check and `snapshot` → `main` promotion when ready.
 
+### 2026-11-25 16:48 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Refresh Delta Counter & Live Relative Timestamp Across Workbench Tables):**
+  - Created [`WorkbenchRefreshControl.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/components/WorkbenchRefreshControl.tsx) tracking relative `"Last refreshed: ..."` time (`just now`, `Xs ago`, `Xm ago`, `Xh ago` ticking every 10s), showing `+N` / `+0` / `-N` row count deltas since the previous refresh, resetting deltas when active filters change, and invalidating `['database-overview']` on manual refresh so sidebar Schema counts stay synchronized.
+  - Replaced standalone `Refresh` buttons with `<WorkbenchRefreshControl>` in [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx), [`SpansTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/SpansTable.tsx), [`EntitiesTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EntitiesTable.tsx), and [`EventsTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EventsTable.tsx).
+  - Added Vitest verification for `Last refreshed:` and `+16` / `+0` deltas in [`DatabaseDashboard.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatabaseDashboard.test.tsx).
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (`built in 1.40s`, `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx src/test/App.test.tsx src/test/TopNav.test.tsx src/test/AdminMobileRestriction.test.tsx`: **4 test files passed (22 tests passed)**.
+- **Next Tasks / Unfinished Work:**
+  - Live UI check and `snapshot` → `main` promotion when ready.
+
 
 
 
