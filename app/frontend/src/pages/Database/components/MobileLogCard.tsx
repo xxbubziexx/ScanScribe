@@ -6,6 +6,8 @@ import { LogExpandedRow } from './LogExpandedRow'
 export function MobileLogCard({
   row,
   isAdmin,
+  selected,
+  onToggleSelect,
   onDelete,
   deleting,
   expanded,
@@ -13,6 +15,8 @@ export function MobileLogCard({
 }: {
   row: LogListEntry
   isAdmin: boolean
+  selected: boolean
+  onToggleSelect: () => void
   onDelete: (id: number) => void
   deleting: boolean
   expanded: boolean
@@ -34,11 +38,20 @@ export function MobileLogCard({
       className={`p-3.5 rounded-xl border transition flex flex-col gap-2.5 ${
         expanded
           ? 'bg-indigo-950/30 border-indigo-500/40 shadow-lg'
-          : 'bg-white/[0.02] border-white/10 hover:border-white/20'
+          : selected
+            ? 'bg-indigo-950/20 border-indigo-500/30'
+            : 'bg-white/[0.02] border-white/10 hover:border-white/20'
       }`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-indigo-500 cursor-pointer shrink-0"
+            checked={selected}
+            onChange={onToggleSelect}
+            aria-label={`Select log entry ${row.id}`}
+          />
           <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-semibold font-mono truncate max-w-[140px]">
             {row.talkgroup || 'No Talkgroup'}
           </span>

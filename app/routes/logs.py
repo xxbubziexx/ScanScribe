@@ -10,16 +10,16 @@ import csv
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
+from ..config import get_settings
 from ..database import get_logs_db
 from ..models.user import User
 from ..models.log_entry import LogEntry
 from ..services.redaction_service import redact_ssn
-from ..utils.audio_paths import is_saved, resolve_audio_file
+from ..utils.audio_paths import NOT_SAVED, is_saved, resolve_audio_file
 from .auth import get_current_active_user
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ async def get_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
+    talkgroup: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     is_reviewed: Optional[bool] = None,
@@ -40,8 +41,8 @@ async def get_logs(
     db: Session = Depends(get_logs_db)
 ):
     """Get transcription logs with pagination and filtering."""
-    # Build query (exclude soft-deleted entries)
-    query = db.query(LogEntry).filter(LogEntry.is_deleted == False)
+    # Build query (exclude soft-deleted entries with IS NOT 1 to preserve idx_timestamp)
+    query = db.query(LogEntry).filter(LogEntry.is_deleted.is_not(True))
     
     # Apply search filter
     if search:
@@ -53,6 +54,8 @@ async def get_logs(
                 LogEntry.talkgroup.like(search_pattern)
             )
         )
+    if talkgroup and talkgroup.strip():
+        query = query.filter(LogEntry.talkgroup == talkgroup.strip())
     # Apply date filters
     if date_from:
         query = query.filter(LogEntry.log_date >= date_from.isoformat())
@@ -148,14 +151,15 @@ async def get_talkgroups(
 @router.get("/export")
 async def export_logs_csv(
     search: Optional[str] = None,
+    talkgroup: Optional[str] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db)
 ):
     """Export logs as CSV."""
-    # Build query (exclude soft-deleted entries)
-    query = db.query(LogEntry).filter(LogEntry.is_deleted == False)
+    # Build query (exclude soft-deleted entries with IS NOT 1)
+    query = db.query(LogEntry).filter(LogEntry.is_deleted.is_not(True))
     
     if search:
         search_pattern = f"%{search}%"
@@ -166,6 +170,8 @@ async def export_logs_csv(
                 LogEntry.talkgroup.like(search_pattern)
             )
         )
+    if talkgroup and talkgroup.strip():
+        query = query.filter(LogEntry.talkgroup == talkgroup.strip())
     
     if date_from:
         query = query.filter(LogEntry.log_date >= date_from.isoformat())
@@ -224,10 +230,6 @@ async def delete_log(
     db: Session = Depends(get_logs_db)
 ):
     """Delete a single log entry. Requires admin privileges."""
-    from fastapi import HTTPException
-    from pathlib import Path
-    from ..config import get_settings
-    
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -262,10 +264,6 @@ async def bulk_delete_logs(
     db: Session = Depends(get_logs_db)
 ):
     """Delete multiple log entries. Requires admin privileges."""
-    from fastapi import HTTPException
-    from pathlib import Path
-    from ..config import get_settings
-    
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Admin access required")
     
@@ -296,7 +294,7 @@ async def bulk_delete_logs(
 
 
 class BulkDownloadRequest(BaseModel):
-    ids: List[int]
+    ids: List[int] = Field(..., min_length=1, max_length=1000)
 
 
 def _safe_zip_name(name: str, max_len: int = 100) -> str:
@@ -308,20 +306,19 @@ def _safe_zip_name(name: str, max_len: int = 100) -> str:
 
 
 @router.post("/bulk-download")
-async def bulk_download_logs(
+def bulk_download_logs(
     request: BulkDownloadRequest,
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_logs_db),
 ):
-    """Download selected log entries as a zip (transcript .txt + audio when available)."""
-    from ..config import get_settings
-
-    if not request.ids:
+    """Download selected log entries as a ZIP containing audio/ files and metadata.csv."""
+    unique_ids = list(dict.fromkeys(request.ids))
+    if not unique_ids:
         raise HTTPException(status_code=400, detail="No IDs provided")
 
     logs = (
         db.query(LogEntry)
-        .filter(LogEntry.id.in_(request.ids), LogEntry.is_deleted == False)
+        .filter(LogEntry.id.in_(unique_ids), LogEntry.is_deleted.is_not(True))
         .order_by(LogEntry.timestamp.asc())
         .all()
     )
@@ -329,35 +326,69 @@ async def bulk_download_logs(
         raise HTTPException(status_code=404, detail="No matching log entries found")
 
     settings = get_settings()
+    output_dir = Path(settings.output_dir)
     buf = io.BytesIO()
+    audio_count = 0
+
+    csv_buf = io.StringIO()
+    writer = csv.writer(csv_buf)
+    writer.writerow([
+        "id",
+        "timestamp",
+        "log_date",
+        "talkgroup",
+        "filename",
+        "duration_seconds",
+        "file_size_bytes",
+        "confidence",
+        "is_reviewed",
+        "transcript",
+        "corrected_transcript",
+        "audio_file",
+        "audio_included",
+    ])
+
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for log in logs:
             base = _safe_zip_name(log.filename or f"log_{log.id}")
-            # Transcript as .txt (always include)
-            header = [
-                f"ID: {log.id}",
-                f"Filename: {log.filename or ''}",
-                f"Timestamp: {log.timestamp}",
-                f"Talkgroup: {log.talkgroup or 'N/A'}",
-                f"Duration: {log.duration or 0}s",
-                "",
-            ]
-            transcript_text = (log.transcript or "").strip()
-            content = "\n".join(header) + (("\n" + transcript_text) if transcript_text else "")
-            txt_arcname = f"{log.id}_{base}.txt"
-            zf.writestr(txt_arcname, content.encode("utf-8"))
-            # Audio file if present
+            audio_arcname = ""
+            audio_included = False
             if is_saved(log.audio_path):
-                audio_path = resolve_audio_file(log.audio_path, Path(settings.output_dir))
+                audio_path = resolve_audio_file(log.audio_path, output_dir)
                 if audio_path:
-                    zf.write(audio_path, f"{log.id}_{base}{audio_path.suffix}")
+                    audio_arcname = f"audio/{log.id}_{base}{audio_path.suffix}"
+                    zf.write(audio_path, audio_arcname)
+                    audio_included = True
+                    audio_count += 1
+
+            writer.writerow([
+                log.id,
+                log.timestamp.isoformat() if log.timestamp else "",
+                log.log_date or "",
+                log.talkgroup or "",
+                log.filename or "",
+                log.duration if log.duration is not None else "",
+                log.file_size if log.file_size is not None else "",
+                log.confidence if log.confidence is not None else "",
+                bool(log.is_reviewed),
+                log.transcript or "",
+                log.corrected_transcript or "",
+                audio_arcname,
+                audio_included,
+            ])
+
+        zf.writestr("metadata.csv", csv_buf.getvalue().encode("utf-8"))
 
     buf.seek(0)
-    filename = f"scanscribe_bulk_{date.today().isoformat()}.zip"
+    filename = f"scanscribe_audio_bulk_{date.today().isoformat()}.zip"
     return StreamingResponse(
         buf,
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "X-Export-Count": str(len(logs)),
+            "X-Audio-Count": str(audio_count),
+        },
     )
 
 
@@ -413,11 +444,10 @@ async def export_dataset(
     db: Session = Depends(get_logs_db)
 ):
     """Export a Whisper fine-tuning dataset (audio files + metadata.csv)."""
-    from ..config import get_settings
     settings = get_settings()
     
     query = db.query(LogEntry).filter(
-        LogEntry.is_deleted == False,
+        LogEntry.is_deleted.is_not(True),
         LogEntry.is_reviewed == True
     )
     if request and request.log_ids:

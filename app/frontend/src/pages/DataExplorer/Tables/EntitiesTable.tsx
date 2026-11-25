@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { eventsApi } from '@/lib/events'
 import { logsApi } from '@/lib/logs'
@@ -7,6 +7,7 @@ import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRange
 import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import type { EntityObservationItem } from '@/types/events'
+import { NerCsvExporterModal } from '../components/NerCsvExporterModal'
 
 const PAGE_SIZES = [25, 50, 100] as const
 
@@ -41,13 +42,14 @@ function copyToClipboard(text: string, onSuccess: () => void) {
 
 export function EntitiesTable() {
   const { addToast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [monitorId, setMonitorId] = useState<string>('')
-  const [label, setLabel] = useState<string>('')
-  const [talkgroup, setTalkgroup] = useState<string>('')
-  const [logEntryId, setLogEntryId] = useState<string>('')
-  const [spanStoreId, setSpanStoreId] = useState<string>('')
-  const [search, setSearch] = useState<string>('')
-  const [debouncedSearch, setDebouncedSearch] = useState<string>('')
+  const [label, setLabel] = useState<string>(() => searchParams.get('label') ?? '')
+  const [talkgroup, setTalkgroup] = useState<string>(() => searchParams.get('talkgroup') ?? '')
+  const [logEntryId, setLogEntryId] = useState<string>(() => searchParams.get('log_entry_id') ?? '')
+  const [spanStoreId, setSpanStoreId] = useState<string>(() => searchParams.get('span_store_id') ?? '')
+  const [search, setSearch] = useState<string>(() => searchParams.get('q') ?? '')
+  const [debouncedSearch, setDebouncedSearch] = useState<string>(() => searchParams.get('q') ?? '')
   const [dateFrom, setDateFrom] = useState<string>('')
   const [dateTo, setDateTo] = useState<string>('')
   const [sortBy, setSortBy] = useState<string>('id')
@@ -56,6 +58,18 @@ export function EntitiesTable() {
   const [page, setPage] = useState<number>(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [jsonViewId, setJsonViewId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [exporterOpen, setExporterOpen] = useState<boolean>(() => searchParams.get('export') === '1')
+  const [exporterDefaultScope, setExporterDefaultScope] = useState<'filters' | 'selected'>('filters')
+
+  useEffect(() => {
+    if (searchParams.get('export') === '1') {
+      setExporterOpen(true)
+      const next = new URLSearchParams(searchParams)
+      next.delete('export')
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const activeDatesQuery = useQuery({
     queryKey: ['database-active-dates'],
@@ -137,6 +151,58 @@ export function EntitiesTable() {
   const total = listQuery.data?.total ?? 0
   const rows = listQuery.data?.items ?? []
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
+  const availableLabels = labelsQuery.data?.labels ?? ['EVT_TYPE', 'LOC', 'ADDRESS', 'UNIT', 'STATUS', 'TIME']
+
+  const pageIds = useMemo(() => rows.map((r) => r.id), [rows])
+  const selectedOnPageCount = useMemo(
+    () => pageIds.filter((id) => selectedIds.has(id)).length,
+    [pageIds, selectedIds],
+  )
+  const allOnPageSelected = pageIds.length > 0 && selectedOnPageCount === pageIds.length
+  const someOnPageSelected = selectedOnPageCount > 0 && selectedOnPageCount < pageIds.length
+
+  const selectAllRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someOnPageSelected
+    }
+  }, [someOnPageSelected])
+
+  const toggleRowSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleSelectPage = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allOnPageSelected) {
+        for (const id of pageIds) next.delete(id)
+      } else {
+        for (const id of pageIds) next.add(id)
+      }
+      return next
+    })
+  }, [allOnPageSelected, pageIds])
+
+  const hasFilters = Boolean(
+    monitorId || label || talkgroup.trim() || logEntryId.trim() || spanStoreId.trim() || search.trim() || dateFrom || dateTo,
+  )
+  const clearFilters = () => {
+    setMonitorId('')
+    setLabel('')
+    setTalkgroup('')
+    setLogEntryId('')
+    setSpanStoreId('')
+    setSearch('')
+    setDebouncedSearch('')
+    setDateFrom('')
+    setDateTo('')
+  }
 
   const toggleSort = (col: string) => {
     if (sortBy === col) {
@@ -272,15 +338,63 @@ export function EntitiesTable() {
           </span>
         </div>
 
-        <button
-          type="button"
-          className="ss-btn-ghost h-8 text-xs"
-          disabled={listQuery.isFetching}
-          onClick={() => void listQuery.refetch()}
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {hasFilters && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 text-xs cursor-pointer"
+              onClick={clearFilters}
+            >
+              Clear Filters
+            </button>
+          )}
+          <button
+            type="button"
+            className="ss-btn-primary h-8 px-3 text-xs cursor-pointer"
+            onClick={() => {
+              setExporterDefaultScope('filters')
+              setExporterOpen(true)
+            }}
+          >
+            Export NER CSV
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-8 text-xs cursor-pointer"
+            disabled={listQuery.isFetching}
+            onClick={() => void listQuery.refetch()}
+          >
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-2">
+          <div className="flex items-center gap-3 text-xs">
+            <span className="font-semibold text-emerald-100">
+              {selectedIds.size} observation{selectedIds.size === 1 ? '' : 's'} selected
+            </span>
+            <button
+              type="button"
+              className="text-emerald-300 hover:text-white underline cursor-pointer"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear selection
+            </button>
+          </div>
+          <button
+            type="button"
+            className="ss-btn-primary h-7 px-3 text-xs cursor-pointer"
+            onClick={() => {
+              setExporterDefaultScope('selected')
+              setExporterOpen(true)
+            }}
+          >
+            Export Selected CSV ({selectedIds.size})
+          </button>
+        </div>
+      )}
 
       {(logEntryInvalid || spanStoreInvalid) && (
         <p className="ss-form-error" role="alert">
@@ -301,6 +415,16 @@ export function EntitiesTable() {
           <table className="ss-events-table w-full text-left text-xs">
             <thead>
               <tr>
+                <th className="w-8 text-center">
+                  <input
+                    ref={selectAllRef}
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-emerald-500 cursor-pointer"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectPage}
+                    aria-label="Select all observations on this page"
+                  />
+                </th>
                 <th className="w-8" />
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('id')}>
                   ID {renderSortIndicator('id')}
@@ -329,12 +453,29 @@ export function EntitiesTable() {
             <tbody>
               {rows.map((row: EntityObservationItem) => {
                 const isOpen = expandedId === row.id
+                const isSelected = selectedIds.has(row.id)
                 return (
                   <Fragment key={row.id}>
                     <tr
-                      className="cursor-pointer hover:bg-white/[0.03] transition-colors"
+                      className={`cursor-pointer hover:bg-white/[0.03] transition-colors ${
+                        isSelected ? 'bg-emerald-500/[0.07]' : ''
+                      }`}
                       onClick={() => setExpandedId(isOpen ? null : row.id)}
                     >
+                      <td
+                        className="text-center"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 accent-emerald-500 cursor-pointer"
+                          checked={isSelected}
+                          onChange={() => toggleRowSelect(row.id)}
+                          aria-label={`Select observation ${row.id}`}
+                        />
+                      </td>
                       <td className="text-gray-500">{isOpen ? '▼' : '▶'}</td>
                       <td className="font-mono text-gray-400">#{row.id}</td>
                       <td className="text-gray-300">
@@ -357,7 +498,7 @@ export function EntitiesTable() {
                       </td>
                       <td className="font-mono">
                         <Link
-                          to="/data/spans"
+                          to={`/data/spans?log_entry_id=${row.log_entry_id ?? ''}`}
                           className="text-sky-300 hover:underline"
                           onClick={(e) => e.stopPropagation()}
                           title="Open in Spans table"
@@ -368,7 +509,7 @@ export function EntitiesTable() {
                       <td className="font-mono text-gray-400">
                         {row.log_entry_id != null ? (
                           <Link
-                            to="/data/logs"
+                            to={`/data/logs?search=${encodeURIComponent(row.talkgroup || '')}`}
                             className="text-amber-300/90 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                             title="Open in Audio Logs"
@@ -527,6 +668,24 @@ export function EntitiesTable() {
           </div>
         </div>
       ) : null}
+
+      <NerCsvExporterModal
+        open={exporterOpen}
+        onClose={() => setExporterOpen(false)}
+        availableLabels={availableLabels}
+        selectedIds={selectedIds}
+        defaultScope={exporterDefaultScope}
+        activeFilters={{
+          monitorId: monitorId ? Number.parseInt(monitorId, 10) : undefined,
+          talkgroup: talkgroup.trim() || undefined,
+          logEntryId: logEntryFilter,
+          spanStoreId: spanStoreFilter,
+          q: debouncedSearch.trim() || undefined,
+          dateFrom: dateFrom.trim() || undefined,
+          dateTo: dateTo.trim() || undefined,
+          initialLabel: label || undefined,
+        }}
+      />
     </div>
   )
 }

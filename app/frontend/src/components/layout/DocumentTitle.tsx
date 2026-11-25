@@ -7,6 +7,12 @@ function titleForPath(pathname: string): string {
     '/insights': 'Insights',
     '/intel': 'Intelligence',
     '/logs': 'Database',
+    '/data': 'Database Overview',
+    '/data/logs': 'Audio Logs',
+    '/data/spans': 'Span Store',
+    '/data/entities': 'NER Entities',
+    '/data/events': 'Events Table',
+    '/data/dataset': 'Fine-Tuning Dataset',
 
     '/events': 'Events',
     '/events/monitors': 'Monitor config',

@@ -5,6 +5,8 @@ import { formatBytes } from '../utils/formatBytes'
 export function LogRow({
   row,
   isAdmin,
+  selected,
+  onToggleSelect,
   onDelete,
   deleting,
   expanded,
@@ -12,6 +14,8 @@ export function LogRow({
 }: {
   row: LogListEntry
   isAdmin: boolean
+  selected: boolean
+  onToggleSelect: () => void
   onDelete: (id: number) => void
   deleting: boolean
   expanded: boolean
@@ -20,10 +24,26 @@ export function LogRow({
   const hasAudio = row.audio_path && row.audio_path !== 'file not saved'
   return (
     <tr
-      className={`ss-db-row ${expanded ? 'ss-db-row--expanded' : ''}`}
+      className={`ss-db-row ${expanded ? 'ss-db-row--expanded' : ''} ${
+        selected ? 'bg-indigo-500/[0.08]' : ''
+      }`}
       onClick={onToggleExpand}
       aria-expanded={expanded}
     >
+      <td
+        className="ss-db-td w-9 text-center"
+        onClick={(e) => {
+          e.stopPropagation()
+        }}
+      >
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-indigo-500 cursor-pointer"
+          checked={selected}
+          onChange={onToggleSelect}
+          aria-label={`Select log entry ${row.id}`}
+        />
+      </td>
       <td className="ss-db-td font-mono text-xs text-gray-400">
         <span className={`ss-db-expand-icon ${expanded ? 'ss-db-expand-icon--open' : ''}`}>▶</span>{' '}
         {row.timestamp
@@ -66,7 +86,7 @@ export function LogRow({
           {hasAudio && (
             <button
               type="button"
-              className="ss-text-link"
+              className="ss-text-link cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()
                 void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
@@ -76,13 +96,13 @@ export function LogRow({
               title="Download audio file directly"
               aria-label="Download audio file directly"
             >
-              ⬇️
+              Audio
             </button>
           )}
           {isAdmin && (
             <button
               type="button"
-              className="ss-btn-filter-clear"
+              className="ss-btn-filter-clear cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()
                 onDelete(row.id)
@@ -91,7 +111,7 @@ export function LogRow({
               title="Remove log entry"
               aria-label="Remove log entry"
             >
-              🗑️
+              Delete
             </button>
           )}
         </div>

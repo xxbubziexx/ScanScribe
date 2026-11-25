@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { eventsApi } from '@/lib/events'
 import { logsApi } from '@/lib/logs'
@@ -61,9 +61,10 @@ function copyToClipboard(text: string, onSuccess: () => void) {
 
 export function SpansTable() {
   const { addToast } = useToast()
+  const [searchParams] = useSearchParams()
   const [monitorId, setMonitorId] = useState<string>('')
-  const [talkgroup, setTalkgroup] = useState<string>('')
-  const [logEntryId, setLogEntryId] = useState<string>('')
+  const [talkgroup, setTalkgroup] = useState<string>(() => searchParams.get('talkgroup') ?? '')
+  const [logEntryId, setLogEntryId] = useState<string>(() => searchParams.get('log_entry_id') ?? '')
   const [search, setSearch] = useState<string>('')
   const [debouncedSearch, setDebouncedSearch] = useState<string>('')
   const [dateFrom, setDateFrom] = useState<string>('')

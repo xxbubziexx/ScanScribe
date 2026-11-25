@@ -166,3 +166,19 @@ export interface EntityObservationListResponse {
   items: EntityObservationItem[]
   total: number
 }
+
+export interface EntityCsvExportRequest {
+  labels: string[]
+  ids?: number[]
+  deduplicate: boolean
+  include_counts: boolean
+  include_context: boolean
+  monitor_id?: number
+  talkgroup?: string
+  log_entry_id?: number
+  span_store_id?: number
+  q?: string
+  date_from?: string
+  date_to?: string
+  limit?: number
+}

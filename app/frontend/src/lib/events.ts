@@ -1,6 +1,7 @@
 import { request } from './api'
 import { ApiError } from '../types/api'
 import type {
+  EntityCsvExportRequest,
   EntityObservationListResponse,
   EventDetailResponse,
   EventsListResponse,
@@ -264,4 +265,53 @@ export async function downloadEventsExportHeaders(args: {
   a.download = `scanscribe_events_headers_${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
+}
+
+export async function downloadEntitiesCsv(
+  payload: EntityCsvExportRequest,
+): Promise<{ rowCount: number }> {
+  const token = getToken()
+  const res = await fetch(`${BASE}${EVENTS_API}/entities/export-csv`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`
+    try {
+      const body: unknown = await res.json()
+      if (body && typeof body === 'object' && 'detail' in body) {
+        const d = (body as { detail: unknown }).detail
+        detail = typeof d === 'string' ? d : String(d)
+      }
+    } catch {
+      // ignore parse errors
+    }
+    if (res.status === 401) {
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('username')
+    }
+    throw new ApiError(detail, res.status)
+  }
+
+  const rowCount = Number(res.headers.get('X-Row-Count') ?? 0) || 0
+  const disp = res.headers.get('Content-Disposition') ?? ''
+  const match = /filename=([^;]+)/i.exec(disp)
+  const filename = match
+    ? match[1].replace(/["']/g, '').trim()
+    : `scanscribe_ner_${new Date().toISOString().slice(0, 10)}.csv`
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+  return { rowCount }
 }

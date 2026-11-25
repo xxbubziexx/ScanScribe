@@ -45,6 +45,23 @@ class EntityObservationListResponse(BaseModel):
     total: int
 
 
+class EntityCsvExportRequest(BaseModel):
+    """Request payload for NER raw-values CSV export."""
+    labels: List[str] = Field(default_factory=list)
+    ids: Optional[List[int]] = None
+    deduplicate: bool = False
+    include_counts: bool = True
+    include_context: bool = False
+    monitor_id: Optional[int] = Field(default=None, ge=1)
+    talkgroup: Optional[str] = Field(default=None, max_length=255)
+    log_entry_id: Optional[int] = Field(default=None, ge=1)
+    span_store_id: Optional[int] = Field(default=None, ge=1)
+    q: Optional[str] = Field(default=None, max_length=500)
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    limit: int = Field(default=100_000, ge=1, le=250_000)
+
+
 class EventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

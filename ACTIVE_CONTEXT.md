@@ -1396,4 +1396,32 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Validate on the live Ubuntu node with `enabled: false, ner_only: true` and an enabled `Monitor`.
 
+---
+
+### 2026-11-24 20:58 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Database Explorer Suite Upgrade):**
+  1. **Database Overview Dashboard (`GET /api/maintenance/overview`, [`DatabaseOverviewPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatabaseOverviewPage.tsx)):**
+     - Added Pydantic v2 schemas in [`app/schemas/maintenance.py`](file:///a:/Scanscribe_Projects/scanscribe/app/schemas/maintenance.py) and admin-only synchronous endpoint in [`app/routes/maintenance.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/maintenance.py) reporting SQLite file/WAL/SHM/PRAGMA footprint, DB-derived audio storage metrics (no `rglob`), table inventory counts & date bounds, NER pipeline mode/coverage/per-label counts, 7-day ingest volume, and top 24h talkgroups.
+     - Registered Overview as the `/data` index route in [`App.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/App.tsx) and [`DataExplorerLayout.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DataExplorerLayout.tsx).
+  2. **Audio Logs Selection & Bulk Audio ZIP Download ([`app/routes/logs.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/logs.py), [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx), [`LogRow.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/LogRow.tsx), [`MobileLogCard.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/MobileLogCard.tsx)):**
+     - Added `talkgroup` filter to `GET /api/logs` and `GET /api/logs/export`, converted `POST /api/logs/bulk-download` to synchronous ZIP streaming (`audio/` files + `metadata.csv`, `X-Export-Count` / `X-Audio-Count` headers), and aligned active-log queries to `LogEntry.is_deleted.is_not(True)`.
+     - Added cross-page row selection checkboxes, talkgroup dropdown, clear-filters button, bulk ZIP download bar, and admin bulk delete on Audio Logs.
+  3. **NER Raw-Values CSV Exporter (`POST /api/events/entities/export-csv`, [`spans_router.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/events/spans_router.py), [`NerCsvExporterModal.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/components/NerCsvExporterModal.tsx), [`EntitiesTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EntitiesTable.tsx)):**
+     - Supports multi-select NER labels, active filter pass-through or checked-row restriction (`ids`), deduplication with optional occurrence counts, and optional context columns (`SpanStore.transcript`, talkgroups, timestamps).
+     - Wired deep-linking query params (`?label=`, `?export=1`, `?talkgroup=`, `?log_entry_id=`) across Overview, Audio Logs, Span Store ([`SpansTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/SpansTable.tsx)), and NER Entities.
+- **Live Ubuntu Ingestion Impact:**
+  - Zero ingestion impact. `GET /api/maintenance/overview` uses `LogEntry.is_deleted.is_not(True)` (`IS NOT 1`) and avoids disk walks.
+- **Gotchas / Warnings for Next Model:**
+  - `npm --prefix app/frontend run build` rebuilt `app/frontend/dist` with the updated React bundle.
+  - Pre-existing environment failure remains in `app/frontend/src/test/DatePickers.test.tsx` (2 tests expecting Oct 2026 calendar cells while system date is Nov 2026); all other 9 frontend test files (including new `DatabaseDashboard.test.tsx`) and all 186 backend tests pass.
+- **Verification Performed:**
+  - `.venv\Scripts\python.exe -m pytest tests/test_database_dashboard.py -v`: **3 passed in 1.85s**.
+  - `.venv\Scripts\python.exe -m pytest tests/ -q`: **186 passed, 2 warnings in 33.03s**.
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` succeeded cleanly (0 errors).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx` (from `app/frontend`): **3 passed in 471ms**.
+  - Full `npx.cmd vitest run` (from `app/frontend`, prior to adding `DatabaseDashboard.test.tsx`): **50 passed, 2 pre-existing failures** in `DatePickers.test.tsx`.
+- **Next Tasks / Unfinished Work:**
+  - Live UI validation on the station browser and promotion from `snapshot` → `main` when ready.
+
+
 

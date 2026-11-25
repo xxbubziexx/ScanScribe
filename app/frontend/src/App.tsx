@@ -13,6 +13,7 @@ import { DatabasePage } from '@/pages/Database/DatabasePage'
 
 import { DatasetPage } from '@/pages/DataExplorer/DatasetPage'
 import { DataExplorerLayout } from '@/pages/DataExplorer/DataExplorerLayout'
+import { DatabaseOverviewPage } from '@/pages/DataExplorer/DatabaseOverviewPage'
 import { EventsTable } from '@/pages/DataExplorer/Tables/EventsTable'
 import { SpansTable } from '@/pages/DataExplorer/Tables/SpansTable'
 import { EntitiesTable } from '@/pages/DataExplorer/Tables/EntitiesTable'
@@ -65,7 +66,7 @@ export default function App() {
           {/* Desktop-only Admin Routes */}
           <Route element={<RequireAdmin />}>
             <Route path="/data" element={<DataExplorerLayout />}>
-              <Route index element={<Navigate to="events" replace />} />
+              <Route index element={<DatabaseOverviewPage />} />
               <Route path="events" element={<EventsTable />} />
               <Route path="spans" element={<SpansTable />} />
               <Route path="entities" element={<EntitiesTable />} />

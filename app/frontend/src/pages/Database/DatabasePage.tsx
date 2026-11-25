@@ -1,8 +1,14 @@
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/context/ToastContext'
-import { buildListParams, downloadLogsExport, logsApi } from '@/lib/logs'
+import {
+  buildListParams,
+  downloadBulkAudioZip,
+  downloadLogsExport,
+  logsApi,
+} from '@/lib/logs'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { errorMessage } from '@/types/api'
 import type { LogsSortBy } from '@/types/logs'
@@ -24,10 +30,12 @@ export function DatabasePage() {
   const { user } = useAuth()
   const { addToast } = useToast()
   const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
   const isAdmin = user?.is_admin === true
 
-  const [searchInput, setSearchInput] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '')
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') ?? '')
+  const [talkgroup, setTalkgroup] = useState(() => searchParams.get('talkgroup') ?? '')
 
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -38,10 +46,20 @@ export function DatabasePage() {
     staleTime: 5 * 60_000,
   })
   const activeDateList = activeDatesQuery.data?.dates
+
+  const talkgroupsQuery = useQuery({
+    queryKey: ['logs-talkgroups-all'],
+    queryFn: () => logsApi.talkgroups(),
+    staleTime: 60_000,
+  })
+  const talkgroupList = talkgroupsQuery.data?.talkgroups ?? []
+
   const [sortBy, setSortBy] = useState<LogsSortBy>('timestamp_desc')
   const [pageSize, setPageSize] = useState(50)
   const [page, setPage] = useState(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [isDownloadingZip, setIsDownloadingZip] = useState(false)
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput), 400)
@@ -50,20 +68,30 @@ export function DatabasePage() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, dateFrom, dateTo, sortBy, pageSize])
+  }, [debouncedSearch, talkgroup, dateFrom, dateTo, sortBy, pageSize])
 
   useEffect(() => {
     setExpandedId(null)
-  }, [page, pageSize, debouncedSearch, dateFrom, dateTo, sortBy])
+  }, [page, pageSize, debouncedSearch, talkgroup, dateFrom, dateTo, sortBy])
 
   const query = useQuery({
-    queryKey: ['database-logs', page, pageSize, debouncedSearch, dateFrom, dateTo, sortBy],
+    queryKey: [
+      'database-logs',
+      page,
+      pageSize,
+      debouncedSearch,
+      talkgroup,
+      dateFrom,
+      dateTo,
+      sortBy,
+    ],
     queryFn: () =>
       logsApi.list(
         buildListParams({
           page,
           pageSize,
           search: debouncedSearch,
+          talkgroup,
           dateFrom,
           dateTo,
           sortBy,
@@ -76,14 +104,69 @@ export function DatabasePage() {
   const total = data?.total ?? 0
   const totalPages = data?.total_pages ?? 0
 
+  const pageIds = useMemo(() => rows.map((r) => r.id), [rows])
+  const selectedOnPageCount = useMemo(
+    () => pageIds.filter((id) => selectedIds.has(id)).length,
+    [pageIds, selectedIds],
+  )
+  const allOnPageSelected = pageIds.length > 0 && selectedOnPageCount === pageIds.length
+  const someOnPageSelected = selectedOnPageCount > 0 && selectedOnPageCount < pageIds.length
+
+  const selectAllRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => {
+    if (selectAllRef.current) {
+      selectAllRef.current.indeterminate = someOnPageSelected
+    }
+  }, [someOnPageSelected])
+
+  const toggleRowSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  const toggleSelectPage = useCallback(() => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allOnPageSelected) {
+        for (const id of pageIds) next.delete(id)
+      } else {
+        for (const id of pageIds) next.add(id)
+      }
+      return next
+    })
+  }, [allOnPageSelected, pageIds])
+
   const delMutation = useMutation({
     mutationFn: (id: number) => logsApi.delete(id),
-    onSuccess: () => {
+    onSuccess: (_res, id) => {
       addToast('Log entry removed', 'success')
+      setSelectedIds((prev) => {
+        if (!prev.has(id)) return prev
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
       void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['database-overview'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Delete failed'), 'error'),
+  })
+
+  const bulkDelMutation = useMutation({
+    mutationFn: (ids: number[]) => logsApi.bulkDelete(ids),
+    onSuccess: (res) => {
+      addToast(`Deleted ${res.deleted} log entries`, 'success')
+      setSelectedIds(new Set())
+      void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['database-overview'] })
+    },
+    onError: (e: unknown) => addToast(errorMessage(e, 'Bulk delete failed'), 'error'),
   })
 
   const onDelete = useCallback(
@@ -95,19 +178,67 @@ export function DatabasePage() {
     [delMutation, isAdmin],
   )
 
+  const onBulkDelete = () => {
+    if (!isAdmin || selectedIds.size === 0) return
+    if (!window.confirm(`Permanently delete ${selectedIds.size} selected log entries and their audio files?`)) {
+      return
+    }
+    bulkDelMutation.mutate(Array.from(selectedIds))
+  }
+
+  const onBulkDownloadZip = async () => {
+    if (selectedIds.size === 0) return
+    setIsDownloadingZip(true)
+    try {
+      const { exportCount, audioCount } = await downloadBulkAudioZip(Array.from(selectedIds))
+      addToast(
+        `Downloaded ZIP (${exportCount} log${exportCount === 1 ? '' : 's'}, ${audioCount} audio file${audioCount === 1 ? '' : 's'})`,
+        'success',
+      )
+    } catch (e) {
+      addToast(errorMessage(e, 'Bulk ZIP download failed'), 'error')
+    } finally {
+      setIsDownloadingZip(false)
+    }
+  }
+
   const onExport = async () => {
     try {
-      await downloadLogsExport({ search: debouncedSearch, dateFrom, dateTo })
-      addToast('Export started', 'success')
+      await downloadLogsExport({ search: debouncedSearch, talkgroup, dateFrom, dateTo })
+      addToast('CSV export started', 'success')
     } catch (e) {
       addToast(errorMessage(e, 'Export failed'), 'error')
     }
   }
 
+  const hasFilters = Boolean(searchInput.trim() || talkgroup || dateFrom || dateTo)
+  const clearFilters = () => {
+    setSearchInput('')
+    setDebouncedSearch('')
+    setTalkgroup('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
   return (
     <div className="ss-db-page">
-      <h1 className="ss-db-title">Database</h1>
-      <p className="mb-4 text-sm text-gray-500">Browse and search transcription log entries.</p>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-base font-semibold text-gray-200">Audio Logs</h2>
+          <p className="text-xs text-gray-500">
+            Browse, filter, select rows across pages, and download bulk audio ZIP archives.
+          </p>
+        </div>
+        {hasFilters && (
+          <button
+            type="button"
+            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+            onClick={clearFilters}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
 
       <div className="ss-db-filters">
         <div className="min-w-0 w-full md:flex-1">
@@ -123,6 +254,24 @@ export function DatabasePage() {
             placeholder="Transcript, filename, talkgroup…"
             autoComplete="off"
           />
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="ss-form-label" htmlFor="db-talkgroup">
+            Talkgroup
+          </label>
+          <select
+            id="db-talkgroup"
+            className="ss-select w-full sm:min-w-[11rem] min-h-[40px]"
+            value={talkgroup}
+            onChange={(e) => setTalkgroup(e.target.value)}
+          >
+            <option value="">All Talkgroups</option>
+            {talkgroupList.map((tg) => (
+              <option key={tg} value={tg}>
+                {tg}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="w-full sm:w-auto">
           <DatabaseDateRangePicker
@@ -183,6 +332,45 @@ export function DatabasePage() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/35 bg-indigo-500/10 px-4 py-2.5">
+          <div className="flex items-center gap-3 text-xs">
+            <span className="font-semibold text-indigo-100">
+              {selectedIds.size} {selectedIds.size === 1 ? 'entry' : 'entries'} selected
+            </span>
+            <button
+              type="button"
+              className="text-indigo-300 hover:text-white underline cursor-pointer"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear selection
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="ss-btn-primary h-8 px-3.5 text-xs cursor-pointer disabled:opacity-50"
+              onClick={() => void onBulkDownloadZip()}
+              disabled={isDownloadingZip}
+            >
+              {isDownloadingZip
+                ? 'Building ZIP…'
+                : `Download ZIP (${selectedIds.size})`}
+            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                className="ss-btn-ghost h-8 px-3 text-xs text-red-300 border-red-500/30 hover:bg-red-500/15 cursor-pointer disabled:opacity-50"
+                onClick={onBulkDelete}
+                disabled={bulkDelMutation.isPending}
+              >
+                {bulkDelMutation.isPending ? 'Deleting…' : 'Delete Selected'}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {query.isError && (
         <p className="ss-form-error mb-4" role="alert">
           {errorMessage(query.error, 'Failed to load logs')}
@@ -201,6 +389,16 @@ export function DatabasePage() {
             <table className="ss-db-table">
               <thead>
                 <tr>
+                  <th className="ss-db-th w-9 text-center">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      className="h-4 w-4 accent-indigo-500 cursor-pointer"
+                      checked={allOnPageSelected}
+                      onChange={toggleSelectPage}
+                      aria-label="Select all entries on this page"
+                    />
+                  </th>
                   <th className="ss-db-th">Time</th>
                   <th className="ss-db-th">Talkgroup</th>
                   <th className="ss-db-th">Filename</th>
@@ -217,6 +415,8 @@ export function DatabasePage() {
                     <LogRow
                       row={row}
                       isAdmin={isAdmin}
+                      selected={selectedIds.has(row.id)}
+                      onToggleSelect={() => toggleRowSelect(row.id)}
                       onDelete={onDelete}
                       deleting={delMutation.isPending}
                       expanded={expandedId === row.id}
@@ -226,7 +426,7 @@ export function DatabasePage() {
                     />
                     {expandedId === row.id && (
                       <tr>
-                        <td className="ss-db-td p-0" colSpan={8}>
+                        <td className="ss-db-td p-0" colSpan={9}>
                           <LogExpandedRow row={row} />
                         </td>
                       </tr>
@@ -243,6 +443,8 @@ export function DatabasePage() {
                 key={row.id}
                 row={row}
                 isAdmin={isAdmin}
+                selected={selectedIds.has(row.id)}
+                onToggleSelect={() => toggleRowSelect(row.id)}
                 onDelete={onDelete}
                 deleting={delMutation.isPending}
                 expanded={expandedId === row.id}
@@ -253,7 +455,7 @@ export function DatabasePage() {
 
           <div className="ss-db-pager">
             <span className="w-full sm:w-auto text-center sm:text-left text-xs sm:text-sm">
-              {total} entries
+              {total.toLocaleString()} entries
               {query.isFetching && !query.isLoading ? ' · …' : ''}
             </span>
             <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
