@@ -221,8 +221,9 @@ export function EntitiesTable() {
   return (
     <div className="ss-workbench-pane">
       <div className="ss-workbench-header">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-gray-100">NER Entity Observations</h2>
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-sm font-semibold tracking-tight text-slate-100">NER Entity Observations</h2>
+          <span className="font-mono text-[11px] text-slate-500">entity_observations</span>
           <span className="ss-events-pill-tiny font-mono">
             {total.toLocaleString()} observation{total === 1 ? '' : 's'}
           </span>

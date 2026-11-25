@@ -134,7 +134,8 @@
   }
 
   .ss-db-row--expanded {
-    @apply bg-indigo-500/10;
+    @apply bg-indigo-500/[0.09];
+    box-shadow: inset 2px 0 0 #818cf8;
   }
 
   .ss-db-expand-icon {
@@ -176,15 +177,15 @@
   /* Full-bleed Database Workbench */
   .ss-workbench {
     color-scheme: dark;
-    @apply flex h-[calc(100dvh-3.5rem)] w-full flex-col lg:flex-row bg-[#0b0d13] overflow-hidden;
+    @apply flex h-[calc(100dvh-3.5rem)] w-full flex-col lg:flex-row bg-[#090b10] overflow-hidden;
   }
 
   .ss-workbench-rail {
-    @apply flex w-full shrink-0 flex-col border-b border-white/10 bg-[#10131c] lg:w-64 lg:border-b-0 lg:border-r;
+    @apply flex w-full shrink-0 flex-col border-b border-[#1e2433] bg-[#0d1018] lg:w-64 lg:border-b-0 lg:border-r;
   }
 
   .ss-workbench-main {
-    @apply flex min-w-0 flex-1 flex-col overflow-hidden bg-[#0c0f16];
+    @apply flex min-w-0 flex-1 flex-col overflow-hidden bg-[#0a0d14];
   }
 
   .ss-workbench-pane {
@@ -192,19 +193,39 @@
   }
 
   .ss-workbench-header {
-    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#111520] px-4 py-3 sm:px-5;
+    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#1f2636] bg-[#111520] px-4 py-2.5 sm:px-5;
   }
 
   .ss-workbench-filters {
-    @apply relative z-20 flex shrink-0 flex-wrap items-end gap-2.5 border-b border-white/[0.07] bg-[#0e1119] px-4 py-2.5 sm:px-5;
+    @apply relative z-20 flex shrink-0 flex-wrap items-end gap-2.5 border-b border-[#192030] bg-[#0d111a] px-4 py-2.5 sm:px-5;
   }
 
   .ss-workbench-bulkbar {
-    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-indigo-500/30 bg-indigo-500/10 px-4 py-2 sm:px-5;
+    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-indigo-500/35 bg-indigo-500/10 px-4 py-2 sm:px-5;
   }
 
   .ss-workbench-grid-wrap {
     @apply min-h-0 flex-1 overflow-auto;
+    scrollbar-width: thin;
+    scrollbar-color: #262e40 transparent;
+  }
+
+  .ss-workbench-grid-wrap::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .ss-workbench-grid-wrap::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .ss-workbench-grid-wrap::-webkit-scrollbar-thumb {
+    background-color: #242c3d;
+    border-radius: 2px;
+  }
+
+  .ss-workbench-grid-wrap::-webkit-scrollbar-thumb:hover {
+    background-color: #364159;
   }
 
   .ss-workbench-table {
@@ -212,34 +233,96 @@
   }
 
   .ss-workbench-table thead th {
-    @apply sticky top-0 z-10 whitespace-nowrap border-b border-white/10 bg-[#131722] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400;
+    @apply sticky top-0 z-10 whitespace-nowrap border-b border-[#252e42] border-r border-white/[0.04] bg-[#151a27] px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-slate-400;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .ss-workbench-table thead th:last-child {
+    @apply border-r-0;
   }
 
   .ss-workbench-table tbody td {
-    @apply border-b border-white/[0.05] px-3 py-2 align-middle text-gray-300;
+    @apply border-b border-white/[0.06] px-3 py-2 align-middle text-gray-300;
   }
 
   .ss-workbench-table tbody tr.ss-db-row:nth-child(even) {
-    @apply bg-white/[0.012];
+    @apply bg-white/[0.014];
   }
 
   .ss-workbench-table tbody tr:hover {
-    @apply bg-indigo-500/[0.06];
+    @apply bg-indigo-500/[0.07];
   }
 
   .ss-workbench-footer {
-    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-[#111520] px-4 py-2.5 text-xs text-gray-400 sm:px-5;
+    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[#1f2636] bg-[#111520] px-4 py-2 text-xs text-slate-400 sm:px-5;
+  }
+
+  .ss-workbench .ss-form-label {
+    @apply mb-1 block text-[10px] font-semibold uppercase tracking-[0.07em] text-slate-500;
   }
 
   .ss-workbench .ss-input,
-  .ss-workbench .ss-select,
-  .ss-workbench .ss-btn-ghost,
-  .ss-workbench .ss-btn-primary,
+  .ss-workbench .ss-select {
+    @apply h-8 rounded-sm border-[#242b3b] bg-[#0a0d14] text-xs text-slate-100 placeholder:text-slate-600 focus:border-indigo-500;
+  }
+
+  .ss-workbench-filters button[aria-haspopup="dialog"] {
+    @apply h-8 rounded-sm border-[#242b3b] bg-[#0a0d14] px-2.5 py-0 text-xs text-slate-200 hover:border-[#3a4766];
+  }
+
+  .ss-workbench-filters [role="dialog"] {
+    @apply rounded border-[#273045];
+  }
+
+  .ss-workbench .ss-btn-ghost {
+    @apply rounded-sm border border-[#273045] bg-[#161c2a] font-medium text-slate-200 transition hover:border-[#3a4766] hover:bg-[#1e2638] hover:text-white;
+  }
+
+  .ss-workbench .ss-btn-primary {
+    @apply rounded-sm border border-indigo-500 bg-indigo-600 font-medium text-white transition hover:bg-indigo-500;
+  }
+
   .ss-workbench .ss-events-pill-tiny {
-    @apply rounded-sm;
+    @apply rounded-sm border border-[#252e42] bg-[#151a27] px-2 py-0.5 text-[10.5px] font-medium text-slate-300;
   }
 
   .ss-workbench .ss-db-daterange-pop {
     @apply rounded;
+  }
+
+  .ss-workbench input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    border: 1px solid #334155;
+    background-color: #0a0d14;
+    display: inline-grid;
+    place-content: center;
+    vertical-align: middle;
+    transition: border-color 0.12s ease, background-color 0.12s ease;
+  }
+
+  .ss-workbench input[type="checkbox"]:hover {
+    border-color: #64748b;
+  }
+
+  .ss-workbench input[type="checkbox"]:checked {
+    border-color: #6366f1;
+    background-color: #6366f1;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 6.2L5 8.6L9.5 3.4' stroke='white' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 10px 10px;
+  }
+
+  .ss-workbench input[type="checkbox"]:indeterminate {
+    border-color: #6366f1;
+    background-color: #4f46e5;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M2.5 6H9.5' stroke='white' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 10px 10px;
   }
 }

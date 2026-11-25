@@ -135,8 +135,9 @@ export function DatasetPage() {
   return (
     <div className="ss-workbench-pane">
       <div className="ss-workbench-header">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-gray-100">Fine-Tuning Dataset</h2>
+        <div className="flex items-center gap-2.5">
+          <h2 className="text-sm font-semibold tracking-tight text-slate-100">Fine-Tuning Dataset</h2>
+          <span className="font-mono text-[11px] text-slate-500">is_reviewed=1</span>
           <span className="ss-events-pill-tiny font-mono">
             {total.toLocaleString()} reviewed
           </span>

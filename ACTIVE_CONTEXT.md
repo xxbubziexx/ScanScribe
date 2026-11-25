@@ -1478,6 +1478,20 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Browser verification and `snapshot` → `main` promotion when ready.
 
+---
+
+### 2026-11-24 23:23 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Professional Instrument-Grade Workbench Polish):**
+  - Upgraded [`database.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/database.css) with layered dark workstation surfaces, column header dividers, custom dark SVG checkboxes (`checked` + `indeterminate`), thin dark scrollbars, unified 32px (`h-8`) filter & DateRangePicker alignment, and left-edge accent bar on expanded rows.
+  - Refined [`DataExplorerLayout.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DataExplorerLayout.tsx) left rail with `border-l-2` active indicators and `Schema` / `Utilities` / `Engine Telemetry` sections.
+  - Added monospace SQL source tags (`log_entries`, `span_store`, `entity_observations`, `events`, `is_reviewed=1`) to all 5 table headers ([`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx), [`SpansTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/SpansTable.tsx), [`EntitiesTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EntitiesTable.tsx), [`EventsTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EventsTable.tsx), [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx)).
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (0 errors; `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx`: **3 passed**.
+- **Next Tasks / Unfinished Work:**
+  - Browser verification and `snapshot` → `main` promotion when ready.
+
+
 
 
 
