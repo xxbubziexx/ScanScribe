@@ -569,7 +569,7 @@ export function EntitiesTable() {
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3.5">
+                            <div className="rounded-sm border border-white/10 bg-white/[0.02] p-3.5">
                               <span className="block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
                                 Entity Span
                               </span>
@@ -582,21 +582,21 @@ export function EntitiesTable() {
                             </div>
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                              <div className="rounded-md border border-white/5 bg-white/[0.02] p-2">
+                              <div className="rounded-sm border border-white/5 bg-white/[0.02] p-2">
                                 <span className="block text-[10px] uppercase text-gray-500">Talkgroup</span>
                                 <span className="mt-0.5 block font-medium text-gray-200">{row.talkgroup || '—'}</span>
                               </div>
-                              <div className="rounded-md border border-white/5 bg-white/[0.02] p-2">
+                              <div className="rounded-sm border border-white/5 bg-white/[0.02] p-2">
                                 <span className="block text-[10px] uppercase text-gray-500">Span Store ID</span>
                                 <span className="mt-0.5 block font-mono text-sky-300">#{row.span_store_id}</span>
                               </div>
-                              <div className="rounded-md border border-white/5 bg-white/[0.02] p-2">
+                              <div className="rounded-sm border border-white/5 bg-white/[0.02] p-2">
                                 <span className="block text-[10px] uppercase text-gray-500">Log Entry ID</span>
                                 <span className="mt-0.5 block font-mono text-amber-300">
                                   {row.log_entry_id ? `#${row.log_entry_id}` : '—'}
                                 </span>
                               </div>
-                              <div className="rounded-md border border-white/5 bg-white/[0.02] p-2">
+                              <div className="rounded-sm border border-white/5 bg-white/[0.02] p-2">
                                 <span className="block text-[10px] uppercase text-gray-500">Timestamp</span>
                                 <span className="mt-0.5 block text-gray-300">{formatTime(row.ts)}</span>
                               </div>
@@ -607,7 +607,7 @@ export function EntitiesTable() {
                                 <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                                   Raw JSON
                                 </span>
-                                <pre className="mt-1.5 max-h-60 overflow-auto rounded-lg border border-white/10 bg-black/60 p-3 font-mono text-xs text-emerald-300">
+                                <pre className="mt-1.5 max-h-60 overflow-auto rounded-sm border border-white/10 bg-black/60 p-3 font-mono text-xs text-emerald-300">
                                   {JSON.stringify(row, null, 2)}
                                 </pre>
                               </div>

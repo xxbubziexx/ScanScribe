@@ -359,7 +359,7 @@ export function SpansTable() {
                             {chips.slice(0, 4).map((c, i) => (
                               <span
                                 key={`${c.label}-${i}`}
-                                className={`rounded px-1.5 py-0.5 text-[10px] font-medium border ${getLabelColor(
+                                className={`rounded-sm px-1.5 py-0.5 text-[10px] font-medium border ${getLabelColor(
                                   c.label,
                                 )}`}
                                 title={`${c.label}: ${c.value}`}
@@ -442,7 +442,7 @@ export function SpansTable() {
                               <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                                 Full Transcript
                               </span>
-                              <p className="mt-1.5 whitespace-pre-wrap rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs leading-relaxed text-gray-200">
+                              <p className="mt-1.5 whitespace-pre-wrap rounded-sm border border-white/10 bg-white/[0.02] p-3 text-xs leading-relaxed text-gray-200">
                                 {row.transcript?.trim() || '—'}
                               </p>
                             </div>
@@ -456,7 +456,7 @@ export function SpansTable() {
                                   {chips.map((c, i) => (
                                     <span
                                       key={`${c.label}-${i}-full`}
-                                      className={`rounded-md px-2 py-1 text-xs border ${getLabelColor(c.label)}`}
+                                      className={`rounded-sm px-2 py-1 text-xs border ${getLabelColor(c.label)}`}
                                     >
                                       <span className="opacity-75 font-semibold">{c.label}:</span> {c.value}
                                     </span>
@@ -470,7 +470,7 @@ export function SpansTable() {
                                 <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
                                   Raw JSON
                                 </span>
-                                <pre className="mt-1.5 max-h-60 overflow-auto rounded-lg border border-white/10 bg-black/60 p-3 font-mono text-xs text-sky-300">
+                                <pre className="mt-1.5 max-h-60 overflow-auto rounded-sm border border-white/10 bg-black/60 p-3 font-mono text-xs text-sky-300">
                                   {JSON.stringify(row, null, 2)}
                                 </pre>
                               </div>

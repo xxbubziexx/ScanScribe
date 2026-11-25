@@ -135,7 +135,7 @@ export function NerCsvExporterModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl rounded-2xl border border-white/15 bg-[#12161f] p-5 shadow-2xl"
+        className="w-full max-w-xl rounded border border-white/15 bg-[#12161f] p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-3">
@@ -166,7 +166,7 @@ export function NerCsvExporterModal({
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                className={`rounded-lg border px-3 py-2 text-left text-xs transition cursor-pointer ${
+                className={`rounded-sm border px-3 py-2 text-left text-xs transition cursor-pointer ${
                   scope === 'filters'
                     ? 'border-indigo-500/60 bg-indigo-500/15 text-indigo-100'
                     : 'border-white/10 bg-white/[0.02] text-gray-400 hover:text-gray-200'
@@ -184,7 +184,7 @@ export function NerCsvExporterModal({
               <button
                 type="button"
                 disabled={selectedIds.size === 0}
-                className={`rounded-lg border px-3 py-2 text-left text-xs transition ${
+                className={`rounded-sm border px-3 py-2 text-left text-xs transition ${
                   selectedIds.size === 0
                     ? 'cursor-not-allowed border-white/5 bg-white/[0.01] text-gray-600'
                     : scope === 'selected'
@@ -236,7 +236,7 @@ export function NerCsvExporterModal({
                     key={lbl}
                     type="button"
                     onClick={() => toggleLabel(lbl)}
-                    className={`rounded-lg border px-3 py-1.5 font-mono text-xs font-semibold transition cursor-pointer ${
+                    className={`rounded-sm border px-3 py-1.5 font-mono text-xs font-semibold transition cursor-pointer ${
                       active
                         ? 'border-emerald-500/50 bg-emerald-500/20 text-emerald-200'
                         : 'border-white/10 bg-white/[0.02] text-gray-400 hover:border-white/25 hover:text-gray-200'
@@ -251,7 +251,7 @@ export function NerCsvExporterModal({
           </div>
 
           {/* Format Options */}
-          <div className="space-y-2 rounded-xl border border-white/10 bg-black/25 p-3">
+          <div className="space-y-2 rounded-sm border border-white/10 bg-black/25 p-3">
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-gray-400">
               CSV Format Options
             </span>
@@ -307,7 +307,7 @@ export function NerCsvExporterModal({
           </div>
 
           {/* Live Column Preview */}
-          <div className="rounded-lg border border-white/10 bg-black/40 p-2.5">
+          <div className="rounded-sm border border-white/10 bg-black/40 p-2.5">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
               CSV Header Preview
             </div>

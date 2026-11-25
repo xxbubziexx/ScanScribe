@@ -41,7 +41,7 @@ function EventDetailSection({ eventId, event }: { eventId: string; event: EventL
         <div className="flex gap-2">
           <button
             type="button"
-            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+            className={`rounded-sm px-3 py-1 text-xs font-medium transition ${
               activeTab === 'overview'
                 ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-500/30'
                 : 'text-gray-400 hover:text-gray-200'
@@ -52,7 +52,7 @@ function EventDetailSection({ eventId, event }: { eventId: string; event: EventL
           </button>
           <button
             type="button"
-            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+            className={`rounded-sm px-3 py-1 text-xs font-medium transition ${
               activeTab === 'transcripts'
                 ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-500/30'
                 : 'text-gray-400 hover:text-gray-200'
@@ -63,7 +63,7 @@ function EventDetailSection({ eventId, event }: { eventId: string; event: EventL
           </button>
           <button
             type="button"
-            className={`rounded-md px-3 py-1 text-xs font-medium transition ${
+            className={`rounded-sm px-3 py-1 text-xs font-medium transition ${
               activeTab === 'json'
                 ? 'bg-indigo-500/20 text-indigo-200 border border-indigo-500/30'
                 : 'text-gray-400 hover:text-gray-200'
@@ -100,14 +100,14 @@ function EventDetailSection({ eventId, event }: { eventId: string; event: EventL
           <div className="space-y-3">
             <div>
               <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Summary</span>
-              <p className="mt-1 rounded-md border border-white/5 bg-white/[0.02] p-3 text-xs leading-relaxed text-gray-200">
+              <p className="mt-1 rounded-sm border border-white/5 bg-white/[0.02] p-3 text-xs leading-relaxed text-gray-200">
                 {event.summary || 'No summary generated yet.'}
               </p>
             </div>
 
             <div>
               <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">Trigger Transcript</span>
-              <p className="mt-1 rounded-md border border-white/5 bg-white/[0.02] p-3 font-mono text-xs text-gray-300">
+              <p className="mt-1 rounded-sm border border-white/5 bg-white/[0.02] p-3 font-mono text-xs text-gray-300">
                 {event.original_transcription || '—'}
               </p>
             </div>
@@ -115,19 +115,19 @@ function EventDetailSection({ eventId, event }: { eventId: string; event: EventL
 
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="rounded-md border border-white/5 bg-white/[0.02] p-2.5">
+              <div className="rounded-sm border border-white/5 bg-white/[0.02] p-2.5">
                 <span className="block text-[10px] uppercase text-gray-500">Status Detail</span>
                 <span className="mt-0.5 block font-medium text-gray-200">{event.status_detail || '—'}</span>
               </div>
-              <div className="rounded-md border border-white/5 bg-white/[0.02] p-2.5">
+              <div className="rounded-sm border border-white/5 bg-white/[0.02] p-2.5">
                 <span className="block text-[10px] uppercase text-gray-500">Broadcast Type</span>
                 <span className="mt-0.5 block font-medium text-gray-200">{event.broadcast_type || '—'}</span>
               </div>
-              <div className="rounded-md border border-white/5 bg-white/[0.02] p-2.5">
+              <div className="rounded-sm border border-white/5 bg-white/[0.02] p-2.5">
                 <span className="block text-[10px] uppercase text-gray-500">Resolved Address</span>
                 <span className="mt-0.5 block font-medium text-gray-200">{event.resolved_address || '—'}</span>
               </div>
-              <div className="rounded-md border border-white/5 bg-white/[0.02] p-2.5">
+              <div className="rounded-sm border border-white/5 bg-white/[0.02] p-2.5">
                 <span className="block text-[10px] uppercase text-gray-500">Coordinates</span>
                 <span className="mt-0.5 block font-mono text-gray-200">
                   {event.latitude != null && event.longitude != null
@@ -144,7 +144,7 @@ function EventDetailSection({ eventId, event }: { eventId: string; event: EventL
                   {event.units.split(',').map((u, i) => (
                     <span
                       key={i}
-                      className="rounded bg-emerald-500/10 px-2 py-0.5 font-mono text-xs text-emerald-300 border border-emerald-500/20"
+                      className="rounded-sm bg-emerald-500/10 px-2 py-0.5 font-mono text-xs text-emerald-300 border border-emerald-500/20"
                     >
                       {u.trim()}
                     </span>
@@ -165,15 +165,15 @@ function EventDetailSection({ eventId, event }: { eventId: string; event: EventL
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
               {detail?.transcripts.map((t, i) => (
-                <div key={i} className="rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs">
+                <div key={i} className="rounded-sm border border-white/10 bg-white/[0.02] p-3 text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-2">
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-gray-400">Log #{t.log_entry_id}</span>
-                      <span className="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300">
+                      <span className="rounded-sm bg-indigo-500/10 px-1.5 py-0.5 text-[10px] text-indigo-300">
                         {t.talkgroup}
                       </span>
                       {t.is_trigger ? (
-                        <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+                        <span className="rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
                           Trigger
                         </span>
                       ) : null}
@@ -196,7 +196,7 @@ function EventDetailSection({ eventId, event }: { eventId: string; event: EventL
       )}
 
       {activeTab === 'json' && (
-        <pre className="max-h-[32rem] overflow-auto rounded-lg border border-white/10 bg-black/60 p-4 font-mono text-xs leading-relaxed text-emerald-300">
+        <pre className="max-h-[32rem] overflow-auto rounded-sm border border-white/10 bg-black/60 p-4 font-mono text-xs leading-relaxed text-emerald-300">
           {JSON.stringify(rawPayload, null, 2)}
         </pre>
       )}
@@ -476,7 +476,7 @@ export function EventsTable() {
                       </td>
                       <td>
                         <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                          className={`rounded-sm px-1.5 py-0.5 text-[10px] font-bold uppercase ${
                             row.status === 'open'
                               ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
                               : 'bg-gray-500/15 text-gray-400 border border-gray-500/20'
@@ -503,7 +503,7 @@ export function EventsTable() {
                         {row.units || '—'}
                       </td>
                       <td>
-                        <span className="rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-300 border border-amber-500/20">
+                        <span className="rounded-sm bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-300 border border-amber-500/20">
                           {row.spans_attached}
                         </span>
                       </td>

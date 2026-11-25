@@ -66,7 +66,7 @@ export function DataExplorerLayout() {
       <aside className="ss-workbench-rail">
         <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-indigo-500/35 bg-indigo-500/20 font-mono text-[11px] font-bold text-indigo-300">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm border border-indigo-500/35 bg-indigo-500/20 font-mono text-[11px] font-bold text-indigo-300">
               DB
             </span>
             <div className="min-w-0">
@@ -81,7 +81,7 @@ export function DataExplorerLayout() {
 
           <button
             type="button"
-            className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-gray-400 transition hover:border-white/20 hover:text-gray-200 cursor-pointer disabled:opacity-50"
+            className="rounded-sm border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-gray-400 transition hover:border-white/20 hover:text-gray-200 cursor-pointer disabled:opacity-50"
             onClick={() => void overviewQuery.refetch()}
             disabled={overviewQuery.isFetching}
             title="Refresh live table counts"
@@ -104,7 +104,7 @@ export function DataExplorerLayout() {
                 key={item.key}
                 to={item.to}
                 className={({ isActive }) =>
-                  `group flex shrink-0 items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs transition ${
+                  `group flex shrink-0 items-center justify-between gap-2 rounded-sm px-2.5 py-2 text-xs transition ${
                     isActive
                       ? 'bg-indigo-500/15 text-white border border-indigo-500/30'
                       : 'text-gray-400 border border-transparent hover:bg-white/[0.04] hover:text-gray-200'
@@ -121,7 +121,7 @@ export function DataExplorerLayout() {
                   </span>
                 </span>
                 {count !== undefined && (
-                  <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-gray-300 tabular-nums">
+                  <span className="rounded-sm bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-gray-300 tabular-nums">
                     {count.toLocaleString()}
                   </span>
                 )}
@@ -137,14 +137,14 @@ export function DataExplorerLayout() {
           <div className="space-y-1">
             <Link
               to="/data/entities?export=1"
-              className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-emerald-300/90 transition hover:bg-emerald-500/10 hover:text-emerald-200"
+              className="flex items-center justify-between rounded-sm px-2.5 py-1.5 text-xs text-emerald-300/90 transition hover:bg-emerald-500/10 hover:text-emerald-200"
             >
               <span>NER CSV Exporter</span>
               <span className="font-mono text-[10px] text-emerald-400/70">CSV</span>
             </Link>
             <Link
               to="/events/monitors"
-              className="flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs text-gray-400 transition hover:bg-white/[0.04] hover:text-gray-200"
+              className="flex items-center justify-between rounded-sm px-2.5 py-1.5 text-xs text-gray-400 transition hover:bg-white/[0.04] hover:text-gray-200"
             >
               <span>Monitors</span>
               <span className="font-mono text-[10px] text-gray-500">
@@ -180,7 +180,7 @@ export function DataExplorerLayout() {
                 <dd className="flex items-center gap-1.5 font-mono text-gray-200">
                   <span>{data.ner.coverage_pct.toFixed(1)}%</span>
                   {nerBadge && (
-                    <span className={`rounded border px-1 py-0 text-[9px] font-semibold ${nerBadge.cls}`}>
+                    <span className={`rounded-sm border px-1 py-0 text-[9px] font-semibold ${nerBadge.cls}`}>
                       {nerBadge.text}
                     </span>
                   )}

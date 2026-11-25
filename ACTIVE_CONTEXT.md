@@ -1467,6 +1467,18 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Browser verification and `snapshot` → `main` promotion when ready.
 
+---
+
+### 2026-11-24 23:20 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Crisper Workbench Border Radii):**
+  - Tightened border radii across [`database.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/database.css) (scoped `.ss-workbench` inputs/selects/buttons/pills to `rounded-sm`, popovers/cards to `rounded`) and across [`DataExplorerLayout.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DataExplorerLayout.tsx), [`NerCsvExporterModal.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/components/NerCsvExporterModal.tsx), [`LogRow.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/LogRow.tsx), [`MobileLogCard.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/MobileLogCard.tsx), [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx), [`EntitiesTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EntitiesTable.tsx), [`SpansTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/SpansTable.tsx), and [`EventsTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EventsTable.tsx).
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (0 errors; `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx`: **3 passed**.
+- **Next Tasks / Unfinished Work:**
+  - Browser verification and `snapshot` → `main` promotion when ready.
+
+
 
 
 

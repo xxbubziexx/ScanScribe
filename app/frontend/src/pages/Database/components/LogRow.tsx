@@ -106,7 +106,7 @@ export function LogRow({
           {hasAudio && (
             <button
               type="button"
-              className="rounded px-2 py-0.5 text-[11px] font-medium text-sky-300 transition hover:bg-sky-500/15 hover:text-sky-200 cursor-pointer"
+              className="rounded-sm px-2 py-0.5 text-[11px] font-medium text-sky-300 transition hover:bg-sky-500/15 hover:text-sky-200 cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()
                 void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
@@ -122,7 +122,7 @@ export function LogRow({
           {isAdmin && (
             <button
               type="button"
-              className="rounded px-2 py-0.5 text-[11px] font-medium text-rose-400 transition hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer disabled:opacity-40"
+              className="rounded-sm px-2 py-0.5 text-[11px] font-medium text-rose-400 transition hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer disabled:opacity-40"
               onClick={(e) => {
                 e.stopPropagation()
                 onDelete(row.id)

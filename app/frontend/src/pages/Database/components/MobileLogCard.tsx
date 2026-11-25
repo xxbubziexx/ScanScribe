@@ -35,7 +35,7 @@ export function MobileLogCard({
 
   return (
     <article
-      className={`p-3.5 rounded-xl border transition flex flex-col gap-2.5 ${
+      className={`p-3.5 rounded border transition flex flex-col gap-2.5 ${
         expanded
           ? 'bg-indigo-950/30 border-indigo-500/40 shadow-lg'
           : selected
@@ -52,12 +52,12 @@ export function MobileLogCard({
             onChange={onToggleSelect}
             aria-label={`Select log entry ${row.id}`}
           />
-          <span className="px-2 py-0.5 rounded-md bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-semibold font-mono truncate max-w-[140px]">
+          <span className="px-2 py-0.5 rounded-sm bg-indigo-500/20 border border-indigo-400/30 text-indigo-200 text-xs font-semibold font-mono truncate max-w-[140px]">
             {row.talkgroup || 'No Talkgroup'}
           </span>
           {confidencePercent != null && (
             <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold border ${confidenceColor}`}
+              className={`px-1.5 py-0.5 rounded-sm text-[10px] font-semibold border ${confidenceColor}`}
             >
               {confidencePercent}%
             </span>
@@ -73,7 +73,7 @@ export function MobileLogCard({
         </time>
       </div>
 
-      <div className="text-sm text-gray-200 leading-relaxed break-words bg-black/20 p-2.5 rounded-lg border border-white/5">
+      <div className="text-sm text-gray-200 leading-relaxed break-words bg-black/20 p-2.5 rounded-sm border border-white/5">
         {row.is_reviewed && (
           <span className="text-green-400 font-bold mr-1.5" title="Reviewed">
             ✓
@@ -104,7 +104,7 @@ export function MobileLogCard({
         <button
           type="button"
           onClick={onToggleExpand}
-          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1.5 min-h-[38px] px-2 py-1 rounded hover:bg-white/5 cursor-pointer"
+          className="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1.5 min-h-[38px] px-2 py-1 rounded-sm hover:bg-white/5 cursor-pointer"
           aria-expanded={expanded}
         >
           <span>{expanded ? '▲ Hide Details & Edit' : '▼ Details & Audio'}</span>

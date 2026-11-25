@@ -12,7 +12,7 @@
   }
 
   .ss-db-table-wrap {
-    @apply overflow-x-auto rounded-xl border border-white/10 bg-white/[0.02];
+    @apply overflow-x-auto rounded border border-white/10 bg-white/[0.02];
   }
 
   .ss-db-table {
@@ -60,7 +60,7 @@
   }
 
   .ss-db-daterange-pop {
-    @apply absolute left-0 sm:left-1/2 top-full z-50 mt-1 w-[min(26rem,calc(100vw-2rem))] -translate-x-0 sm:-translate-x-1/2 rounded-xl border border-white/10;
+    @apply absolute left-0 sm:left-1/2 top-full z-50 mt-1 w-[min(26rem,calc(100vw-2rem))] -translate-x-0 sm:-translate-x-1/2 rounded border border-white/10;
     @apply bg-[#141821] p-3 sm:p-4 shadow-2xl;
   }
 
@@ -85,7 +85,7 @@
   }
 
   .ss-db-daterange-day {
-    @apply relative flex aspect-square min-h-[2.35rem] min-w-0 items-center justify-center rounded-md;
+    @apply relative flex aspect-square min-h-[2.35rem] min-w-0 items-center justify-center rounded-sm;
     @apply text-base text-gray-200 transition;
     @apply hover:bg-indigo-500/25;
   }
@@ -166,7 +166,7 @@
   }
 
   .ss-db-expand-transcript {
-    @apply max-h-56 overflow-y-auto whitespace-pre-wrap rounded-md border border-white/10 bg-white/[0.03] p-3 text-sm text-gray-200;
+    @apply max-h-56 overflow-y-auto whitespace-pre-wrap rounded-sm border border-white/10 bg-white/[0.03] p-3 text-sm text-gray-200;
   }
 
   .ss-db-expand-audio {
@@ -229,5 +229,17 @@
 
   .ss-workbench-footer {
     @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-[#111520] px-4 py-2.5 text-xs text-gray-400 sm:px-5;
+  }
+
+  .ss-workbench .ss-input,
+  .ss-workbench .ss-select,
+  .ss-workbench .ss-btn-ghost,
+  .ss-workbench .ss-btn-primary,
+  .ss-workbench .ss-events-pill-tiny {
+    @apply rounded-sm;
+  }
+
+  .ss-workbench .ss-db-daterange-pop {
+    @apply rounded;
   }
 }
