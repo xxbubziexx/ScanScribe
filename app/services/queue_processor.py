@@ -98,6 +98,8 @@ def parse_timestamp_from_filename(filename: str) -> Optional[datetime]:
 
 
 _monitor_locks: Dict[int, asyncio.Lock] = {}
+_unmatched_tg_last_logged: Dict[str, float] = {}
+_UNMATCHED_TG_LOG_INTERVAL = 60.0  # seconds
 
 
 def _get_monitor_lock(monitor_id: int) -> asyncio.Lock:
@@ -120,6 +122,20 @@ async def _dispatch_events_pipeline(
             monitor_ids = get_matching_monitor_ids(events_db, talkgroup)
         finally:
             events_db.close()
+
+        if not monitor_ids:
+            norm_key = (talkgroup or "").strip().lower()
+            now = time.time()
+            last_logged = _unmatched_tg_last_logged.get(norm_key, 0.0)
+            if now - last_logged >= _UNMATCHED_TG_LOG_INTERVAL:
+                _unmatched_tg_last_logged[norm_key] = now
+                logger.info(
+                    "Events: unmatched talkgroup %r (log_entry_id=%s) — no enabled monitor matches",
+                    talkgroup or "N/A",
+                    log_entry_id,
+                )
+            return
+
         for mid in monitor_ids:
             lock = _get_monitor_lock(mid)
             async with lock:
@@ -454,7 +470,8 @@ class QueueProcessor:
 
             # Events pipeline: dispatch asynchronously in background so audio ingestion is not blocked
             settings = get_settings()
-            if getattr(settings.config, "events_pipeline", None) and settings.config.events_pipeline.enabled:
+            pipe_cfg = getattr(settings.config, "events_pipeline", None)
+            if pipe_cfg and (pipe_cfg.enabled or getattr(pipe_cfg, "ner_only", False)):
                 transcript_text = result.get("transcript") or ""
                 from .task_manager import task_manager
                 task_manager.spawn(

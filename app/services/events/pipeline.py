@@ -88,7 +88,7 @@ def get_matching_monitor_ids(events_db, talkgroup: str) -> List[int]:
 def ensure_ner_model_loaded() -> bool:
     settings = get_settings()
     cfg = getattr(settings.config, "events_pipeline", None)
-    if not cfg or not cfg.enabled or not cfg.ner_model_path:
+    if not cfg or not (cfg.enabled or getattr(cfg, "ner_only", False)) or not cfg.ner_model_path:
         return False
     return load_ner_model(cfg.ner_model_path)
 
@@ -103,7 +103,7 @@ def process_transcript_for_monitor(
     """Single-pass OpenRouter LLM router pipeline."""
     settings = get_settings()
     cfg = getattr(settings.config, "events_pipeline", None)
-    if not cfg or not cfg.enabled or not cfg.ner_model_path:
+    if not cfg or not (cfg.enabled or getattr(cfg, "ner_only", False)) or not cfg.ner_model_path:
         return
 
     events_db = EventsSessionLocal()
@@ -121,33 +121,57 @@ def process_transcript_for_monitor(
         ner_threshold = float(getattr(cfg, "ner_confidence_threshold", 0.0) or 0.0)
         ner_text = normalize_span_for_ner(transcript, strip_commas)
         t0 = time.perf_counter()
-        entities, raw_output = extract_entities(ner_text, threshold=ner_threshold)
-        ner_duration_ms = (time.perf_counter() - t0) * 1000
-
-        span_row = span_store_from_entities(
-            monitor_id, talkgroup or "", transcript, log_entry_id, entities
-        )
-        events_db.add(span_row)
-        events_db.flush()
-
         try:
-            obs_rows = entity_observations_from_entities(
-                span_store_id=span_row.id,
-                monitor_id=monitor_id,
-                talkgroup=talkgroup or "",
-                log_entry_id=log_entry_id,
-                entities=entities,
-                ts=log_timestamp if isinstance(log_timestamp, datetime) else None,
-            )
-            if obs_rows:
-                events_db.add_all(obs_rows)
+            entities, raw_output = extract_entities(ner_text, threshold=ner_threshold)
         except Exception as ex:
             logger.warning(
-                "entity_observations write failed log_entry_id=%s: %s",
+                "NER extraction failed for log_entry_id=%s: %s",
                 log_entry_id,
                 ex,
+                exc_info=True,
             )
-        events_db.commit()
+            return
+        ner_duration_ms = (time.perf_counter() - t0) * 1000
+
+        try:
+            span_row = span_store_from_entities(
+                monitor_id, talkgroup or "", transcript, log_entry_id, entities
+            )
+            events_db.add(span_row)
+            events_db.flush()
+
+            try:
+                obs_rows = entity_observations_from_entities(
+                    span_store_id=span_row.id,
+                    monitor_id=monitor_id,
+                    talkgroup=talkgroup or "",
+                    log_entry_id=log_entry_id,
+                    entities=entities,
+                    ts=log_timestamp if isinstance(log_timestamp, datetime) else None,
+                )
+                if obs_rows:
+                    events_db.add_all(obs_rows)
+            except Exception as ex:
+                logger.warning(
+                    "entity_observations write failed log_entry_id=%s: %s",
+                    log_entry_id,
+                    ex,
+                    exc_info=True,
+                )
+            events_db.commit()
+        except Exception as ex:
+            logger.warning(
+                "Span store commit failed for log_entry_id=%s: %s",
+                log_entry_id,
+                ex,
+                exc_info=True,
+            )
+            events_db.rollback()
+            return
+
+        # NER-only mode: spans and observations are committed. Never call the LLM router.
+        if getattr(cfg, "ner_only", False):
+            return
 
         open_events = list(
             events_db.query(Event)

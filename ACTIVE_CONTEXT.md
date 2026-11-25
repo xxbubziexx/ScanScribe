@@ -1338,3 +1338,34 @@ This living document is the **shared memory** between different AI models, human
   - `pytest tests/`: **169 passed**.
 - **Next Tasks / Unfinished Work:**
   - The `AUTOSTART` branch still needs one end-to-end run of `install.sh` on a scratch VM.
+
+---
+
+### 2026-11-24 18:30 | Gemini 3.8 Flash (Windows Dev Workstation)
+- **Work Performed:**
+  1. **Implemented NER-Only Pipeline Mode:**
+     - Added `ner_only: bool = False` to `EventsPipelineConfig` in [`app/config.py`](file:///a:/Scanscribe_Projects/scanscribe/app/config.py) and documented in [`config.yml.example`](file:///a:/Scanscribe_Projects/scanscribe/config.yml.example).
+     - Decoupled NER entity extraction from the OpenRouter LLM router. When `ner_only: true`:
+       - Loads NER model at startup in [`app/main.py`](file:///a:/Scanscribe_Projects/scanscribe/app/main.py) and [`app/services/events/pipeline.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/events/pipeline.py).
+       - Persists `span_store` and `entity_observations` rows to SQLite on matching monitors.
+       - Returns early immediately after commit, strictly bypassing open event queries, chatter checks, and `EventsRouter.route_transcript()` (never calls OpenRouter, never modifies `events` table).
+       - Takes precedence over `enabled: true`.
+     - Added startup warning if `events_active` (`enabled` or `ner_only`) is true and `SELECT COUNT(*) FROM monitors == 0`.
+     - In [`app/services/queue_processor.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/queue_processor.py), updated events pipeline dispatch check to accept `pipe_cfg.enabled or ner_only`, and added rate-limited (60s) `INFO` logging for unmatched talkgroups.
+     - Added full automated unit test suite in [`tests/test_ner_only_mode.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_ner_only_mode.py) covering config fields, startup checks, router bypass, precedence, and unmatched talkgroup rate limiting.
+  2. **Root Cause Analysis of Beta Tester ASR Crashes & Fallbacks:**
+     - Investigated three beta tester console crash logs:
+       - Screenshot 1: `sepiaapps/whisper-small.en-police-radio` contains duplicate `feature_extractor` in `processor_config.json`, and `AutoTokenizer` defaulted to `WhisperTokenizerFast`, which failed `WhisperProcessor` validation and fell back to `openai/whisper-small.en` (resolved in `5411e39`).
+       - Screenshot 2: CUDA OOM during beam search triggered a degraded greedy-decoding retry ladder that wedged VRAM and inflated Windows `pagefile.sys` past 12 GB (resolved in `e60215f` per Zero Silent Fallbacks policy and VRAM fraction limits).
+       - Screenshot 3: Subsequent file crashed immediately due to uncollected asynchronous CUDA allocator cache blocks (resolved in `e60215f` by unconditionally calling `release_gpu_memory()` before ingest and on every failure path).
+- **Live Ubuntu Ingestion Impact:**
+  - Zero ingestion impact. Existing pipelines run unmodified unless `ner_only: true` is configured.
+- **Gotchas / Warnings for Next Model:**
+  - `span_store.monitor_id` has a foreign key to `monitors.id`. Even in `ner_only` mode, at least one enabled `Monitor` matching the talkgroup must exist in the database for transcripts to be processed and stored.
+  - Commits remain on `snapshot` branch per branching protocol.
+- **Verification Performed:**
+  - `pytest tests/test_ner_only_mode.py`: 5 passed in 0.63s.
+  - Full suite `pytest tests/`: **174 passed, 2 warnings in 25.47s**.
+- **Next Tasks / Unfinished Work:**
+  - Database dashboard ergonomics and UI improvements as requested by user.
+

@@ -60,12 +60,26 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Queue processor started")
 
         from .services.events_worker import ensure_ner_model_loaded, start_event_cleanup_worker
+        pipe_cfg = getattr(settings.config, "events_pipeline", None)
+        events_active = bool(pipe_cfg and (pipe_cfg.enabled or getattr(pipe_cfg, "ner_only", False)))
         if ensure_ner_model_loaded():
             logger.info("✅ NER model loaded for events pipeline")
-        elif getattr(settings.config, "events_pipeline", None) and settings.config.events_pipeline.enabled:
+        elif events_active:
             logger.warning("⚠️ Events pipeline enabled but NER model failed to load")
         start_event_cleanup_worker()
         logger.info("✅ Events cleanup worker started")
+
+        if events_active:
+            from .database import EventsSessionLocal
+            from .models.event import Monitor
+            _ev_db = EventsSessionLocal()
+            try:
+                if _ev_db.query(Monitor).count() == 0:
+                    logger.warning("⚠️ Events pipeline is on but no monitors are defined — nothing will ever match")
+            except Exception as _mon_err:
+                logger.debug("Failed checking monitors count at startup: %s", _mon_err)
+            finally:
+                _ev_db.close()
 
         await watcher_service.start()
         logger.info("✅ File watcher started")

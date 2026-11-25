@@ -83,6 +83,8 @@ queue:
 # ==================== EVENTS PIPELINE ====================
 events_pipeline:
   enabled: true
+  # Run NER + span/entity extraction only, never call the LLM router (saves tokens / reduces noise)
+  ner_only: false
   # Path to NER model folder or Hugging Face repo (e.g. ./models/incident_ner_v1 or xxbubziexx/incident_ner_v1)
   ner_model_path: "./models/incident_ner_v1"
   # Strip commas from span text before NER (recommended: true)
