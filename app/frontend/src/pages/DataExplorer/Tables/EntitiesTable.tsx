@@ -8,8 +8,22 @@ import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import type { EntityObservationItem } from '@/types/events'
 import { NerCsvExporterModal } from '../components/NerCsvExporterModal'
+import { ColResizeHandle, useResizableColumns } from '../hooks/useResizableColumns'
 
 const PAGE_SIZES = [25, 50, 100] as const
+
+const DEFAULT_COL_WIDTHS = {
+  id: 68,
+  monitor: 135,
+  label: 105,
+  raw: 240,
+  talkgroup: 185,
+  span_id: 88,
+  log_id: 88,
+  observed: 155,
+} as const
+
+type EntitiesCol = keyof typeof DEFAULT_COL_WIDTHS
 
 function formatTime(iso: string | null | undefined) {
   if (!iso) return '—'
@@ -192,6 +206,15 @@ export function EntitiesTable() {
   const hasFilters = Boolean(
     monitorId || label || talkgroup.trim() || logEntryId.trim() || spanStoreId.trim() || search.trim() || dateFrom || dateTo,
   )
+  const {
+    widths: colWidths,
+    totalWidth: colTotalWidth,
+    isCustomized: hasCustomWidths,
+    activeCol: activeResizeCol,
+    startResize,
+    resetColumn,
+    resetAll: resetColWidths,
+  } = useResizableColumns<EntitiesCol>('entities', DEFAULT_COL_WIDTHS)
   const clearFilters = () => {
     setMonitorId('')
     setLabel('')
@@ -230,6 +253,15 @@ export function EntitiesTable() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {hasCustomWidths && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={resetColWidths}
+            >
+              Reset Widths
+            </button>
+          )}
           {hasFilters && (
             <button
               type="button"
@@ -416,7 +448,22 @@ export function EntitiesTable() {
         {listQuery.isSuccess && rows.length === 0 ? (
           <p className="ss-empty m-4 not-italic">No entity observations found matching the selected filters.</p>
         ) : !listQuery.isLoading && !listQuery.isError && rows.length > 0 ? (
-          <table className="ss-workbench-table">
+          <table
+            className="ss-workbench-table ss-workbench-table--resizable"
+            style={{ width: `${colTotalWidth + 64}px`, minWidth: '100%' }}
+          >
+            <colgroup>
+              <col style={{ width: '32px' }} />
+              <col style={{ width: '32px' }} />
+              <col style={{ width: `${colWidths.id}px` }} />
+              <col style={{ width: `${colWidths.monitor}px` }} />
+              <col style={{ width: `${colWidths.label}px` }} />
+              <col style={{ width: `${colWidths.raw}px` }} />
+              <col style={{ width: `${colWidths.talkgroup}px` }} />
+              <col style={{ width: `${colWidths.span_id}px` }} />
+              <col style={{ width: `${colWidths.log_id}px` }} />
+              <col style={{ width: `${colWidths.observed}px` }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="w-8 text-center">
@@ -432,25 +479,83 @@ export function EntitiesTable() {
                 <th className="w-8" />
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('id')}>
                   ID {renderSortIndicator('id')}
+                  <ColResizeHandle
+                    col="id"
+                    label="ID"
+                    isActive={activeResizeCol === 'id'}
+                    onMouseDown={(e) => startResize('id', e)}
+                    onDoubleClick={() => resetColumn('id')}
+                  />
                 </th>
-                <th>Monitor</th>
+                <th>
+                  Monitor
+                  <ColResizeHandle
+                    col="monitor"
+                    label="Monitor"
+                    isActive={activeResizeCol === 'monitor'}
+                    onMouseDown={(e) => startResize('monitor', e)}
+                    onDoubleClick={() => resetColumn('monitor')}
+                  />
+                </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('label')}>
                   Label {renderSortIndicator('label')}
+                  <ColResizeHandle
+                    col="label"
+                    label="Label"
+                    isActive={activeResizeCol === 'label'}
+                    onMouseDown={(e) => startResize('label', e)}
+                    onDoubleClick={() => resetColumn('label')}
+                  />
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('raw')}>
                   Entity Span {renderSortIndicator('raw')}
+                  <ColResizeHandle
+                    col="raw"
+                    label="Entity Span"
+                    isActive={activeResizeCol === 'raw'}
+                    onMouseDown={(e) => startResize('raw', e)}
+                    onDoubleClick={() => resetColumn('raw')}
+                  />
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('talkgroup')}>
                   Talkgroup {renderSortIndicator('talkgroup')}
+                  <ColResizeHandle
+                    col="talkgroup"
+                    label="Talkgroup"
+                    isActive={activeResizeCol === 'talkgroup'}
+                    onMouseDown={(e) => startResize('talkgroup', e)}
+                    onDoubleClick={() => resetColumn('talkgroup')}
+                  />
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('span_store_id')}>
                   Span ID {renderSortIndicator('span_store_id')}
+                  <ColResizeHandle
+                    col="span_id"
+                    label="Span ID"
+                    isActive={activeResizeCol === 'span_id'}
+                    onMouseDown={(e) => startResize('span_id', e)}
+                    onDoubleClick={() => resetColumn('span_id')}
+                  />
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('log_entry_id')}>
                   Log ID {renderSortIndicator('log_entry_id')}
+                  <ColResizeHandle
+                    col="log_id"
+                    label="Log ID"
+                    isActive={activeResizeCol === 'log_id'}
+                    onMouseDown={(e) => startResize('log_id', e)}
+                    onDoubleClick={() => resetColumn('log_id')}
+                  />
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('ts')}>
                   Observed {renderSortIndicator('ts')}
+                  <ColResizeHandle
+                    col="observed"
+                    label="Observed"
+                    isActive={activeResizeCol === 'observed'}
+                    onMouseDown={(e) => startResize('observed', e)}
+                    onDoubleClick={() => resetColumn('observed')}
+                  />
                 </th>
               </tr>
             </thead>
@@ -461,9 +566,8 @@ export function EntitiesTable() {
                 return (
                   <Fragment key={row.id}>
                     <tr
-                      className={`cursor-pointer hover:bg-white/[0.03] transition-colors ${
-                        isSelected ? 'bg-emerald-500/[0.07]' : ''
-                      }`}
+                      className={`cursor-pointer hover:bg-white/[0.03] transition-colors ${isSelected ? 'bg-emerald-500/[0.07]' : ''
+                        }`}
                       onClick={() => setExpandedId(isOpen ? null : row.id)}
                     >
                       <td
@@ -494,10 +598,10 @@ export function EntitiesTable() {
                           {row.label}
                         </span>
                       </td>
-                      <td className="max-w-[16rem] truncate font-semibold text-slate-100" title={row.raw}>
+                      <td className="truncate font-semibold text-slate-100" title={row.raw}>
                         {row.raw}
                       </td>
-                      <td className="max-w-[10rem] truncate font-semibold text-sky-300/90" title={row.talkgroup ?? ''}>
+                      <td className="truncate font-semibold text-sky-300/90" title={row.talkgroup ?? ''}>
                         {row.talkgroup || '—'}
                       </td>
                       <td className="whitespace-nowrap font-mono">

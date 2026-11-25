@@ -8,6 +8,17 @@ import { errorMessage } from '@/types/api'
 import type { LogListEntry, LogsSortBy } from '@/types/logs'
 import { ScAudioPlayer } from '@/components/ui/ScAudioPlayer'
 import { formatBytes } from '@/pages/Database/utils/formatBytes'
+import { ColResizeHandle, useResizableColumns } from './hooks/useResizableColumns'
+
+const DEFAULT_COL_WIDTHS = {
+  time: 160,
+  talkgroup: 210,
+  filename: 240,
+  transcript: 380,
+  actions: 132,
+} as const
+
+type DatasetCol = keyof typeof DEFAULT_COL_WIDTHS
 
 const SORT_OPTIONS: { value: LogsSortBy; label: string }[] = [
   { value: 'timestamp_desc', label: 'Newest first' },
@@ -40,6 +51,15 @@ export function DatasetPage() {
   const [page, setPage] = useState(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const {
+    widths: colWidths,
+    totalWidth: colTotalWidth,
+    isCustomized: hasCustomWidths,
+    activeCol: activeResizeCol,
+    startResize,
+    resetColumn,
+    resetAll: resetColWidths,
+  } = useResizableColumns<DatasetCol>('dataset', DEFAULT_COL_WIDTHS)
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput), 400)
@@ -144,6 +164,15 @@ export function DatasetPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {hasCustomWidths && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={resetColWidths}
+            >
+              Reset Widths
+            </button>
+          )}
           {hasFilters && (
             <button
               type="button"
@@ -301,7 +330,18 @@ export function DatasetPage() {
         )}
 
         {!query.isLoading && !query.isError && rows.length > 0 && (
-          <table className="ss-workbench-table">
+          <table
+            className="ss-workbench-table ss-workbench-table--resizable"
+            style={{ width: `${colTotalWidth + 36}px`, minWidth: '100%' }}
+          >
+            <colgroup>
+              <col style={{ width: '36px' }} />
+              <col style={{ width: `${colWidths.time}px` }} />
+              <col style={{ width: `${colWidths.talkgroup}px` }} />
+              <col style={{ width: `${colWidths.filename}px` }} />
+              <col style={{ width: `${colWidths.transcript}px` }} />
+              <col style={{ width: `${colWidths.actions}px` }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="w-9 text-center">
@@ -321,11 +361,56 @@ export function DatasetPage() {
                     aria-label="Select all dataset spans on this page"
                   />
                 </th>
-                <th>Time</th>
-                <th>Talkgroup</th>
-                <th>Filename</th>
-                <th>Reviewed Transcript</th>
-                <th className="text-right">Actions</th>
+                <th>
+                  Time
+                  <ColResizeHandle
+                    col="time"
+                    label="Time"
+                    isActive={activeResizeCol === 'time'}
+                    onMouseDown={(e) => startResize('time', e)}
+                    onDoubleClick={() => resetColumn('time')}
+                  />
+                </th>
+                <th>
+                  Talkgroup
+                  <ColResizeHandle
+                    col="talkgroup"
+                    label="Talkgroup"
+                    isActive={activeResizeCol === 'talkgroup'}
+                    onMouseDown={(e) => startResize('talkgroup', e)}
+                    onDoubleClick={() => resetColumn('talkgroup')}
+                  />
+                </th>
+                <th>
+                  Filename
+                  <ColResizeHandle
+                    col="filename"
+                    label="Filename"
+                    isActive={activeResizeCol === 'filename'}
+                    onMouseDown={(e) => startResize('filename', e)}
+                    onDoubleClick={() => resetColumn('filename')}
+                  />
+                </th>
+                <th>
+                  Reviewed Transcript
+                  <ColResizeHandle
+                    col="transcript"
+                    label="Reviewed Transcript"
+                    isActive={activeResizeCol === 'transcript'}
+                    onMouseDown={(e) => startResize('transcript', e)}
+                    onDoubleClick={() => resetColumn('transcript')}
+                  />
+                </th>
+                <th className="text-right">
+                  Actions
+                  <ColResizeHandle
+                    col="actions"
+                    label="Actions"
+                    isActive={activeResizeCol === 'actions'}
+                    onMouseDown={(e) => startResize('actions', e)}
+                    onDoubleClick={() => resetColumn('actions')}
+                  />
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -474,15 +559,15 @@ function LogRow({
           : '—'}
       </td>
       <td>
-        <span className="inline-block max-w-[13rem] truncate font-semibold text-sky-300" title={row.talkgroup ?? ''}>
+        <span className="block w-full truncate font-semibold text-sky-300" title={row.talkgroup ?? ''}>
           {row.talkgroup || '—'}
         </span>
       </td>
       <td title={row.filename}>
-        <span className="block max-w-[18rem] truncate font-mono text-[11px] text-slate-500">{row.filename || '—'}</span>
+        <span className="block w-full truncate font-mono text-[11px] text-slate-500">{row.filename || '—'}</span>
       </td>
       <td>
-        <span className="ss-db-td-clip block font-medium text-slate-100">
+        <span className="block w-full truncate font-medium text-slate-100">
           {row.corrected_transcript || row.transcript || '—'}
         </span>
       </td>

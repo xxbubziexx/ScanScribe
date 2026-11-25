@@ -1504,6 +1504,18 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Live UI check and `snapshot` → `main` promotion when ready.
 
+### 2026-11-25 16:40 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Drag-Resizable Columns Across Database Workbench Tables):**
+  - Created [`useResizableColumns.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/hooks/useResizableColumns.tsx) providing `useResizableColumns(tableKey, defaults, minWidth = 56)` (persisting per-table widths in `localStorage` under `scanscribe_col_widths_<tableKey>`, tracking `totalWidth`, `isCustomized`, `activeCol`, single-column `resetColumn`, and full `resetAll`) plus `ColResizeHandle` (`role="separator"`, stopping click/double-click/mousedown propagation so sortable headers never sort accidentally on drag or double-click reset).
+  - Added `.ss-workbench-table--resizable` (`table-layout: fixed`, `tbody td { overflow: hidden; }`) and `.ss-col-resizer` / `.ss-col-resizer--active` divider styles in [`database.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/database.css).
+  - Wired `<colgroup>`, `<ColResizeHandle>`, `Reset Widths` header button (shown when customized), and fluid `truncate` cell styling (removing fixed `max-w-*` / `ss-db-td-clip` width caps) across all 5 Database Workbench tables: [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx) + [`LogRow.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/LogRow.tsx), [`SpansTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/SpansTable.tsx), [`EntitiesTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EntitiesTable.tsx), [`EventsTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EventsTable.tsx), and [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx).
+  - Added drag-resize, `localStorage` persistence, double-click column reset, and `Reset Widths` verification in [`DatabaseDashboard.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatabaseDashboard.test.tsx).
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (0 errors; `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx src/test/App.test.tsx src/test/TopNav.test.tsx src/test/AdminMobileRestriction.test.tsx`: **4 test files passed (19 tests passed)**.
+- **Next Tasks / Unfinished Work:**
+  - Live UI check and `snapshot` → `main` promotion when ready.
+
 
 
 

@@ -67,20 +67,20 @@ export function LogRow({
       </td>
       <td>
         <span
-          className="inline-block max-w-[13rem] truncate font-semibold text-sky-300"
+          className="block w-full truncate font-semibold text-sky-300"
           title={row.talkgroup ?? ''}
         >
           {row.talkgroup || '—'}
         </span>
       </td>
       <td title={row.filename}>
-        <span className="block max-w-[18rem] truncate font-mono text-[11px] text-slate-500">
+        <span className="block w-full truncate font-mono text-[11px] text-slate-500">
           {row.filename || '—'}
         </span>
       </td>
       <td>
         <span
-          className={`ss-db-td-clip block ${
+          className={`block w-full truncate ${
             isVadRejected ? 'font-mono text-[11px] italic text-zinc-500' : 'font-medium text-slate-100'
           }`}
         >

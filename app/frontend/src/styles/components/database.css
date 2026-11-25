@@ -245,6 +245,43 @@
     @apply border-b border-white/[0.06] px-3 py-2 align-middle text-gray-300;
   }
 
+  .ss-workbench-table--resizable {
+    table-layout: fixed;
+  }
+
+  .ss-workbench-table--resizable tbody td {
+    overflow: hidden;
+  }
+
+  .ss-col-resizer {
+    position: absolute;
+    top: 0;
+    right: -3px;
+    bottom: 0;
+    width: 7px;
+    cursor: col-resize;
+    user-select: none;
+    touch-action: none;
+    z-index: 20;
+  }
+
+  .ss-col-resizer::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 3px;
+    width: 2px;
+    border-radius: 1px;
+    background: transparent;
+    transition: background-color 120ms ease;
+  }
+
+  .ss-col-resizer:hover::after,
+  .ss-col-resizer--active::after {
+    background-color: rgb(99 102 241 / 0.85);
+  }
+
   .ss-workbench-table tbody tr.ss-db-row:nth-child(even) {
     @apply bg-white/[0.014];
   }

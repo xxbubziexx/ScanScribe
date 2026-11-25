@@ -16,6 +16,20 @@ import type { LogsSortBy } from '@/types/logs'
 import { LogRow } from './components/LogRow'
 import { LogExpandedRow } from './components/LogExpandedRow'
 import { MobileLogCard } from './components/MobileLogCard'
+import { ColResizeHandle, useResizableColumns } from '@/pages/DataExplorer/hooks/useResizableColumns'
+
+const DEFAULT_COL_WIDTHS = {
+  time: 155,
+  talkgroup: 195,
+  filename: 220,
+  transcript: 320,
+  dur: 68,
+  size: 84,
+  conf: 68,
+  actions: 128,
+} as const
+
+type TransmissionsCol = keyof typeof DEFAULT_COL_WIDTHS
 
 const SORT_OPTIONS: { value: LogsSortBy; label: string }[] = [
   { value: 'timestamp_desc', label: 'Newest first' },
@@ -58,6 +72,15 @@ export function DatabasePage() {
   const [page, setPage] = useState(1)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const {
+    widths: colWidths,
+    totalWidth: colTotalWidth,
+    isCustomized: hasCustomWidths,
+    activeCol: activeResizeCol,
+    startResize,
+    resetColumn,
+    resetAll: resetColWidths,
+  } = useResizableColumns<TransmissionsCol>('transmissions', DEFAULT_COL_WIDTHS)
   const [isDownloadingZip, setIsDownloadingZip] = useState(false)
 
   useEffect(() => {
@@ -231,6 +254,15 @@ export function DatabasePage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {hasCustomWidths && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={resetColWidths}
+            >
+              Reset Widths
+            </button>
+          )}
           {hasFilters && (
             <button
               type="button"
@@ -378,7 +410,21 @@ export function DatabasePage() {
         {!query.isLoading && !query.isError && rows.length > 0 && (
           <>
             <div className="hidden md:block">
-              <table className="ss-workbench-table">
+              <table
+                className="ss-workbench-table ss-workbench-table--resizable"
+                style={{ width: `${colTotalWidth + 36}px`, minWidth: '100%' }}
+              >
+                <colgroup>
+                  <col style={{ width: '36px' }} />
+                  <col style={{ width: `${colWidths.time}px` }} />
+                  <col style={{ width: `${colWidths.talkgroup}px` }} />
+                  <col style={{ width: `${colWidths.filename}px` }} />
+                  <col style={{ width: `${colWidths.transcript}px` }} />
+                  <col style={{ width: `${colWidths.dur}px` }} />
+                  <col style={{ width: `${colWidths.size}px` }} />
+                  <col style={{ width: `${colWidths.conf}px` }} />
+                  <col style={{ width: `${colWidths.actions}px` }} />
+                </colgroup>
                 <thead>
                   <tr>
                     <th className="w-9 text-center">
@@ -391,14 +437,86 @@ export function DatabasePage() {
                         aria-label="Select all entries on this page"
                       />
                     </th>
-                    <th>Time</th>
-                    <th>Talkgroup</th>
-                    <th>Filename</th>
-                    <th>Transcript</th>
-                    <th>Dur</th>
-                    <th>Size</th>
-                    <th>Conf.</th>
-                    <th className="text-right">Actions</th>
+                    <th>
+                      Time
+                      <ColResizeHandle
+                        col="time"
+                        label="Time"
+                        isActive={activeResizeCol === 'time'}
+                        onMouseDown={(e) => startResize('time', e)}
+                        onDoubleClick={() => resetColumn('time')}
+                      />
+                    </th>
+                    <th>
+                      Talkgroup
+                      <ColResizeHandle
+                        col="talkgroup"
+                        label="Talkgroup"
+                        isActive={activeResizeCol === 'talkgroup'}
+                        onMouseDown={(e) => startResize('talkgroup', e)}
+                        onDoubleClick={() => resetColumn('talkgroup')}
+                      />
+                    </th>
+                    <th>
+                      Filename
+                      <ColResizeHandle
+                        col="filename"
+                        label="Filename"
+                        isActive={activeResizeCol === 'filename'}
+                        onMouseDown={(e) => startResize('filename', e)}
+                        onDoubleClick={() => resetColumn('filename')}
+                      />
+                    </th>
+                    <th>
+                      Transcript
+                      <ColResizeHandle
+                        col="transcript"
+                        label="Transcript"
+                        isActive={activeResizeCol === 'transcript'}
+                        onMouseDown={(e) => startResize('transcript', e)}
+                        onDoubleClick={() => resetColumn('transcript')}
+                      />
+                    </th>
+                    <th>
+                      Dur
+                      <ColResizeHandle
+                        col="dur"
+                        label="Dur"
+                        isActive={activeResizeCol === 'dur'}
+                        onMouseDown={(e) => startResize('dur', e)}
+                        onDoubleClick={() => resetColumn('dur')}
+                      />
+                    </th>
+                    <th>
+                      Size
+                      <ColResizeHandle
+                        col="size"
+                        label="Size"
+                        isActive={activeResizeCol === 'size'}
+                        onMouseDown={(e) => startResize('size', e)}
+                        onDoubleClick={() => resetColumn('size')}
+                      />
+                    </th>
+                    <th>
+                      Conf.
+                      <ColResizeHandle
+                        col="conf"
+                        label="Conf."
+                        isActive={activeResizeCol === 'conf'}
+                        onMouseDown={(e) => startResize('conf', e)}
+                        onDoubleClick={() => resetColumn('conf')}
+                      />
+                    </th>
+                    <th className="text-right">
+                      Actions
+                      <ColResizeHandle
+                        col="actions"
+                        label="Actions"
+                        isActive={activeResizeCol === 'actions'}
+                        onMouseDown={(e) => startResize('actions', e)}
+                        onDoubleClick={() => resetColumn('actions')}
+                      />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>

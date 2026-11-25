@@ -7,8 +7,22 @@ import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRange
 import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import type { SpanStoreRow } from '@/types/events'
+import { ColResizeHandle, useResizableColumns } from '../hooks/useResizableColumns'
 
 const PAGE_SIZES = [25, 50, 100] as const
+
+const DEFAULT_COL_WIDTHS = {
+  id: 72,
+  monitor: 135,
+  log_entry: 95,
+  talkgroup: 175,
+  ner: 230,
+  transcript: 280,
+  events: 120,
+  created: 155,
+} as const
+
+type SpansCol = keyof typeof DEFAULT_COL_WIDTHS
 
 function formatTime(iso: string | null | undefined) {
   if (!iso) return '—'
@@ -161,6 +175,15 @@ export function SpansTable() {
   const hasFilters = Boolean(
     monitorId || talkgroup.trim() || logEntryId.trim() || search.trim() || dateFrom || dateTo,
   )
+  const {
+    widths: colWidths,
+    totalWidth: colTotalWidth,
+    isCustomized: hasCustomWidths,
+    activeCol: activeResizeCol,
+    startResize,
+    resetColumn,
+    resetAll: resetColWidths,
+  } = useResizableColumns<SpansCol>('spans', DEFAULT_COL_WIDTHS)
   const clearFilters = () => {
     setMonitorId('')
     setTalkgroup('')
@@ -183,6 +206,15 @@ export function SpansTable() {
         </div>
 
         <div className="flex items-center gap-2">
+          {hasCustomWidths && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={resetColWidths}
+            >
+              Reset Widths
+            </button>
+          )}
           {hasFilters && (
             <button
               type="button"
@@ -298,25 +330,103 @@ export function SpansTable() {
         {listQuery.isSuccess && rows.length === 0 ? (
           <p className="ss-empty m-4 not-italic">No span_store entries match the selected filters.</p>
         ) : !listQuery.isLoading && !listQuery.isError && rows.length > 0 ? (
-          <table className="ss-workbench-table">
+          <table
+            className="ss-workbench-table ss-workbench-table--resizable"
+            style={{ width: `${colTotalWidth + 32}px`, minWidth: '100%' }}
+          >
+            <colgroup>
+              <col style={{ width: '32px' }} />
+              <col style={{ width: `${colWidths.id}px` }} />
+              <col style={{ width: `${colWidths.monitor}px` }} />
+              <col style={{ width: `${colWidths.log_entry}px` }} />
+              <col style={{ width: `${colWidths.talkgroup}px` }} />
+              <col style={{ width: `${colWidths.ner}px` }} />
+              <col style={{ width: `${colWidths.transcript}px` }} />
+              <col style={{ width: `${colWidths.events}px` }} />
+              <col style={{ width: `${colWidths.created}px` }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="w-8" />
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('id')}>
                   ID {renderSortIndicator('id')}
+                  <ColResizeHandle
+                    col="id"
+                    label="ID"
+                    isActive={activeResizeCol === 'id'}
+                    onMouseDown={(e) => startResize('id', e)}
+                    onDoubleClick={() => resetColumn('id')}
+                  />
                 </th>
-                <th>Monitor</th>
+                <th>
+                  Monitor
+                  <ColResizeHandle
+                    col="monitor"
+                    label="Monitor"
+                    isActive={activeResizeCol === 'monitor'}
+                    onMouseDown={(e) => startResize('monitor', e)}
+                    onDoubleClick={() => resetColumn('monitor')}
+                  />
+                </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('log_entry_id')}>
                   Log Entry {renderSortIndicator('log_entry_id')}
+                  <ColResizeHandle
+                    col="log_entry"
+                    label="Log Entry"
+                    isActive={activeResizeCol === 'log_entry'}
+                    onMouseDown={(e) => startResize('log_entry', e)}
+                    onDoubleClick={() => resetColumn('log_entry')}
+                  />
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('talkgroup')}>
                   Talkgroup {renderSortIndicator('talkgroup')}
+                  <ColResizeHandle
+                    col="talkgroup"
+                    label="Talkgroup"
+                    isActive={activeResizeCol === 'talkgroup'}
+                    onMouseDown={(e) => startResize('talkgroup', e)}
+                    onDoubleClick={() => resetColumn('talkgroup')}
+                  />
                 </th>
-                <th>Extracted NER</th>
-                <th>Transcript</th>
-                <th>Linked Incidents</th>
+                <th>
+                  Extracted NER
+                  <ColResizeHandle
+                    col="ner"
+                    label="Extracted NER"
+                    isActive={activeResizeCol === 'ner'}
+                    onMouseDown={(e) => startResize('ner', e)}
+                    onDoubleClick={() => resetColumn('ner')}
+                  />
+                </th>
+                <th>
+                  Transcript
+                  <ColResizeHandle
+                    col="transcript"
+                    label="Transcript"
+                    isActive={activeResizeCol === 'transcript'}
+                    onMouseDown={(e) => startResize('transcript', e)}
+                    onDoubleClick={() => resetColumn('transcript')}
+                  />
+                </th>
+                <th>
+                  Linked Incidents
+                  <ColResizeHandle
+                    col="events"
+                    label="Linked Incidents"
+                    isActive={activeResizeCol === 'events'}
+                    onMouseDown={(e) => startResize('events', e)}
+                    onDoubleClick={() => resetColumn('events')}
+                  />
+                </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('created_at')}>
                   Created {renderSortIndicator('created_at')}
+                  <ColResizeHandle
+                    col="created"
+                    label="Created"
+                    isActive={activeResizeCol === 'created'}
+                    onMouseDown={(e) => startResize('created', e)}
+                    onDoubleClick={() => resetColumn('created')}
+                  />
                 </th>
               </tr>
             </thead>
@@ -349,7 +459,7 @@ export function SpansTable() {
                           '—'
                         )}
                       </td>
-                      <td className="max-w-[10rem] truncate font-semibold text-sky-300" title={row.talkgroup ?? ''}>
+                      <td className="truncate font-semibold text-sky-300" title={row.talkgroup ?? ''}>
                         {row.talkgroup || '—'}
                       </td>
                       <td>
@@ -374,7 +484,7 @@ export function SpansTable() {
                           </div>
                         )}
                       </td>
-                      <td className="max-w-[18rem] truncate font-medium text-slate-100">
+                      <td className="truncate font-medium text-slate-100" title={row.transcript || ''}>
                         {row.transcript || '—'}
                       </td>
                       <td>

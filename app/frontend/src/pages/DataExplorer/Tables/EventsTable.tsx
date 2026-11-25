@@ -7,8 +7,22 @@ import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRange
 import { errorMessage } from '@/types/api'
 import { useToast } from '@/context/ToastContext'
 import type { EventDetailResponse, EventListItem } from '@/types/events'
+import { ColResizeHandle, useResizableColumns } from '../hooks/useResizableColumns'
 
 const PAGE_SIZES = [25, 50, 100] as const
+
+const DEFAULT_COL_WIDTHS = {
+  event_id: 120,
+  status: 90,
+  monitor: 135,
+  type: 165,
+  location: 220,
+  units: 165,
+  spans: 80,
+  created: 155,
+} as const
+
+type EventsCol = keyof typeof DEFAULT_COL_WIDTHS
 
 function formatTime(iso: string | null | undefined) {
   if (!iso) return '—'
@@ -313,6 +327,15 @@ export function EventsTable() {
   }
 
   const hasFilters = Boolean(monitorId || status || search.trim() || dateFrom || dateTo)
+  const {
+    widths: colWidths,
+    totalWidth: colTotalWidth,
+    isCustomized: hasCustomWidths,
+    activeCol: activeResizeCol,
+    startResize,
+    resetColumn,
+    resetAll: resetColWidths,
+  } = useResizableColumns<EventsCol>('events', DEFAULT_COL_WIDTHS)
   const clearFilters = () => {
     setMonitorId('')
     setStatus('')
@@ -334,6 +357,15 @@ export function EventsTable() {
         </div>
 
         <div className="flex items-center gap-2">
+          {hasCustomWidths && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={resetColWidths}
+            >
+              Reset Widths
+            </button>
+          )}
           {hasFilters && (
             <button
               type="button"
@@ -438,27 +470,103 @@ export function EventsTable() {
         {eventsQuery.isSuccess && rows.length === 0 ? (
           <p className="ss-empty m-4 not-italic">No events match the selected filters.</p>
         ) : !eventsQuery.isLoading && !eventsQuery.isError && rows.length > 0 ? (
-          <table className="ss-workbench-table">
+          <table
+            className="ss-workbench-table ss-workbench-table--resizable"
+            style={{ width: `${colTotalWidth + 32}px`, minWidth: '100%' }}
+          >
+            <colgroup>
+              <col style={{ width: '32px' }} />
+              <col style={{ width: `${colWidths.event_id}px` }} />
+              <col style={{ width: `${colWidths.status}px` }} />
+              <col style={{ width: `${colWidths.monitor}px` }} />
+              <col style={{ width: `${colWidths.type}px` }} />
+              <col style={{ width: `${colWidths.location}px` }} />
+              <col style={{ width: `${colWidths.units}px` }} />
+              <col style={{ width: `${colWidths.spans}px` }} />
+              <col style={{ width: `${colWidths.created}px` }} />
+            </colgroup>
             <thead>
               <tr>
                 <th className="w-8" />
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('event_id')}>
                   Event ID {renderSortIndicator('event_id')}
+                  <ColResizeHandle
+                    col="event_id"
+                    label="Event ID"
+                    isActive={activeResizeCol === 'event_id'}
+                    onMouseDown={(e) => startResize('event_id', e)}
+                    onDoubleClick={() => resetColumn('event_id')}
+                  />
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('status')}>
                   Status {renderSortIndicator('status')}
+                  <ColResizeHandle
+                    col="status"
+                    label="Status"
+                    isActive={activeResizeCol === 'status'}
+                    onMouseDown={(e) => startResize('status', e)}
+                    onDoubleClick={() => resetColumn('status')}
+                  />
                 </th>
-                <th>Monitor</th>
+                <th>
+                  Monitor
+                  <ColResizeHandle
+                    col="monitor"
+                    label="Monitor"
+                    isActive={activeResizeCol === 'monitor'}
+                    onMouseDown={(e) => startResize('monitor', e)}
+                    onDoubleClick={() => resetColumn('monitor')}
+                  />
+                </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('event_type')}>
                   Type {renderSortIndicator('event_type')}
+                  <ColResizeHandle
+                    col="type"
+                    label="Type"
+                    isActive={activeResizeCol === 'type'}
+                    onMouseDown={(e) => startResize('type', e)}
+                    onDoubleClick={() => resetColumn('type')}
+                  />
                 </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('location')}>
                   Location {renderSortIndicator('location')}
+                  <ColResizeHandle
+                    col="location"
+                    label="Location"
+                    isActive={activeResizeCol === 'location'}
+                    onMouseDown={(e) => startResize('location', e)}
+                    onDoubleClick={() => resetColumn('location')}
+                  />
                 </th>
-                <th>Units</th>
-                <th>Spans</th>
+                <th>
+                  Units
+                  <ColResizeHandle
+                    col="units"
+                    label="Units"
+                    isActive={activeResizeCol === 'units'}
+                    onMouseDown={(e) => startResize('units', e)}
+                    onDoubleClick={() => resetColumn('units')}
+                  />
+                </th>
+                <th>
+                  Spans
+                  <ColResizeHandle
+                    col="spans"
+                    label="Spans"
+                    isActive={activeResizeCol === 'spans'}
+                    onMouseDown={(e) => startResize('spans', e)}
+                    onDoubleClick={() => resetColumn('spans')}
+                  />
+                </th>
                 <th className="cursor-pointer select-none" onClick={() => toggleSort('created_at')}>
                   Created {renderSortIndicator('created_at')}
+                  <ColResizeHandle
+                    col="created"
+                    label="Created"
+                    isActive={activeResizeCol === 'created'}
+                    onMouseDown={(e) => startResize('created', e)}
+                    onDoubleClick={() => resetColumn('created')}
+                  />
                 </th>
               </tr>
             </thead>
@@ -497,10 +605,10 @@ export function EventsTable() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="max-w-[14rem] truncate font-medium text-sky-200" title={row.location || ''}>
+                      <td className="truncate font-medium text-sky-200" title={row.location || ''}>
                         {row.location || '—'}
                       </td>
-                      <td className="max-w-[10rem] truncate font-mono text-emerald-300/90" title={row.units || ''}>
+                      <td className="truncate font-mono text-emerald-300/90" title={row.units || ''}>
                         {row.units || '—'}
                       </td>
                       <td>

@@ -224,4 +224,67 @@ describe('Database Workbench Suite', () => {
       )
     })
   })
+
+  it('resizes Transmissions columns via drag, persists to localStorage, and resets cleanly', async () => {
+    window.localStorage.removeItem('scanscribe_col_widths_transmissions')
+    vi.mocked(logsApi.activeDates).mockResolvedValue({ dates: ['2026-11-24'] })
+    vi.mocked(logsApi.talkgroups).mockResolvedValue({ talkgroups: ['Fire Dispatch'] })
+    vi.mocked(logsApi.list).mockResolvedValue({
+      total: 1,
+      page: 1,
+      page_size: 50,
+      total_pages: 1,
+      logs: [
+        {
+          id: 201,
+          filename: 'dispatch_101.mp3',
+          talkgroup: 'Fire Dispatch',
+          timestamp: '2026-11-24T12:00:00',
+          duration: 4.5,
+          file_size: 2048,
+          confidence: 0.94,
+          transcript: 'Engine 101 responding to structure fire',
+          audio_path: 'audio_storage/2026/11/24/dispatch_101.mp3',
+          log_date: '2026-11-24',
+          created_at: '2026-11-24T12:00:00Z',
+          is_reviewed: false,
+          corrected_transcript: null,
+        },
+      ],
+    })
+
+    const { container } = wrap(<DatabasePage />, ['/data/logs'])
+
+    const handle = await screen.findByRole('separator', { name: 'Resize Talkgroup column' })
+    expect(screen.queryByRole('button', { name: 'Reset Widths' })).not.toBeInTheDocument()
+
+    // Drag Talkgroup handle +80px wider (default 195 -> 275)
+    fireEvent.mouseDown(handle, { clientX: 200 })
+    fireEvent.mouseMove(window, { clientX: 280 })
+    fireEvent.mouseUp(window, { clientX: 280 })
+
+    const cols = container.querySelectorAll('table colgroup col')
+    expect((cols[2] as HTMLElement).style.width).toBe('275px')
+    expect(JSON.parse(window.localStorage.getItem('scanscribe_col_widths_transmissions') || '{}')).toMatchObject({
+      talkgroup: 275,
+    })
+
+    await screen.findByRole('button', { name: 'Reset Widths' })
+
+    // Double-click Talkgroup handle resets just that column back to default (195px)
+    fireEvent.doubleClick(handle)
+    expect((container.querySelectorAll('table colgroup col')[2] as HTMLElement).style.width).toBe('195px')
+    expect(screen.queryByRole('button', { name: 'Reset Widths' })).not.toBeInTheDocument()
+
+    // Drag again and reset all via the header Reset Widths button
+    fireEvent.mouseDown(handle, { clientX: 200 })
+    fireEvent.mouseMove(window, { clientX: 300 })
+    fireEvent.mouseUp(window, { clientX: 300 })
+    expect((container.querySelectorAll('table colgroup col')[2] as HTMLElement).style.width).toBe('295px')
+    expect(screen.getByRole('button', { name: 'Reset Widths' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset Widths' }))
+    expect((container.querySelectorAll('table colgroup col')[2] as HTMLElement).style.width).toBe('195px')
+    expect(window.localStorage.getItem('scanscribe_col_widths_transmissions')).toBeNull()
+  })
 })
