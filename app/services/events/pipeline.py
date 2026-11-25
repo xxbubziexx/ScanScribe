@@ -6,6 +6,8 @@ import threading
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from ...config import get_settings
 from ...database import EventsSessionLocal, LogsSessionLocal
 from ...models.event import Event, EventTranscriptLink, Monitor, SpanStore
@@ -85,10 +87,37 @@ def get_matching_monitor_ids(events_db, talkgroup: str) -> List[int]:
     return list(index.get(key, []))
 
 
+def is_events_pipeline_active(cfg: Any) -> bool:
+    """Return True if either full events pipeline or NER-only mode is enabled."""
+    return bool(cfg and (cfg.enabled or getattr(cfg, "ner_only", False)))
+
+
+def warn_if_no_monitors_configured(session_factory=None) -> None:
+    """Log a WARNING at startup if the pipeline is active but no monitors can match."""
+    factory = session_factory or EventsSessionLocal
+    events_db = factory()
+    try:
+        total_monitors = events_db.query(Monitor).count()
+        if total_monitors == 0:
+            logger.warning(
+                "⚠️ Events pipeline is on but no monitors are defined — nothing will ever match"
+            )
+            return
+        enabled_monitors = events_db.query(Monitor).filter(Monitor.enabled == True).count()
+        if enabled_monitors == 0:
+            logger.warning(
+                "⚠️ Events pipeline is on but no monitors are enabled — nothing will ever match"
+            )
+    except SQLAlchemyError as err:
+        logger.warning("Failed checking monitors count at startup: %s", err, exc_info=True)
+    finally:
+        events_db.close()
+
+
 def ensure_ner_model_loaded() -> bool:
     settings = get_settings()
     cfg = getattr(settings.config, "events_pipeline", None)
-    if not cfg or not (cfg.enabled or getattr(cfg, "ner_only", False)) or not cfg.ner_model_path:
+    if not is_events_pipeline_active(cfg) or not cfg.ner_model_path:
         return False
     return load_ner_model(cfg.ner_model_path)
 
@@ -103,7 +132,7 @@ def process_transcript_for_monitor(
     """Single-pass OpenRouter LLM router pipeline."""
     settings = get_settings()
     cfg = getattr(settings.config, "events_pipeline", None)
-    if not cfg or not (cfg.enabled or getattr(cfg, "ner_only", False)) or not cfg.ner_model_path:
+    if not is_events_pipeline_active(cfg) or not cfg.ner_model_path:
         return
 
     events_db = EventsSessionLocal()
@@ -149,6 +178,14 @@ def process_transcript_for_monitor(
                     entities=entities,
                     ts=log_timestamp if isinstance(log_timestamp, datetime) else None,
                 )
+                extracted_count = sum(len(v) for v in entities.values() if v)
+                if extracted_count > 0 and len(obs_rows) == 0:
+                    logger.warning(
+                        "NER extracted %d entities for log_entry_id=%s but produced 0 entity_observations (entities=%r)",
+                        extracted_count,
+                        log_entry_id,
+                        entities,
+                    )
                 if obs_rows:
                     events_db.add_all(obs_rows)
             except Exception as ex:

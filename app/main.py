@@ -24,6 +24,12 @@ from .routes.events import router as events_router
 from .services.watcher import get_watcher_service
 from .services.queue_processor import get_processor
 from .services.summaries_auto import start_auto_summary_worker, stop_auto_summary_worker
+from .services.events_worker import (
+    ensure_ner_model_loaded,
+    is_events_pipeline_active,
+    start_event_cleanup_worker,
+    warn_if_no_monitors_configured,
+)
 from .logging_config import setup_logging
 
 # Configure logging with custom handlers
@@ -59,27 +65,22 @@ async def lifespan(app: FastAPI):
         await queue_processor.start()
         logger.info("✅ Queue processor started")
 
-        from .services.events_worker import ensure_ner_model_loaded, start_event_cleanup_worker
         pipe_cfg = getattr(settings.config, "events_pipeline", None)
-        events_active = bool(pipe_cfg and (pipe_cfg.enabled or getattr(pipe_cfg, "ner_only", False)))
+        events_active = is_events_pipeline_active(pipe_cfg)
+        ner_only = bool(getattr(pipe_cfg, "ner_only", False)) if pipe_cfg else False
+        mode_label = "NER-only mode" if ner_only else "events pipeline"
         if ensure_ner_model_loaded():
-            logger.info("✅ NER model loaded for events pipeline")
+            logger.info("✅ NER model loaded for %s", mode_label)
         elif events_active:
-            logger.warning("⚠️ Events pipeline enabled but NER model failed to load")
+            logger.warning(
+                "⚠️ %s enabled but NER model failed to load",
+                "NER-only mode" if ner_only else "Events pipeline",
+            )
         start_event_cleanup_worker()
         logger.info("✅ Events cleanup worker started")
 
         if events_active:
-            from .database import EventsSessionLocal
-            from .models.event import Monitor
-            _ev_db = EventsSessionLocal()
-            try:
-                if _ev_db.query(Monitor).count() == 0:
-                    logger.warning("⚠️ Events pipeline is on but no monitors are defined — nothing will ever match")
-            except Exception as _mon_err:
-                logger.debug("Failed checking monitors count at startup: %s", _mon_err)
-            finally:
-                _ev_db.close()
+            warn_if_no_monitors_configured()
 
         await watcher_service.start()
         logger.info("✅ File watcher started")

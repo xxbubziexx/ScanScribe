@@ -82,8 +82,10 @@ from .events.pipeline import (
     ensure_ner_model_loaded,
     get_matching_monitor_ids,
     invalidate_monitor_index_cache,
+    is_events_pipeline_active,
     normalize_talkgroup_key,
     process_transcript_for_monitor,
+    warn_if_no_monitors_configured,
 )
 from .events.spans import (
     comma_join_parts,

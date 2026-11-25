@@ -19,7 +19,12 @@ from ..utils.audio_paths import NOT_SAVED, shard_target
 from .transcription_engine import get_engine
 from .websocket import websocket_manager
 from .watcher import get_watcher_service
-from .events_worker import get_matching_monitor_ids, process_transcript_for_monitor
+from .events_worker import (
+    get_matching_monitor_ids,
+    is_events_pipeline_active,
+    normalize_talkgroup_key,
+    process_transcript_for_monitor,
+)
 from .redaction_service import redact_ssn
 
 logger = logging.getLogger(__name__)
@@ -124,7 +129,7 @@ async def _dispatch_events_pipeline(
             events_db.close()
 
         if not monitor_ids:
-            norm_key = (talkgroup or "").strip().lower()
+            norm_key = normalize_talkgroup_key(talkgroup or "")
             now = time.time()
             last_logged = _unmatched_tg_last_logged.get(norm_key, 0.0)
             if now - last_logged >= _UNMATCHED_TG_LOG_INTERVAL:
@@ -471,7 +476,7 @@ class QueueProcessor:
             # Events pipeline: dispatch asynchronously in background so audio ingestion is not blocked
             settings = get_settings()
             pipe_cfg = getattr(settings.config, "events_pipeline", None)
-            if pipe_cfg and (pipe_cfg.enabled or getattr(pipe_cfg, "ner_only", False)):
+            if is_events_pipeline_active(pipe_cfg):
                 transcript_text = result.get("transcript") or ""
                 from .task_manager import task_manager
                 task_manager.spawn(

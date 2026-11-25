@@ -1369,3 +1369,31 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Database dashboard ergonomics and UI improvements as requested by user.
 
+---
+
+### 2026-11-24 18:45 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (NER-Only Mode Audit & Hardening):**
+  1. **NER Failure Propagation ([`app/services/ner_service.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/ner_service.py)):**
+     - `extract_entities()` now raises `RuntimeError("NER model is not loaded")` when `_pipeline is None` (for non-empty transcripts) and no longer swallows pipeline inference exceptions into `({}, [])`. Failures propagate to `process_transcript_for_monitor()`, which logs `WARNING` with `log_entry_id` and `exc_info=True` and avoids committing bogus empty `SpanStore` rows.
+  2. **Shared Active-Mode Helper, Monitor Check & Observation Warning ([`app/services/events/pipeline.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/events/pipeline.py), [`app/services/events_worker.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/events_worker.py)):**
+     - Added `is_events_pipeline_active(cfg)` (`enabled or ner_only`) and `warn_if_no_monitors_configured()` (warns at startup when 0 monitors exist or 0 monitors are enabled).
+     - Added `WARNING` log when NER extracts entities (`extracted_count > 0`) but `entity_observations_from_entities()` produces 0 rows.
+  3. **Startup & Queue Dispatch Cleanup ([`app/main.py`](file:///a:/Scanscribe_Projects/scanscribe/app/main.py), [`app/services/queue_processor.py`](file:///a:/Scanscribe_Projects/scanscribe/app/services/queue_processor.py)):**
+     - Moved `events_worker` imports to module top level in `app/main.py` (removing inline imports inside `lifespan()`), logged mode-specific NER load status (`NER-only mode` vs `events pipeline`), and invoked `warn_if_no_monitors_configured()` when active.
+     - Normalized `_unmatched_tg_last_logged` rate-limit keys in `_dispatch_events_pipeline()` using `normalize_talkgroup_key()` so whitespace variants share the 60s bucket.
+  4. **Status Endpoint Fix ([`app/routes/events/admin_router.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/events/admin_router.py)):**
+     - Updated `/api/events/llm-status` (`events_llm_status`) to use `is_events_pipeline_active(cfg)` and include `ner_only` in the response payload so NER-only deployments report `"ok"` / `"unreachable"` rather than `"disabled"`.
+  5. **SQLite Integration & Acceptance Tests ([`tests/test_ner_only_mode.py`](file:///a:/Scanscribe_Projects/scanscribe/tests/test_ner_only_mode.py)):**
+     - Expanded from 5 unit tests to 14 tests including real in-memory SQLite (`PRAGMA foreign_keys=ON`) end-to-end checks for all 4 `(enabled, ner_only)` combinations, zero outbound `httpx` calls, monitor startup warnings, whitespace-normalized rate-limited logging, NER/DB failure warnings, and `/api/events/llm-status`.
+- **Live Ubuntu Ingestion Impact:**
+  - Zero regression risk; improves observability when NER fails, observations are dropped, or no enabled monitors exist.
+- **Gotchas / Warnings for Next Model:**
+  - `extract_entities()` now raises on unloaded/failing `_pipeline` for non-empty transcripts; unit tests invoking `process_transcript_for_monitor()` without patching `extract_entities` must ensure `ner_service._pipeline` is loaded or expect the caught `WARNING` path.
+- **Verification Performed:**
+  - `python -c "import app.main"` succeeded cleanly (no circular imports).
+  - `.venv\Scripts\python.exe -m pytest tests/test_ner_only_mode.py -v`: **14 passed in 1.31s**.
+  - `.venv\Scripts\python.exe -m pytest tests/ -q`: **183 passed, 2 warnings in 27.21s**.
+- **Next Tasks / Unfinished Work:**
+  - Validate on the live Ubuntu node with `enabled: false, ner_only: true` and an enabled `Monitor`.
+
+

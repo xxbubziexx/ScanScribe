@@ -11,6 +11,7 @@ from ...models.event import SystemSetting
 from ...models.user import User
 from ...services.events_debug import clear_all as clear_debug_all, get_recent as get_debug_recent
 from ...services.events_router_engine import OpenRouterRateLimitManager
+from ...services.events_worker import is_events_pipeline_active
 from ...services.ner_service import ENTITY_LABELS, is_loaded
 from ..auth import get_current_active_user, get_current_admin_user
 
@@ -54,17 +55,25 @@ async def events_llm_status(
     """NER model status for Events pipeline."""
     settings = get_settings()
     cfg = getattr(settings.config, "events_pipeline", None)
-    if not cfg or not cfg.enabled or not cfg.ner_model_path:
+    ner_only = bool(getattr(cfg, "ner_only", False)) if cfg else False
+    if not is_events_pipeline_active(cfg) or not cfg.ner_model_path:
         return {
             "enabled": False,
+            "ner_only": ner_only,
             "ner_model_path": "",
             "status": "disabled",
             "message": "Events pipeline disabled",
         }
     if is_loaded():
-        return {"enabled": True, "ner_model_path": cfg.ner_model_path, "status": "ok"}
+        return {
+            "enabled": True,
+            "ner_only": ner_only,
+            "ner_model_path": cfg.ner_model_path,
+            "status": "ok",
+        }
     return {
         "enabled": True,
+        "ner_only": ner_only,
         "ner_model_path": cfg.ner_model_path,
         "status": "unreachable",
         "message": "NER model not loaded",

@@ -158,19 +158,17 @@ def extract_entities(transcript: str, threshold: float = 0.0) -> tuple[Dict[str,
     threshold: minimum confidence score (0.0–1.0); spans below this are discarded.
     """
     global _pipeline
-    if not _pipeline or not transcript or not transcript.strip():
+    if not transcript or not transcript.strip():
         return {}, []
+    if _pipeline is None:
+        raise RuntimeError("NER model is not loaded")
 
     with _ner_lock:
-        try:
-            if _TORCH_AVAILABLE and torch is not None:
-                with torch.inference_mode():
-                    results = _pipeline(transcript.strip()) or []
-            else:
+        if _TORCH_AVAILABLE and torch is not None:
+            with torch.inference_mode():
                 results = _pipeline(transcript.strip()) or []
-        except Exception as e:
-            logger.warning("NER inference failed: %s", e)
-            return {}, []
+        else:
+            results = _pipeline(transcript.strip()) or []
 
 
     if threshold > 0.0:
