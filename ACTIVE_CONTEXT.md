@@ -1571,6 +1571,16 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Live UI check and `snapshot` → `main` promotion when ready.
 
+### 2026-11-25 17:43 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Workbench Button Vertical Alignment & Inspector Right-Edge Margin Fix):**
+  - Added `inline-flex items-center justify-center py-0 leading-none` to `.ss-workbench .ss-btn-ghost` and `.ss-workbench .ss-btn-primary` in [`database.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/database.css) and on [`LogExpandedRow.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/LogExpandedRow.tsx) action buttons so base `py-2`/`py-1.5` padding never shifts button text vertically inside compact `h-6`/`h-8` buttons.
+  - Adjusted `.ss-db-expand-inner` `max-width` to `min(100%, calc(100vw - 19rem))` so `Open audio` has crisp right-edge margin inside the viewport.
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (`built in 1.86s`, `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx src/test/App.test.tsx src/test/TopNav.test.tsx src/test/AdminMobileRestriction.test.tsx`: **4 test files passed (24 tests passed)**.
+- **Next Tasks / Unfinished Work:**
+  - Live UI check and `snapshot` → `main` promotion when ready.
+
 
 
 

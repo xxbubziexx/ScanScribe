@@ -149,14 +149,14 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  className="ss-btn-ghost h-6 px-2 text-[11px] cursor-pointer"
+                  className="ss-btn-ghost inline-flex h-6 items-center justify-center px-2.5 py-0 text-[11px] leading-none cursor-pointer"
                   onClick={copyTranscript}
                 >
                   {copied ? 'Copied' : 'Copy'}
                 </button>
                 <button
                   type="button"
-                  className="ss-btn-primary h-6 px-2.5 text-[11px] cursor-pointer"
+                  className="ss-btn-primary inline-flex h-6 items-center justify-center px-2.5 py-0 text-[11px] leading-none cursor-pointer"
                   onClick={() => reviewMutation.mutate(text)}
                   disabled={reviewMutation.isPending}
                 >
@@ -165,7 +165,7 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
                 {showUnreview && (
                   <button
                     type="button"
-                    className="ss-btn-ghost h-6 px-2 text-[11px] text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 cursor-pointer"
+                    className="ss-btn-ghost inline-flex h-6 items-center justify-center px-2.5 py-0 text-[11px] leading-none text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 cursor-pointer"
                     onClick={() => unreviewMutation.mutate()}
                     disabled={unreviewMutation.isPending}
                   >

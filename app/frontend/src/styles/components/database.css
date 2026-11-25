@@ -153,7 +153,7 @@
 
   .ss-db-expand-inner {
     @apply sticky left-0 w-full space-y-1.5;
-    max-width: min(100%, calc(100vw - 17.5rem));
+    max-width: min(100%, calc(100vw - 19rem));
   }
 
   .ss-db-expand-meta {
@@ -338,11 +338,11 @@
   }
 
   .ss-workbench .ss-btn-ghost {
-    @apply rounded-sm border border-[#273045] bg-[#161c2a] font-medium text-slate-200 transition hover:border-[#3a4766] hover:bg-[#1e2638] hover:text-white;
+    @apply inline-flex items-center justify-center rounded-sm border border-[#273045] bg-[#161c2a] py-0 font-medium leading-none text-slate-200 transition hover:border-[#3a4766] hover:bg-[#1e2638] hover:text-white;
   }
 
   .ss-workbench .ss-btn-primary {
-    @apply rounded-sm border border-indigo-500 bg-indigo-600 font-medium text-white transition hover:bg-indigo-500;
+    @apply inline-flex items-center justify-center rounded-sm border border-indigo-500 bg-indigo-600 py-0 font-medium leading-none text-white transition hover:bg-indigo-500;
   }
 
   .ss-workbench .ss-events-pill-tiny {
