@@ -539,7 +539,7 @@ export function DatabasePage() {
                         }
                       />
                       {expandedId === row.id && (
-                        <tr>
+                        <tr className="ss-db-expand-tr">
                           <td className="p-0" colSpan={9}>
                             <LogExpandedRow row={row} />
                           </td>

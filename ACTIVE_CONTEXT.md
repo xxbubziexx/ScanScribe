@@ -1528,6 +1528,18 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Live UI check and `snapshot` → `main` promotion when ready.
 
+### 2026-11-25 16:46 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Compact, High-Contrast Expanded Row Inspector Drawer):**
+  - Added compact `.ss-db-expand*` layout classes and scoped `.sc-audio-player` density overrides in [`database.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/database.css) (`sticky left-0 max-w-5xl` container for wide resizable tables, dense metadata flex strip, hairline file row, side-by-side transcript/audio cards, `48px` compact waveform, and `.ss-db-expand-tr:hover` override).
+  - Restyled [`LogExpandedRow.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/LogExpandedRow.tsx) with color-coded metadata (`#ID`, `Talkgroup`, `Date & Time`, `Duration`, `File Size`, confidence thresholds `>=85%`/`>=65%`/`<65%`), compact inline `Filename` + `Audio Path`, and optional `showUnreview` prop.
+  - Wired `ss-db-expand-tr` in [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx) and replaced the duplicated inline expanded drawer in [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx) with `<LogExpandedRow row={row} showUnreview />`.
+  - Added row-expansion inspector drawer assertions in [`DatabaseDashboard.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatabaseDashboard.test.tsx).
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (`built in 1.36s`, `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx src/test/App.test.tsx src/test/TopNav.test.tsx src/test/AdminMobileRestriction.test.tsx`: **4 test files passed (21 tests passed)**.
+- **Next Tasks / Unfinished Work:**
+  - Live UI check and `snapshot` → `main` promotion when ready.
+
 
 
 

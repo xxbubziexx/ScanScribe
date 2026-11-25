@@ -352,4 +352,43 @@ describe('Database Workbench Suite', () => {
       )
     })
   })
+
+  it('expands a Transmissions row to show the compact inspector drawer', async () => {
+    vi.mocked(logsApi.activeDates).mockResolvedValue({ dates: ['2026-11-24'] })
+    vi.mocked(logsApi.talkgroups).mockResolvedValue({ talkgroups: ['Fire Dispatch'] })
+    vi.mocked(logsApi.list).mockResolvedValue({
+      total: 1,
+      page: 1,
+      page_size: 50,
+      total_pages: 1,
+      logs: [
+        {
+          id: 404,
+          filename: 'inspect_404.mp3',
+          talkgroup: 'Fire Dispatch',
+          timestamp: '2026-11-24T12:00:00',
+          duration: 3.67,
+          file_size: 55194,
+          confidence: 0.61,
+          transcript: 'Two-five.',
+          audio_path: 'audio_storage/2026/11/24/inspect_404.wav',
+          log_date: '2026-11-24',
+          created_at: '2026-11-24T12:00:00Z',
+          is_reviewed: true,
+          corrected_transcript: 'Two-five.',
+        },
+      ],
+    })
+
+    wrap(<DatabasePage />, ['/data/logs'])
+
+    const cells = await screen.findAllByText('Two-five.')
+    fireEvent.click(cells[0])
+
+    expect((await screen.findAllByText('#404')).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('3.67s').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Reviewed').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByRole('button', { name: 'Accept & Save' }).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByRole('textbox')[0]).toHaveValue('Two-five.')
+  })
 })
