@@ -471,12 +471,12 @@ export function EventsTable() {
                       onClick={() => setExpandedId(isOpen ? null : row.event_id)}
                     >
                       <td className="text-gray-500">{isOpen ? '▼' : '▶'}</td>
-                      <td className="font-mono text-indigo-300/90 font-medium">
+                      <td className="whitespace-nowrap font-mono font-semibold text-indigo-300">
                         {row.event_id.length > 12 ? row.event_id.slice(0, 12) + '…' : row.event_id}
                       </td>
                       <td>
                         <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
                             row.status === 'open'
                               ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
                               : 'bg-gray-500/15 text-gray-400 border border-gray-500/20'
@@ -485,29 +485,29 @@ export function EventsTable() {
                           {row.status}
                         </span>
                       </td>
-                      <td className="text-gray-300">
+                      <td className="font-medium text-slate-300">
                         {monitorById.get(row.monitor_id) ?? `Monitor #${row.monitor_id}`}
                       </td>
                       <td>
                         <div className="flex flex-col">
-                          <span className="font-medium text-gray-200">{row.event_type || '—'}</span>
+                          <span className="font-semibold text-slate-100">{row.event_type || '—'}</span>
                           {row.broadcast_type ? (
-                            <span className="text-[10px] text-amber-300/80">{row.broadcast_type}</span>
+                            <span className="text-[10px] font-medium text-amber-300/90">{row.broadcast_type}</span>
                           ) : null}
                         </div>
                       </td>
-                      <td className="max-w-[14rem] truncate text-gray-300" title={row.location || ''}>
+                      <td className="max-w-[14rem] truncate font-medium text-sky-200" title={row.location || ''}>
                         {row.location || '—'}
                       </td>
-                      <td className="max-w-[8rem] truncate text-gray-400" title={row.units || ''}>
+                      <td className="max-w-[10rem] truncate font-mono text-emerald-300/90" title={row.units || ''}>
                         {row.units || '—'}
                       </td>
                       <td>
-                        <span className="rounded bg-white/5 px-2 py-0.5 font-mono text-[11px] text-gray-300">
+                        <span className="rounded bg-amber-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-300 border border-amber-500/20">
                           {row.spans_attached}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap text-gray-500">{formatTime(row.created_at)}</td>
+                      <td className="whitespace-nowrap font-mono text-slate-400">{formatTime(row.created_at)}</td>
                     </tr>
 
                     {isOpen ? (

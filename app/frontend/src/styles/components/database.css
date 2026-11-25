@@ -36,7 +36,7 @@
   }
 
   .ss-db-actions {
-    @apply flex flex-wrap justify-end gap-1;
+    @apply flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap;
   }
 
   .ss-db-actions .ss-text-link {
@@ -175,6 +175,7 @@
 
   /* Full-bleed Database Workbench */
   .ss-workbench {
+    color-scheme: dark;
     @apply flex h-[calc(100dvh-3.5rem)] w-full flex-col lg:flex-row bg-[#0b0d13] overflow-hidden;
   }
 
@@ -216,6 +217,14 @@
 
   .ss-workbench-table tbody td {
     @apply border-b border-white/[0.05] px-3 py-2 align-middle text-gray-300;
+  }
+
+  .ss-workbench-table tbody tr.ss-db-row:nth-child(even) {
+    @apply bg-white/[0.012];
+  }
+
+  .ss-workbench-table tbody tr:hover {
+    @apply bg-indigo-500/[0.06];
   }
 
   .ss-workbench-footer {

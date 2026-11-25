@@ -466,22 +466,22 @@ function LogRow({
           }}
         />
       </td>
-      <td className="font-mono text-xs text-gray-400">
+      <td className="whitespace-nowrap font-mono text-xs text-slate-300">
         <span className={`ss-db-expand-icon ${expanded ? 'ss-db-expand-icon--open' : ''}`}>▶</span>{' '}
         {row.timestamp
           ? new Date(row.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
           : '—'}
       </td>
       <td>
-        <span className="inline-block max-w-[12rem] truncate text-indigo-200" title={row.talkgroup ?? ''}>
+        <span className="inline-block max-w-[13rem] truncate font-semibold text-sky-300" title={row.talkgroup ?? ''}>
           {row.talkgroup || '—'}
         </span>
       </td>
       <td title={row.filename}>
-        <span className="ss-db-filename-clip block">{row.filename || '—'}</span>
+        <span className="block max-w-[18rem] truncate font-mono text-[11px] text-slate-500">{row.filename || '—'}</span>
       </td>
       <td>
-        <span className="ss-db-td-clip block text-gray-300">
+        <span className="ss-db-td-clip block font-medium text-slate-100">
           {row.corrected_transcript || row.transcript || '—'}
         </span>
       </td>
@@ -490,7 +490,7 @@ function LogRow({
           {hasAudio && (
             <button
               type="button"
-              className="ss-text-link cursor-pointer"
+              className="rounded px-2 py-0.5 text-[11px] font-medium text-sky-300 transition hover:bg-sky-500/15 hover:text-sky-200 cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()
                 void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
@@ -506,7 +506,7 @@ function LogRow({
           {isAdmin && (
             <button
               type="button"
-              className="ss-btn-filter-clear cursor-pointer"
+              className="rounded px-2 py-0.5 text-[11px] font-medium text-rose-400 transition hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer disabled:opacity-40"
               onClick={(e) => {
                 e.stopPropagation()
                 onDelete(row.id)

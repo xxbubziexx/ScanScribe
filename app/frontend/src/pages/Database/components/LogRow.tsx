@@ -22,6 +22,18 @@ export function LogRow({
   onToggleExpand: () => void
 }) {
   const hasAudio = row.audio_path && row.audio_path !== 'file not saved'
+  const transcriptText = row.corrected_transcript || row.transcript || '—'
+  const isVadRejected = transcriptText.trim().toUpperCase() === 'VAD_REJECTED'
+  const confPct = row.confidence != null ? Math.round(row.confidence * 100) : null
+  const confClass =
+    confPct == null
+      ? 'text-slate-500'
+      : confPct >= 85
+        ? 'font-bold text-emerald-400'
+        : confPct >= 65
+          ? 'font-semibold text-amber-300'
+          : 'font-semibold text-rose-400'
+
   return (
     <tr
       className={`ss-db-row ${expanded ? 'ss-db-row--expanded' : ''} ${
@@ -31,7 +43,7 @@ export function LogRow({
       aria-expanded={expanded}
     >
       <td
-        className="ss-db-td w-9 text-center"
+        className="w-9 text-center"
         onClick={(e) => {
           e.stopPropagation()
         }}
@@ -44,7 +56,7 @@ export function LogRow({
           aria-label={`Select log entry ${row.id}`}
         />
       </td>
-      <td className="ss-db-td font-mono text-xs text-gray-400">
+      <td className="whitespace-nowrap font-mono text-xs text-slate-300">
         <span className={`ss-db-expand-icon ${expanded ? 'ss-db-expand-icon--open' : ''}`}>▶</span>{' '}
         {row.timestamp
           ? new Date(row.timestamp).toLocaleString(undefined, {
@@ -53,40 +65,48 @@ export function LogRow({
             })
           : '—'}
       </td>
-      <td className="ss-db-td">
+      <td>
         <span
-          className="inline-block max-w-[12rem] truncate text-indigo-200"
+          className="inline-block max-w-[13rem] truncate font-semibold text-sky-300"
           title={row.talkgroup ?? ''}
         >
           {row.talkgroup || '—'}
         </span>
       </td>
-      <td className="ss-db-td" title={row.filename}>
-        <span className="ss-db-filename-clip block">{row.filename || '—'}</span>
+      <td title={row.filename}>
+        <span className="block max-w-[18rem] truncate font-mono text-[11px] text-slate-500">
+          {row.filename || '—'}
+        </span>
       </td>
-      <td className="ss-db-td">
-        <span className="ss-db-td-clip block text-gray-400">
+      <td>
+        <span
+          className={`ss-db-td-clip block ${
+            isVadRejected ? 'font-mono text-[11px] italic text-zinc-500' : 'font-medium text-slate-100'
+          }`}
+        >
           {row.is_reviewed && (
-            <span className="text-green-500 mr-1" title="Reviewed">
+            <span className="text-emerald-400 font-bold mr-1" title="Reviewed">
               ✓
             </span>
           )}
-          {row.corrected_transcript || row.transcript || '—'}
+          {transcriptText}
         </span>
       </td>
-      <td className="ss-db-td tabular-nums text-gray-500">
-        {typeof row.duration === 'number' ? row.duration.toFixed(1) : '—'}
+      <td className="whitespace-nowrap font-mono font-medium tabular-nums text-amber-300/90">
+        {typeof row.duration === 'number' ? `${row.duration.toFixed(1)}s` : '—'}
       </td>
-      <td className="ss-db-td text-gray-500">{formatBytes(row.file_size || 0)}</td>
-      <td className="ss-db-td tabular-nums text-gray-500">
-        {row.confidence != null ? `${Math.round(row.confidence * 100)}%` : '—'}
+      <td className="whitespace-nowrap font-mono tabular-nums text-slate-400">
+        {formatBytes(row.file_size || 0)}
       </td>
-      <td className="ss-db-td text-right">
+      <td className={`whitespace-nowrap font-mono tabular-nums ${confClass}`}>
+        {confPct != null ? `${confPct}%` : '—'}
+      </td>
+      <td className="text-right">
         <div className="ss-db-actions">
           {hasAudio && (
             <button
               type="button"
-              className="ss-text-link cursor-pointer"
+              className="rounded px-2 py-0.5 text-[11px] font-medium text-sky-300 transition hover:bg-sky-500/15 hover:text-sky-200 cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()
                 void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
@@ -102,7 +122,7 @@ export function LogRow({
           {isAdmin && (
             <button
               type="button"
-              className="ss-btn-filter-clear cursor-pointer"
+              className="rounded px-2 py-0.5 text-[11px] font-medium text-rose-400 transition hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer disabled:opacity-40"
               onClick={(e) => {
                 e.stopPropagation()
                 onDelete(row.id)

@@ -1442,6 +1442,20 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Live browser check of `/data/logs` through `/data/dataset` and promotion from `snapshot` → `main` when approved.
 
+---
+
+### 2026-11-24 23:15 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Workbench Column Color/Weight Hierarchy & GB `formatBytes` Fix):**
+  1. **Fixed `formatBytes` GB/TB unit overflow ([`formatBytes.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/utils/formatBytes.ts)):** Added `'GB', 'TB'` and clamped unit index so gigabyte-scale audio totals no longer display `1.5 undefined`.
+  2. **Dark Checkboxes, Single-Line Actions & Row Zebra/Hover ([`database.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/database.css)):** Added `color-scheme: dark` to `.ss-workbench`, `flex-nowrap` on `.ss-db-actions`, subtle even-row shading, and indigo row hover highlight.
+  3. **Column Typography Hierarchy ([`LogRow.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/LogRow.tsx), [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx), [`SpansTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/SpansTable.tsx), [`EntitiesTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EntitiesTable.tsx), [`EventsTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EventsTable.tsx)):** Prevented `Time`/`Size` wrapping (`whitespace-nowrap`), bolded talkgroups (`sky-300`), brightened transcripts (`slate-100`, with muted italic `VAD_REJECTED`), colored durations (`amber-300/90`), threshold-colored confidence (`emerald-400` / `amber-300` / `rose-400`), and applied matching color/weight contrast across Span Store, NER Entities, Events, and Dataset tables.
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (0 errors; `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx` (in `app/frontend`): **3 passed**.
+- **Next Tasks / Unfinished Work:**
+  - Reload `/data/logs` in browser to confirm column readability and `GB` storage readout, then promote `snapshot` → `main` when ready.
+
+
 
 
 

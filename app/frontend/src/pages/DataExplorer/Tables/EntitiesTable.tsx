@@ -480,40 +480,40 @@ export function EntitiesTable() {
                         />
                       </td>
                       <td className="text-gray-500">{isOpen ? '▼' : '▶'}</td>
-                      <td className="font-mono text-gray-400">#{row.id}</td>
-                      <td className="text-gray-300">
+                      <td className="whitespace-nowrap font-mono text-slate-400">#{row.id}</td>
+                      <td className="font-medium text-slate-300">
                         {monitorById.get(row.monitor_id) ?? `Monitor #${row.monitor_id}`}
                       </td>
                       <td>
                         <span
-                          className={`font-semibold uppercase text-[11px] tracking-wide ${getLabelBadgeClass(
+                          className={`font-bold uppercase text-[11px] tracking-wide ${getLabelBadgeClass(
                             row.label,
                           )}`}
                         >
                           {row.label}
                         </span>
                       </td>
-                      <td className="max-w-[16rem] truncate font-medium text-gray-200" title={row.raw}>
+                      <td className="max-w-[16rem] truncate font-semibold text-slate-100" title={row.raw}>
                         {row.raw}
                       </td>
-                      <td className="max-w-[8rem] truncate text-gray-400" title={row.talkgroup ?? ''}>
+                      <td className="max-w-[10rem] truncate font-semibold text-sky-300/90" title={row.talkgroup ?? ''}>
                         {row.talkgroup || '—'}
                       </td>
-                      <td className="font-mono">
+                      <td className="whitespace-nowrap font-mono">
                         <Link
                           to={`/data/spans?log_entry_id=${row.log_entry_id ?? ''}`}
-                          className="text-sky-300 hover:underline"
+                          className="font-medium text-sky-300 hover:underline"
                           onClick={(e) => e.stopPropagation()}
                           title="Open in Spans table"
                         >
                           #{row.span_store_id}
                         </Link>
                       </td>
-                      <td className="font-mono text-gray-400">
+                      <td className="whitespace-nowrap font-mono text-slate-400">
                         {row.log_entry_id != null ? (
                           <Link
                             to={`/data/logs?search=${encodeURIComponent(row.talkgroup || '')}`}
-                            className="text-amber-300/90 hover:underline"
+                            className="font-medium text-amber-300/90 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                             title="Open in Audio Logs"
                           >
@@ -523,7 +523,7 @@ export function EntitiesTable() {
                           '—'
                         )}
                       </td>
-                      <td className="whitespace-nowrap text-gray-500">{formatTime(row.ts)}</td>
+                      <td className="whitespace-nowrap font-mono text-slate-400">{formatTime(row.ts)}</td>
                     </tr>
 
                     {isOpen ? (

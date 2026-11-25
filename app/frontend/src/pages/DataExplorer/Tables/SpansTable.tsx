@@ -330,15 +330,15 @@ export function SpansTable() {
                       onClick={() => setExpandedId(isOpen ? null : row.id)}
                     >
                       <td className="text-gray-500">{isOpen ? '▼' : '▶'}</td>
-                      <td className="font-mono text-gray-400">#{row.id}</td>
-                      <td className="text-gray-300">
+                      <td className="whitespace-nowrap font-mono font-semibold text-sky-300">#{row.id}</td>
+                      <td className="font-medium text-slate-300">
                         {monitorById.get(row.monitor_id) ?? `Monitor #${row.monitor_id}`}
                       </td>
-                      <td className="font-mono">
+                      <td className="whitespace-nowrap font-mono">
                         {row.log_entry_id != null ? (
                           <Link
                             to="/data/logs"
-                            className="text-emerald-300 hover:underline"
+                            className="font-medium text-emerald-300 hover:underline"
                             onClick={(e) => e.stopPropagation()}
                             title="View log entry in Audio Logs table"
                           >
@@ -348,7 +348,7 @@ export function SpansTable() {
                           '—'
                         )}
                       </td>
-                      <td className="max-w-[8rem] truncate font-medium text-gray-300" title={row.talkgroup ?? ''}>
+                      <td className="max-w-[10rem] truncate font-semibold text-sky-300" title={row.talkgroup ?? ''}>
                         {row.talkgroup || '—'}
                       </td>
                       <td>
@@ -373,7 +373,7 @@ export function SpansTable() {
                           </div>
                         )}
                       </td>
-                      <td className="max-w-[16rem] truncate text-gray-300">
+                      <td className="max-w-[18rem] truncate font-medium text-slate-100">
                         {row.transcript || '—'}
                       </td>
                       <td>
@@ -385,7 +385,7 @@ export function SpansTable() {
                               <Link
                                 key={eid}
                                 to="/data/events"
-                                className="font-mono text-sky-300/90 hover:underline text-[11px]"
+                                className="font-mono font-semibold text-indigo-300 hover:underline text-[11px]"
                                 onClick={(e) => e.stopPropagation()}
                                 title={`Event ID: ${eid}`}
                               >
@@ -395,7 +395,7 @@ export function SpansTable() {
                           </div>
                         )}
                       </td>
-                      <td className="whitespace-nowrap text-gray-500">{formatTime(row.created_at)}</td>
+                      <td className="whitespace-nowrap font-mono text-slate-400">{formatTime(row.created_at)}</td>
                     </tr>
 
                     {isOpen ? (
