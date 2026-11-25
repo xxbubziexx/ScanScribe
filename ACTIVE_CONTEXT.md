@@ -1455,6 +1455,19 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Reload `/data/logs` in browser to confirm column readability and `GB` storage readout, then promote `snapshot` → `main` when ready.
 
+---
+
+### 2026-11-24 23:18 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed:**
+  - Renamed `Audio Logs` → `Transmissions` across [`DataExplorerLayout.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DataExplorerLayout.tsx), [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx), [`DocumentTitle.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/layout/DocumentTitle.tsx), [`EntitiesTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EntitiesTable.tsx), [`SpansTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/SpansTable.tsx), [`maintenance.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/maintenance.py), and [`DatabaseDashboard.test.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/test/DatabaseDashboard.test.tsx).
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (0 errors; `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx`: **3 passed**.
+  - `.venv\Scripts\python.exe -m pytest tests/test_database_dashboard.py -v`: **3 passed**.
+- **Next Tasks / Unfinished Work:**
+  - Browser verification and `snapshot` → `main` promotion when ready.
+
+
 
 
 

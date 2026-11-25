@@ -7,7 +7,7 @@ const TABLE_NAV_ITEMS = [
   {
     key: 'logs',
     to: '/data/logs',
-    label: 'Audio Logs',
+    label: 'Transmissions',
     sqlName: 'log_entries',
     dotClass: 'bg-amber-400',
   },

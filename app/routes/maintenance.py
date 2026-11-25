@@ -237,7 +237,7 @@ def get_database_overview(
     tables: List[TableInventoryItem] = [
         TableInventoryItem(
             key="logs",
-            label="Audio Logs",
+            label="Transmissions",
             route="/data/logs",
             row_count=total_logs,
             secondary_label="Reviewed",

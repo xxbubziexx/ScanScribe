@@ -83,7 +83,7 @@ describe('Database Workbench Suite', () => {
         retention_days: 30,
       },
       tables: [
-        { key: 'logs', label: 'Audio Logs', route: '/data/logs', row_count: 150, secondary_label: null, secondary_value: null, oldest: null, newest: null },
+        { key: 'logs', label: 'Transmissions', route: '/data/logs', row_count: 150, secondary_label: null, secondary_value: null, oldest: null, newest: null },
         { key: 'spans', label: 'Span Store', route: '/data/spans', row_count: 120, secondary_label: null, secondary_value: null, oldest: null, newest: null },
         { key: 'entities', label: 'NER Entities', route: '/data/entities', row_count: 310, secondary_label: null, secondary_value: null, oldest: null, newest: null },
         { key: 'events', label: 'Events', route: '/data/events', row_count: 18, secondary_label: null, secondary_value: null, oldest: null, newest: null },
@@ -109,7 +109,7 @@ describe('Database Workbench Suite', () => {
     wrap(<DataExplorerLayout />)
 
     expect(screen.queryByRole('link', { name: /overview/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Audio Logs/i })).toHaveAttribute('href', '/data/logs')
+    expect(screen.getByRole('link', { name: /Transmissions/i })).toHaveAttribute('href', '/data/logs')
     expect(screen.getByRole('link', { name: /Span Store/i })).toHaveAttribute('href', '/data/spans')
     expect(screen.getByRole('link', { name: /NER Entities/i })).toHaveAttribute('href', '/data/entities')
     expect(screen.getByRole('link', { name: /Events/i })).toHaveAttribute('href', '/data/events')

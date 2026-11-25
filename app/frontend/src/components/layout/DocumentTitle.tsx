@@ -8,7 +8,7 @@ function titleForPath(pathname: string): string {
     '/intel': 'Intelligence',
     '/logs': 'Database',
     '/data': 'Database',
-    '/data/logs': 'Audio Logs',
+    '/data/logs': 'Transmissions',
     '/data/spans': 'Span Store',
     '/data/entities': 'NER Entities',
     '/data/events': 'Events Table',

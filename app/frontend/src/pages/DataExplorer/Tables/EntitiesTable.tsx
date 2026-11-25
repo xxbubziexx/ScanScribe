@@ -515,7 +515,7 @@ export function EntitiesTable() {
                             to={`/data/logs?search=${encodeURIComponent(row.talkgroup || '')}`}
                             className="font-medium text-amber-300/90 hover:underline"
                             onClick={(e) => e.stopPropagation()}
-                            title="Open in Audio Logs"
+                            title="Open in Transmissions"
                           >
                             #{row.log_entry_id}
                           </Link>

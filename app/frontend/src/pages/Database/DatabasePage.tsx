@@ -223,7 +223,7 @@ export function DatabasePage() {
     <div className="ss-workbench-pane">
       <div className="ss-workbench-header">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold text-gray-100">Audio Logs</h2>
+          <h2 className="text-sm font-semibold text-gray-100">Transmissions</h2>
           <span className="ss-events-pill-tiny font-mono">
             {total.toLocaleString()} row{total === 1 ? '' : 's'}
           </span>
@@ -368,7 +368,7 @@ export function DatabasePage() {
           </p>
         )}
 
-        {query.isLoading && <p className="p-5 text-xs text-gray-500">Loading audio logs…</p>}
+        {query.isLoading && <p className="p-5 text-xs text-gray-500">Loading transmissions…</p>}
 
         {!query.isLoading && !query.isError && rows.length === 0 && (
           <p className="ss-empty m-4 not-italic">No log entries for these filters.</p>

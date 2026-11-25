@@ -340,7 +340,7 @@ export function SpansTable() {
                             to="/data/logs"
                             className="font-medium text-emerald-300 hover:underline"
                             onClick={(e) => e.stopPropagation()}
-                            title="View log entry in Audio Logs table"
+                            title="View log entry in Transmissions"
                           >
                             #{row.log_entry_id}
                           </Link>
