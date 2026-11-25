@@ -5,6 +5,7 @@ import { logsApi } from '../../lib/logs'
 import { errorMessage } from '../../types/api'
 import { useToast } from '../../context/ToastContext'
 import type { MonitorResponse, MonitorUpdate } from '../../types/events'
+import { MonitorDeleteModal } from './components/MonitorDeleteModal'
 
 function parseTokens(raw: string): string[] {
   return raw
@@ -36,6 +37,7 @@ export function EventsMonitorsPage() {
   const [editLabels, setEditLabels] = useState('')
   const [editGeoRegion, setEditGeoRegion] = useState('')
   const [editKnownUnits, setEditKnownUnits] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<MonitorResponse | null>(null)
 
   const globalRulesQuery = useQuery({
     queryKey: ['events-global-rules'],
@@ -114,6 +116,7 @@ export function EventsMonitorsPage() {
     onSuccess: () => {
       addToast('Monitor updated', 'success')
       setEditingId(null)
+      setDeleteTarget(null)
       invalidate()
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Failed to update monitor'), 'error'),
@@ -122,9 +125,14 @@ export function EventsMonitorsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: number) => eventsApi.deleteMonitor(id),
     onSuccess: () => {
-      addToast('Monitor deleted', 'success')
+      addToast('Monitor and dependent records deleted', 'success')
+      setDeleteTarget(null)
       invalidate()
       void queryClient.invalidateQueries({ queryKey: ['events-list'] })
+      void queryClient.invalidateQueries({ queryKey: ['database-overview'] })
+      void queryClient.invalidateQueries({ queryKey: ['data-explorer-events'] })
+      void queryClient.invalidateQueries({ queryKey: ['data-explorer-spans'] })
+      void queryClient.invalidateQueries({ queryKey: ['data-explorer-entities'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Failed to delete monitor'), 'error'),
   })
@@ -483,15 +491,7 @@ export function EventsMonitorsPage() {
                           type="button"
                           className="ss-btn-danger-soft text-[11px]"
                           disabled={deleteMutation.isPending}
-                          onClick={() => {
-                            if (
-                              !window.confirm(
-                                `Delete monitor “${m.name}”? This removes all events and transcript links for this monitor.`,
-                              )
-                            )
-                              return
-                            deleteMutation.mutate(m.id)
-                          }}
+                          onClick={() => setDeleteTarget(m)}
                         >
                           Delete
                         </button>
@@ -505,6 +505,17 @@ export function EventsMonitorsPage() {
           </ul>
         )}
       </section>
+
+      <MonitorDeleteModal
+        monitor={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirmDelete={(id) => deleteMutation.mutate(id)}
+        onDisableInstead={(mon) =>
+          updateMutation.mutate({ id: mon.id, body: { enabled: false } })
+        }
+        isDeleting={deleteMutation.isPending}
+        isDisabling={updateMutation.isPending}
+      />
     </div>
   )
 }

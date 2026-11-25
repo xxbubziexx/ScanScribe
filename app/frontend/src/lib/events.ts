@@ -6,6 +6,7 @@ import type {
   EventDetailResponse,
   EventsListResponse,
   MonitorCreate,
+  MonitorDeleteImpactResponse,
   MonitorResponse,
   MonitorUpdate,
   NerLabelsResponse,
@@ -57,6 +58,9 @@ export const eventsApi = {
     request<{ ok: boolean }>(`${EVENTS_API}/monitors/${monitorId}`, {
       method: 'DELETE',
     }),
+
+  monitorDeleteImpact: (monitorId: number) =>
+    request<MonitorDeleteImpactResponse>(`${EVENTS_API}/monitors/${monitorId}/delete-impact`),
 
   debugRecent: (limit = 80) =>
     request<PipelineDebugEntry[]>(`${EVENTS_API}/debug?limit=${encodeURIComponent(String(limit))}`),

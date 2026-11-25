@@ -34,3 +34,16 @@ class MonitorResponse(BaseModel):
     start_event_labels: List[str]
     geo_region: Optional[str] = None
     known_units: Optional[str] = None
+
+
+class MonitorDeleteImpactResponse(BaseModel):
+    """Counts of dependent database rows removed by deleting a monitor."""
+    model_config = ConfigDict(from_attributes=True)
+
+    monitor_id: int
+    monitor_name: str
+    events_count: int = 0
+    event_links_count: int = 0
+    span_store_count: int = 0
+    entity_observations_count: int = 0
+    total_dependent_rows: int = 0

@@ -16,7 +16,14 @@ import app.models  # noqa: F401 - register all ORM tables on Base.metadata
 from app.config import get_settings
 from app.database import Base, get_events_db, get_logs_db
 from app.main import app
-from app.models.event import EntityObservation, Event, Monitor, SpanStore, SystemSetting
+from app.models.event import (
+    EntityObservation,
+    Event,
+    EventTranscriptLink,
+    Monitor,
+    SpanStore,
+    SystemSetting,
+)
 from app.models.log_entry import LogEntry
 from app.models.user import User
 from app.routes.auth import get_current_user
@@ -381,3 +388,52 @@ def test_entities_csv_export_all_modes(db_ctx, tmp_path):
     assert r5.headers["x-row-count"] == "1"
     rows5 = list(csv.reader(io.StringIO(r5.text)))
     assert rows5[1] == ["UNIT", "Engine 1"]
+
+
+def test_monitor_delete_impact_and_cascade(db_ctx, tmp_path):
+    """GET /api/events/monitors/{id}/delete-impact reports exact cascade counts and DELETE preserves log_entries."""
+    Session, _ = db_ctx
+    seeded = _seed_dashboard_data(Session, tmp_path)
+
+    # Link a transcript to the seeded event so event_links_count == 1
+    db = Session()
+    try:
+        ev = db.query(Event).filter(Event.monitor_id == seeded["monitor_id"]).first()
+        db.add(EventTranscriptLink(event_id=ev.id, log_entry_id=seeded["log1_id"]))
+        db.commit()
+    finally:
+        db.close()
+
+    client = TestClient(app)
+
+    # 404 on missing monitor
+    r_missing = client.get("/api/events/monitors/99999/delete-impact")
+    assert r_missing.status_code == 404
+
+    # Exact counts on seeded monitor
+    r_impact = client.get(f"/api/events/monitors/{seeded['monitor_id']}/delete-impact")
+    assert r_impact.status_code == 200
+    impact = r_impact.json()
+    assert impact["monitor_id"] == seeded["monitor_id"]
+    assert impact["monitor_name"] == "County Fire & EMS"
+    assert impact["events_count"] == 1
+    assert impact["event_links_count"] == 1
+    assert impact["span_store_count"] == 2
+    assert impact["entity_observations_count"] == 4
+    assert impact["total_dependent_rows"] == 8
+
+    # Deleting the monitor cascades all 4 dependent tables while preserving log_entries
+    r_del = client.delete(f"/api/events/monitors/{seeded['monitor_id']}")
+    assert r_del.status_code == 200
+
+    verify_db = Session()
+    try:
+        assert verify_db.query(Monitor).count() == 0
+        assert verify_db.query(Event).count() == 0
+        assert verify_db.query(EventTranscriptLink).count() == 0
+        assert verify_db.query(SpanStore).count() == 0
+        assert verify_db.query(EntityObservation).count() == 0
+        # Transmissions (log_entries) are preserved
+        assert verify_db.query(LogEntry).filter(LogEntry.is_deleted.is_not(True)).count() == 2
+    finally:
+        verify_db.close()

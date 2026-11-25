@@ -4,12 +4,18 @@ import json
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ...database import get_events_db
-from ...models.event import EntityObservation, Event, EventTranscriptLink, Monitor
+from ...models.event import EntityObservation, Event, EventTranscriptLink, Monitor, SpanStore
 from ...models.user import User
-from ...schemas.monitor import MonitorCreate, MonitorResponse, MonitorUpdate
+from ...schemas.monitor import (
+    MonitorCreate,
+    MonitorDeleteImpactResponse,
+    MonitorResponse,
+    MonitorUpdate,
+)
 from ...services.events_common import parse_json_list
 from ...services.events_worker import invalidate_monitor_index_cache
 from ..auth import get_current_active_user
@@ -126,6 +132,51 @@ async def update_monitor(
         start_event_labels=start_labels(m.keyword_config),
         geo_region=m.geo_region,
         known_units=m.known_units,
+    )
+
+
+@router.get("/monitors/{monitor_id}/delete-impact", response_model=MonitorDeleteImpactResponse)
+def get_monitor_delete_impact(
+    monitor_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_events_db),
+) -> MonitorDeleteImpactResponse:
+    """Preview exact dependent rows removed via CASCADE when deleting a monitor."""
+    m = db.query(Monitor).filter(Monitor.id == monitor_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Monitor not found")
+
+    events_count = int(
+        db.query(func.count(Event.id)).filter(Event.monitor_id == monitor_id).scalar() or 0
+    )
+    event_links_count = int(
+        db.query(func.count(EventTranscriptLink.id))
+        .join(Event, Event.id == EventTranscriptLink.event_id)
+        .filter(Event.monitor_id == monitor_id)
+        .scalar()
+        or 0
+    )
+    span_store_count = int(
+        db.query(func.count(SpanStore.id)).filter(SpanStore.monitor_id == monitor_id).scalar() or 0
+    )
+    entity_observations_count = int(
+        db.query(func.count(EntityObservation.id))
+        .filter(EntityObservation.monitor_id == monitor_id)
+        .scalar()
+        or 0
+    )
+    total_dependent_rows = (
+        events_count + event_links_count + span_store_count + entity_observations_count
+    )
+
+    return MonitorDeleteImpactResponse(
+        monitor_id=m.id,
+        monitor_name=m.name,
+        events_count=events_count,
+        event_links_count=event_links_count,
+        span_store_count=span_store_count,
+        entity_observations_count=entity_observations_count,
+        total_dependent_rows=total_dependent_rows,
     )
 
 

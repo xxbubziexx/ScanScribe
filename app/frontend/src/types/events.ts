@@ -25,6 +25,16 @@ export interface MonitorUpdate {
   known_units?: string | null
 }
 
+export interface MonitorDeleteImpactResponse {
+  monitor_id: number
+  monitor_name: string
+  events_count: number
+  event_links_count: number
+  span_store_count: number
+  entity_observations_count: number
+  total_dependent_rows: number
+}
+
 export interface NerLabelsResponse {
   labels: string[]
 }

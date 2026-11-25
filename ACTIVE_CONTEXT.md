@@ -1491,6 +1491,22 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Browser verification and `snapshot` → `main` promotion when ready.
 
+---
+
+### 2026-11-25 16:25 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Monitor Deletion Impact Warning & Type-to-Confirm Modal):**
+  - Added `MonitorDeleteImpactResponse` in [`app/schemas/monitor.py`](file:///a:/Scanscribe_Projects/scanscribe/app/schemas/monitor.py) and `GET /api/events/monitors/{monitor_id}/delete-impact` in [`app/routes/events/monitors_router.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/events/monitors_router.py) returning exact `ON DELETE CASCADE` row counts across `events`, `event_transcript_links`, `span_store`, and `entity_observations`.
+  - Created [`MonitorDeleteModal.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/components/MonitorDeleteModal.tsx) and wired it into [`EventsMonitorsPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Events/EventsMonitorsPage.tsx) (replacing `window.confirm`), showing live per-table deletion counts, clarifying that `log_entries` & audio files are preserved, offering a one-click `Disable Monitor Instead` action when enabled, and requiring exact monitor-name confirmation before enabling deletion.
+- **Verification Performed:**
+  - `.venv\Scripts\python.exe -m pytest tests/test_database_dashboard.py -v`: **4 passed** (including new `test_monitor_delete_impact_and_cascade`).
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (0 errors; `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/MonitorDeleteModal.test.tsx src/test/DatabaseDashboard.test.tsx`: **5 passed**.
+- **Next Tasks / Unfinished Work:**
+  - Live UI check and `snapshot` → `main` promotion when ready.
+
+
+
+
 
 
 
