@@ -6,6 +6,19 @@ import type { LogEntry, SearchFilters, TalkgroupEntry } from '@/types/insights'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
 import { useAdminCapability } from '@/hooks/useAdminCapability'
 import { getInitialDateRange, isPageReload, todayIso } from '@/lib/dateSelection'
+import { formatBytes } from '@/pages/Database/utils/formatBytes'
+
+function confidenceBadgeTone(confidence: number): string {
+  if (confidence >= 0.85) return 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+  if (confidence >= 0.65) return 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+  return 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+}
+
+function confidenceTextTone(confidence: number): string {
+  if (confidence >= 0.85) return 'text-emerald-400'
+  if (confidence >= 0.65) return 'text-amber-300'
+  return 'text-rose-400'
+}
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -580,36 +593,37 @@ export function SearchPage() {
               (entities.locations && entities.locations.length > 0) ||
               (entities.call_types && entities.call_types.length > 0) ||
               (entities.status && entities.status.length > 0)
+            const isVadRejected = (entry.transcript ?? '').trim().toUpperCase() === 'VAD_REJECTED'
 
             return (
               <div
                 key={entry.id}
                 onClick={() => toggleExpand(entry.id)}
-                className={`group rounded-lg border transition-all cursor-pointer ${
+                className={`group rounded-sm border transition-all cursor-pointer px-3.5 py-2.5 sm:px-4 sm:py-3 ${
                   isExpanded
-                    ? 'border-indigo-500/40 bg-white/[0.04] shadow-lg shadow-black/40 ring-1 ring-indigo-500/20'
-                    : 'border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.035]'
-                } p-2.5 sm:p-3`}
+                    ? 'border-indigo-500/50 border-l-2 border-l-indigo-400 bg-[#121726] shadow-lg shadow-black/40'
+                    : 'border-[#1f2738] bg-[#0e131e] hover:border-[#2e3a54] hover:bg-[#121826]'
+                }`}
               >
                 {/* Header Metadata Strip */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     {/* Talkgroup */}
-                    <span className="rounded bg-white/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-gray-200">
+                    <span className="rounded-sm border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-xs font-bold text-sky-300">
                       {entry.talkgroup ?? 'N/A'}
                     </span>
 
                     {/* Timestamp */}
-                    <span className="text-xs text-gray-400 font-mono">
+                    <span className="font-mono text-xs text-slate-400">
                       {entry.timestamp ? formatDateShort(entry.timestamp) : ''}{' '}
-                      <span className="text-gray-300">
+                      <span className="font-semibold text-slate-100">
                         {entry.timestamp ? formatTime(entry.timestamp) : ''}
                       </span>
                     </span>
 
                     {/* Duration */}
                     {entry.duration !== undefined && entry.duration !== null && (
-                      <span className="rounded bg-black/30 border border-white/5 px-1.5 py-0.5 font-mono text-[10px] text-gray-400">
+                      <span className="rounded-sm border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-300">
                         {entry.duration.toFixed(1)}s
                       </span>
                     )}
@@ -617,7 +631,7 @@ export function SearchPage() {
                     {/* Whisper ASR Confidence */}
                     {entry.confidence !== undefined && entry.confidence !== null && (
                       <span
-                        className="rounded bg-black/30 border border-white/5 px-1.5 py-0.5 font-mono text-[10px] text-emerald-400/90"
+                        className={`rounded-sm border px-1.5 py-0.5 font-mono text-[11px] font-bold ${confidenceBadgeTone(entry.confidence)}`}
                         title={`ASR Confidence: ${(entry.confidence * 100).toFixed(1)}%`}
                       >
                         {Math.round(entry.confidence * 100)}%
@@ -627,10 +641,10 @@ export function SearchPage() {
                     {/* Dynamic NER Badges (display IF present) */}
                     {entities.units && entities.units.length > 0 && (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full border border-sky-500/30 bg-sky-500/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-sky-300"
+                        className="inline-flex items-center gap-1 rounded-sm border border-sky-500/30 bg-sky-500/15 px-2 py-0.5 font-mono text-[11px] font-semibold text-sky-300"
                         title={`Units: ${entities.units.join(', ')}`}
                       >
-                        <span className="text-sky-400/70 font-sans text-[9px] uppercase tracking-wider">UNITS</span>
+                        <span className="text-sky-400/80 font-sans text-[9.5px] font-bold uppercase tracking-wider">UNITS</span>
                         <span>
                           {entities.units.slice(0, 2).join(', ')}
                           {entities.units.length > 2 ? ` +${entities.units.length - 2}` : ''}
@@ -640,10 +654,10 @@ export function SearchPage() {
 
                     {entities.locations && entities.locations.length > 0 && (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-emerald-300 max-w-[200px]"
+                        className="inline-flex items-center gap-1 rounded-sm border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 font-mono text-[11px] font-semibold text-emerald-300 max-w-[200px]"
                         title={`Location: ${entities.locations.join(', ')}`}
                       >
-                        <span className="text-emerald-400/70 font-sans text-[9px] uppercase tracking-wider shrink-0">LOC</span>
+                        <span className="text-emerald-400/80 font-sans text-[9.5px] font-bold uppercase tracking-wider shrink-0">LOC</span>
                         <span className="truncate">
                           {entities.locations[0]}
                           {entities.locations.length > 1 ? ` +${entities.locations.length - 1}` : ''}
@@ -653,20 +667,20 @@ export function SearchPage() {
 
                     {entities.call_types && entities.call_types.length > 0 && (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-amber-300"
+                        className="inline-flex items-center gap-1 rounded-sm border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-300"
                         title={`Call Type: ${entities.call_types.join(', ')}`}
                       >
-                        <span className="text-amber-400/70 font-sans text-[9px] uppercase tracking-wider">TYPE</span>
+                        <span className="text-amber-400/80 font-sans text-[9.5px] font-bold uppercase tracking-wider">TYPE</span>
                         <span>{entities.call_types.join(', ')}</span>
                       </span>
                     )}
 
                     {entities.status && entities.status.length > 0 && (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/15 px-2 py-0.5 font-mono text-[10px] font-semibold text-purple-300"
+                        className="inline-flex items-center gap-1 rounded-sm border border-purple-500/30 bg-purple-500/15 px-2 py-0.5 font-mono text-[11px] font-semibold text-purple-300"
                         title={`Status: ${entities.status.join(', ')}`}
                       >
-                        <span className="text-purple-400/70 font-sans text-[9px] uppercase tracking-wider">STATUS</span>
+                        <span className="text-purple-400/80 font-sans text-[9.5px] font-bold uppercase tracking-wider">STATUS</span>
                         <span>{entities.status.join(', ')}</span>
                       </span>
                     )}
@@ -679,7 +693,7 @@ export function SearchPage() {
                         key={ev.id}
                         to={`/events?incident=${ev.id}`}
                         onClick={(e) => e.stopPropagation()}
-                        className="rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-300 hover:bg-indigo-500/20"
+                        className="rounded-sm border border-indigo-500/35 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-semibold text-indigo-300 hover:bg-indigo-500/25"
                         title={`Attached Event: ${ev.event_id}`}
                       >
                         Incident #{ev.event_id}
@@ -693,10 +707,10 @@ export function SearchPage() {
                           e.stopPropagation()
                           toggleAudio(entry.id, entry.audio_path)
                         }}
-                        className={`inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${
+                        className={`inline-flex items-center gap-1 rounded-sm border px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
                           isPlaying
-                            ? 'bg-amber-600 text-white'
-                            : 'bg-indigo-600/30 text-indigo-200 hover:bg-indigo-600/50'
+                            ? 'border-amber-500/40 bg-amber-600 text-white'
+                            : 'border-indigo-500/35 bg-indigo-500/15 text-indigo-200 hover:bg-indigo-500/30'
                         }`}
                         title={isPlaying ? 'Stop audio' : 'Play transmission audio'}
                       >
@@ -706,7 +720,7 @@ export function SearchPage() {
                     )}
 
                     <span
-                      className="p-1 text-gray-400 hover:text-gray-200 transition-colors"
+                      className="p-1 text-slate-400 hover:text-slate-200 transition-colors"
                       title={isExpanded ? 'Click to collapse details' : 'Click to expand full details'}
                     >
                       <ChevronDownIcon
@@ -720,9 +734,13 @@ export function SearchPage() {
 
                 {/* Collapsed Transcript Preview */}
                 <p
-                  className={`mt-1.5 text-xs leading-relaxed text-gray-200 ${
-                    isExpanded ? 'font-medium' : 'line-clamp-2'
-                  }`}
+                  className={
+                    isVadRejected
+                      ? 'mt-2 font-mono text-xs italic text-zinc-500'
+                      : `mt-2 text-[13.5px] leading-relaxed font-medium text-slate-50 ${
+                          isExpanded ? '' : 'line-clamp-2'
+                        }`
+                  }
                 >
                   {highlight(entry.transcript, filters.keyword)}
                 </p>
@@ -730,25 +748,25 @@ export function SearchPage() {
                 {/* Expanded Accordion Details */}
                 {isExpanded && (
                   <div
-                    className="mt-3 space-y-2.5 border-t border-white/10 pt-3 text-xs"
+                    className="mt-3 space-y-2.5 border-t border-[#1e2638] pt-3 text-xs"
                     onClick={(e) => e.stopPropagation()}
                   >
                     {/* Full Transcription Container */}
-                    <div className="rounded-lg border border-white/10 bg-black/40 p-3">
+                    <div className="rounded-sm border border-[#1e2638] bg-[#090d16] p-3">
                       <div className="mb-1.5 flex items-center justify-between text-[11px]">
-                        <span className="font-semibold uppercase tracking-wider text-gray-400">
+                        <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-400">
                           Full Transcription
                         </span>
                         <button
                           type="button"
                           onClick={() => copyTranscript(entry.id, entry.transcript)}
-                          className="inline-flex items-center gap-1 text-[11px] text-gray-400 hover:text-gray-200 transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
                           title="Copy transcript text"
                         >
                           {copiedId === entry.id ? (
                             <>
                               <CheckIcon className="h-3.5 w-3.5 text-emerald-400" />
-                              <span className="text-emerald-400 font-medium">Copied</span>
+                              <span className="text-emerald-400 font-semibold">Copied</span>
                             </>
                           ) : (
                             <>
@@ -758,21 +776,27 @@ export function SearchPage() {
                           )}
                         </button>
                       </div>
-                      <div className="font-mono text-xs leading-relaxed text-gray-100 whitespace-pre-wrap select-text">
+                      <div
+                        className={
+                          isVadRejected
+                            ? 'font-mono text-xs italic text-zinc-500 whitespace-pre-wrap select-text'
+                            : 'text-sm font-medium leading-relaxed text-slate-50 whitespace-pre-wrap select-text'
+                        }
+                      >
                         {highlight(entry.transcript, filters.keyword)}
                       </div>
                     </div>
 
                     {/* Detailed NER Matrix (if any entities present) */}
                     {hasAnyEntities && (
-                      <div className="rounded-lg border border-white/10 bg-white/[0.015] p-3 space-y-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                      <div className="rounded-sm border border-[#1e2638] bg-[#0c101b] p-3 space-y-2">
+                        <div className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-slate-400">
                           Extracted Named Entities (NER)
                         </div>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                           {/* Units */}
-                          <div className="rounded border border-sky-500/20 bg-sky-950/20 p-2">
-                            <div className="text-[10px] font-semibold text-sky-400 uppercase tracking-wider mb-1">
+                          <div className="rounded-sm border border-sky-500/25 bg-sky-950/25 p-2">
+                            <div className="text-[10px] font-bold text-sky-400 uppercase tracking-wider mb-1">
                               Units Mentioned ({entities.units?.length ?? 0})
                             </div>
                             {entities.units && entities.units.length > 0 ? (
@@ -782,7 +806,7 @@ export function SearchPage() {
                                     key={i}
                                     type="button"
                                     onClick={() => setFilters((prev) => ({ ...prev, keyword: u }))}
-                                    className="rounded bg-sky-500/20 px-1.5 py-0.5 font-mono text-[11px] font-medium text-sky-200 hover:bg-sky-500/40 transition-colors cursor-pointer"
+                                    className="rounded-sm bg-sky-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-sky-200 hover:bg-sky-500/40 transition-colors cursor-pointer"
                                     title={`Click to search for "${u}"`}
                                   >
                                     {u}
@@ -790,14 +814,14 @@ export function SearchPage() {
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-[11px] text-gray-500 italic">None detected</span>
+                              <span className="text-[11px] text-slate-500 italic">None detected</span>
                             )}
                           </div>
 
                           {/* Locations */}
-                          <div className="rounded border border-emerald-500/20 bg-emerald-950/20 p-2">
-                            <div className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">
-                              Locations & Addresses ({entities.locations?.length ?? 0})
+                          <div className="rounded-sm border border-emerald-500/25 bg-emerald-950/25 p-2">
+                            <div className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">
+                              Locations &amp; Addresses ({entities.locations?.length ?? 0})
                             </div>
                             {entities.locations && entities.locations.length > 0 ? (
                               <div className="flex flex-wrap gap-1">
@@ -806,7 +830,7 @@ export function SearchPage() {
                                     key={i}
                                     type="button"
                                     onClick={() => setFilters((prev) => ({ ...prev, keyword: loc }))}
-                                    className="rounded bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/40 transition-colors cursor-pointer"
+                                    className="rounded-sm bg-emerald-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-emerald-200 hover:bg-emerald-500/40 transition-colors cursor-pointer"
                                     title={`Click to search for "${loc}"`}
                                   >
                                     {loc}
@@ -814,13 +838,13 @@ export function SearchPage() {
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-[11px] text-gray-500 italic">None detected</span>
+                              <span className="text-[11px] text-slate-500 italic">None detected</span>
                             )}
                           </div>
 
                           {/* Call Types */}
-                          <div className="rounded border border-amber-500/20 bg-amber-950/20 p-2">
-                            <div className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider mb-1">
+                          <div className="rounded-sm border border-amber-500/25 bg-amber-950/25 p-2">
+                            <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider mb-1">
                               Incident / Call Types ({entities.call_types?.length ?? 0})
                             </div>
                             {entities.call_types && entities.call_types.length > 0 ? (
@@ -830,7 +854,7 @@ export function SearchPage() {
                                     key={i}
                                     type="button"
                                     onClick={() => setFilters((prev) => ({ ...prev, keyword: ct }))}
-                                    className="rounded bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-medium text-amber-200 hover:bg-amber-500/40 transition-colors cursor-pointer"
+                                    className="rounded-sm bg-amber-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-amber-200 hover:bg-amber-500/40 transition-colors cursor-pointer"
                                     title={`Click to search for "${ct}"`}
                                   >
                                     {ct}
@@ -838,13 +862,13 @@ export function SearchPage() {
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-[11px] text-gray-500 italic">None detected</span>
+                              <span className="text-[11px] text-slate-500 italic">None detected</span>
                             )}
                           </div>
 
                           {/* Status */}
-                          <div className="rounded border border-purple-500/20 bg-purple-950/20 p-2">
-                            <div className="text-[10px] font-semibold text-purple-400 uppercase tracking-wider mb-1">
+                          <div className="rounded-sm border border-purple-500/25 bg-purple-950/25 p-2">
+                            <div className="text-[10px] font-bold text-purple-400 uppercase tracking-wider mb-1">
                               Operational Status ({entities.status?.length ?? 0})
                             </div>
                             {entities.status && entities.status.length > 0 ? (
@@ -852,14 +876,14 @@ export function SearchPage() {
                                 {entities.status.map((st, i) => (
                                   <span
                                     key={i}
-                                    className="rounded bg-purple-500/20 px-1.5 py-0.5 font-mono text-[11px] font-medium text-purple-200"
+                                    className="rounded-sm bg-purple-500/20 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-purple-200"
                                   >
                                     {st}
                                   </span>
                                 ))}
                               </div>
                             ) : (
-                              <span className="text-[11px] text-gray-500 italic">None detected</span>
+                              <span className="text-[11px] text-slate-500 italic">None detected</span>
                             )}
                           </div>
                         </div>
@@ -867,15 +891,15 @@ export function SearchPage() {
                     )}
 
                     {/* Technical Telemetry Strip */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/5 bg-black/30 px-3 py-2 text-[11px] text-gray-400">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-[#1e2638] bg-[#090d16] px-3 py-2 text-[11px] text-slate-400">
                       <div className="flex flex-wrap items-center gap-3">
                         <span>
-                          TX ID: <strong className="font-mono text-gray-200">#{entry.id}</strong>
+                          TX ID: <strong className="font-mono font-bold text-slate-100">#{entry.id}</strong>
                         </span>
                         {entry.confidence !== undefined && entry.confidence !== null && (
                           <span>
                             Whisper ASR Confidence:{' '}
-                            <strong className="font-mono text-emerald-400">
+                            <strong className={`font-mono font-bold ${confidenceTextTone(entry.confidence)}`}>
                               {(entry.confidence * 100).toFixed(1)}%
                             </strong>
                           </span>
@@ -883,22 +907,22 @@ export function SearchPage() {
                         {entry.file_size ? (
                           <span>
                             File Size:{' '}
-                            <strong className="font-mono text-gray-200">
-                              {(entry.file_size / 1024).toFixed(1)} KB
+                            <strong className="font-mono font-semibold text-slate-200">
+                              {formatBytes(entry.file_size)}
                             </strong>
                           </span>
                         ) : null}
                         {entry.audio_path && (
                           <span className="truncate max-w-[220px]" title={entry.audio_path}>
                             Audio File:{' '}
-                            <span className="font-mono text-gray-300">
+                            <span className="font-mono font-medium text-sky-300/90">
                               {entry.audio_path.split('/').pop()}
                             </span>
                           </span>
                         )}
                       </div>
 
-                      <div className="font-mono text-[11px] text-gray-500">
+                      <div className="font-mono text-[11px] text-slate-400">
                         {entry.timestamp ? new Date(entry.timestamp).toISOString() : ''}
                       </div>
                     </div>
