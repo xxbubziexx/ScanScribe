@@ -147,24 +147,25 @@
   }
 
   .ss-db-expand {
-    @apply border-t border-[#222a3d] bg-[#0b0f18] px-4 py-3;
+    @apply border-t border-[#222a3d] bg-[#0b0f18] px-3 py-2;
     box-shadow: inset 2px 0 0 rgba(99, 102, 241, 0.75);
   }
 
   .ss-db-expand-inner {
-    @apply sticky left-0 max-w-5xl space-y-2.5;
+    @apply sticky left-0 w-full space-y-1.5;
+    max-width: min(100%, calc(100vw - 17.5rem));
   }
 
   .ss-db-expand-meta {
-    @apply rounded-sm border border-[#1d2536] bg-[#101522] px-3 py-2;
+    @apply rounded-sm border border-[#1d2536] bg-[#101522] px-2.5 py-1.5;
   }
 
   .ss-db-expand-strip {
-    @apply flex flex-wrap items-start gap-x-6 gap-y-2;
+    @apply flex flex-wrap items-start gap-x-5 gap-y-1;
   }
 
   .ss-db-expand-files {
-    @apply mt-2 flex flex-wrap items-baseline gap-x-6 gap-y-1 border-t border-white/[0.06] pt-2;
+    @apply mt-1.5 flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-white/[0.06] pt-1.5;
   }
 
   .ss-db-expand-field {
@@ -180,44 +181,15 @@
   }
 
   .ss-db-expand-body {
-    @apply grid gap-2.5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] items-start;
+    @apply grid gap-2 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] items-stretch;
   }
 
   .ss-db-expand-card {
-    @apply rounded-sm border border-[#1d2536] bg-[#101522] p-2.5;
+    @apply flex flex-col rounded-sm border border-[#1d2536] bg-[#101522] px-2.5 py-2;
   }
 
   .ss-workbench-table tbody tr.ss-db-expand-tr:hover {
     background-color: transparent;
-  }
-
-  .ss-db-expand .sc-audio-player {
-    background: transparent;
-    border: none;
-    border-radius: 2px;
-    padding: 0;
-    font-size: 12px;
-  }
-
-  .ss-db-expand .sc-audio-player__header {
-    display: none;
-  }
-
-  .ss-db-expand .sc-audio-player__waveform {
-    height: 48px;
-    margin-bottom: 0.5rem;
-    border-radius: 2px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .ss-db-expand .sc-audio-player__controls {
-    gap: 0.375rem 0.625rem;
-  }
-
-  .ss-db-expand .sc-audio-player__btn {
-    padding: 0.25rem 0.55rem;
-    border-radius: 2px;
-    font-size: 11px;
   }
 
   .ss-db-expand-transcript {
@@ -416,4 +388,63 @@
     background-repeat: no-repeat;
     background-size: 10px 10px;
   }
+}
+
+/* Unlayered overrides so embedded ScAudioPlayer stays single-row and borderless inside Workbench drawer */
+.ss-db-expand .sc-audio-player {
+  background: transparent;
+  border: none;
+  border-radius: 2px;
+  padding: 0;
+  font-size: 11px;
+}
+
+.ss-db-expand .sc-audio-player__header {
+  display: none;
+}
+
+.ss-db-expand .sc-audio-player__waveform {
+  height: 40px;
+  margin-bottom: 0.375rem;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.ss-db-expand .sc-audio-player__controls {
+  flex-wrap: nowrap;
+  gap: 0.35rem 0.5rem;
+}
+
+.ss-db-expand .sc-audio-player__btn {
+  padding: 0.2rem 0.5rem;
+  border-radius: 2px;
+  font-size: 11px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.ss-db-expand .sc-audio-player__vol-label {
+  font-size: 11px;
+}
+
+.ss-db-expand .sc-audio-player__vol-wrap {
+  width: 68px;
+}
+
+.ss-db-expand .sc-audio-player__time {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ss-db-expand .sc-audio-player__open {
+  margin-left: auto;
+  font-size: 11px;
+  color: #38bdf8;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.ss-db-expand .sc-audio-player__open:hover {
+  color: #7dd3fc;
+  text-decoration: underline;
 }

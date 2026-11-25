@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/context/ToastContext'
 import { logsApi } from '@/lib/logs'
@@ -32,8 +32,28 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
   const confidence = row.confidence != null ? `${Math.round(row.confidence * 100)}%` : '—'
 
   const [text, setText] = useState(row.corrected_transcript ?? row.transcript ?? '')
+  const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<number | null>(null)
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current)
+      }
+    }
+  }, [])
+
+  const copyTranscript = () => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current)
+      }
+      copyTimerRef.current = window.setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   const reviewMutation = useMutation({
     mutationFn: (newText: string) => logsApi.review(row.id, newText),
@@ -96,15 +116,19 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
           </div>
 
           <div className="ss-db-expand-files">
-            <div className="ss-db-expand-field">
-              <span className="ss-db-expand-label">Filename</span>
-              <span className="ss-db-expand-value font-mono text-[11px] text-slate-300">
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-500">
+                File
+              </span>
+              <span className="break-all font-mono text-[11px] text-slate-300">
                 {row.filename || '—'}
               </span>
             </div>
-            <div className="ss-db-expand-field">
-              <span className="ss-db-expand-label">Audio Path</span>
-              <span className="ss-db-expand-value font-mono text-[11px] text-slate-500">
+            <div className="flex items-baseline gap-1.5 min-w-0">
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-500">
+                Path
+              </span>
+              <span className="break-all font-mono text-[11px] text-slate-500">
                 {row.audio_path || '—'}
               </span>
             </div>
@@ -113,7 +137,7 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
 
         <div className={hasAudio ? 'ss-db-expand-body' : ''}>
           <div className="ss-db-expand-card">
-            <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="ss-db-expand-label mb-0">Full transcript</span>
                 {row.is_reviewed && (
@@ -122,10 +146,17 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  className="ss-btn-primary h-7 px-2.5 text-xs cursor-pointer"
+                  className="ss-btn-ghost h-6 px-2 text-[11px] cursor-pointer"
+                  onClick={copyTranscript}
+                >
+                  {copied ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  type="button"
+                  className="ss-btn-primary h-6 px-2.5 text-[11px] cursor-pointer"
                   onClick={() => reviewMutation.mutate(text)}
                   disabled={reviewMutation.isPending}
                 >
@@ -134,7 +165,7 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
                 {showUnreview && (
                   <button
                     type="button"
-                    className="ss-btn-ghost h-7 px-2.5 text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 cursor-pointer"
+                    className="ss-btn-ghost h-6 px-2 text-[11px] text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 cursor-pointer"
                     onClick={() => unreviewMutation.mutate()}
                     disabled={unreviewMutation.isPending}
                   >
@@ -144,8 +175,8 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
               </div>
             </div>
             <textarea
-              rows={3}
-              className="min-h-[68px] w-full rounded-sm border border-[#242c3d] bg-[#090d16] px-2.5 py-1.5 font-mono text-xs leading-relaxed text-slate-100 focus:border-indigo-500 focus:outline-none"
+              rows={2}
+              className="flex-1 min-h-[54px] w-full rounded-sm border border-[#242c3d] bg-[#090d16] px-2.5 py-1.5 font-mono text-xs leading-relaxed text-slate-100 focus:border-indigo-500 focus:outline-none"
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
@@ -153,7 +184,7 @@ export function LogExpandedRow({ row, showUnreview = false }: LogExpandedRowProp
 
           {hasAudio && (
             <div className="ss-db-expand-card">
-              <span className="ss-db-expand-label mb-1.5">Audio playback</span>
+              <span className="ss-db-expand-label mb-1">Audio playback</span>
               <ScAudioPlayer src={audioSrc} />
             </div>
           )}

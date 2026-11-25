@@ -95,9 +95,16 @@ export function TalkgroupMultiSelect({
         }`}
       >
         <span className="truncate">{triggerLabel}</span>
-        <span className="shrink-0 text-[10px] text-slate-400" aria-hidden="true">
-          {open ? '▴' : '▾'}
-        </span>
+        <svg
+          viewBox="0 0 16 16"
+          className={`h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          aria-hidden="true"
+        >
+          <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </button>
 
       {open && (

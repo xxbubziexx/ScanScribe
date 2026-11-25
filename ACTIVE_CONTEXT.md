@@ -1560,6 +1560,17 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Live UI check and `snapshot` → `main` promotion when ready.
 
+### 2026-11-25 17:30 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Inspector Space Reduction & Single-Row Embedded Audio Player):**
+  - Tightened `.ss-db-expand*` rules in [`database.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/database.css) (`px-3 py-2`, `max-width: min(100%, calc(100vw - 17.5rem))` so the drawer fills visible viewport width without dead space or table overflow, `items-stretch` equal-height cards) and moved embedded `.sc-audio-player` overrides outside `@layer components` so they cleanly beat unlayered `audio-player.css` (borderless container, hidden inner `Audio` header, `40px` waveform, single-row `nowrap` controls, and sky-blue `Open audio` link).
+  - Updated [`LogExpandedRow.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/LogExpandedRow.tsx) with compact inline `FILE` / `PATH` pairs, equal-height `flex-1` transcript `<textarea>` (`rows={2}`), and a header `Copy` button with timed `Copied` feedback.
+  - Replaced the tiny text chevron in [`TalkgroupMultiSelect.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/database/TalkgroupMultiSelect.tsx) with an SVG chevron matching `Sort`.
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (`built in 2.19s`, `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx src/test/App.test.tsx src/test/TopNav.test.tsx src/test/AdminMobileRestriction.test.tsx`: **4 test files passed (24 tests passed)**.
+- **Next Tasks / Unfinished Work:**
+  - Live UI check and `snapshot` → `main` promotion when ready.
+
 
 
 
