@@ -219,130 +219,20 @@ export function EntitiesTable() {
   }
 
   return (
-    <div className="ss-events-page">
-      {/* Filters */}
-      <div className="ss-events-debug-controls flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="entity-monitor">
-            Monitor
-          </label>
-          <select
-            id="entity-monitor"
-            className="ss-select h-8 min-w-[9rem] text-xs"
-            value={monitorId}
-            onChange={(e) => setMonitorId(e.target.value)}
-          >
-            <option value="">All Monitors</option>
-            {(monitorsQuery.data ?? []).map((m) => (
-              <option key={m.id} value={String(m.id)}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="entity-label">
-            Label
-          </label>
-          <select
-            id="entity-label"
-            className="ss-select h-8 min-w-[8rem] text-xs"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-          >
-            <option value="">All Labels</option>
-            {(labelsQuery.data?.labels ?? ['EVT_TYPE', 'LOC', 'ADDRESS', 'UNIT', 'STATUS', 'TIME']).map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="entity-tg">
-            Talkgroup
-          </label>
-          <input
-            id="entity-tg"
-            type="search"
-            className="ss-input h-8 w-32 text-xs"
-            placeholder="contains…"
-            value={talkgroup}
-            onChange={(e) => setTalkgroup(e.target.value)}
-          />
-
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="entity-span">
-            Span ID
-          </label>
-          <input
-            id="entity-span"
-            type="text"
-            inputMode="numeric"
-            className="ss-input h-8 w-20 text-xs font-mono"
-            placeholder="span"
-            value={spanStoreId}
-            onChange={(e) => setSpanStoreId(e.target.value)}
-          />
-
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="entity-log">
-            Log ID
-          </label>
-          <input
-            id="entity-log"
-            type="text"
-            inputMode="numeric"
-            className="ss-input h-8 w-20 text-xs font-mono"
-            placeholder="log"
-            value={logEntryId}
-            onChange={(e) => setLogEntryId(e.target.value)}
-          />
-
-          <DatabaseDateRangePicker
-            from={dateFrom}
-            to={dateTo}
-            onChange={(f, t) => {
-              setDateFrom(f)
-              setDateTo(t)
-            }}
-            activeDates={activeDateList}
-          />
-
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="entity-search">
-            Search
-          </label>
-          <input
-            id="entity-search"
-            type="search"
-            className="ss-input h-8 min-w-[11rem] flex-1 text-xs"
-            placeholder="Search entity text…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="entity-page-size">
-            Page Size
-          </label>
-          <select
-            id="entity-page-size"
-            className="ss-select h-8 text-xs"
-            value={String(pageSize)}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-          >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-
-          <span className="ss-events-pill-tiny">
+    <div className="ss-workbench-pane">
+      <div className="ss-workbench-header">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold text-gray-100">NER Entity Observations</h2>
+          <span className="ss-events-pill-tiny font-mono">
             {total.toLocaleString()} observation{total === 1 ? '' : 's'}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {hasFilters && (
             <button
               type="button"
-              className="ss-btn-ghost h-8 text-xs cursor-pointer"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
               onClick={clearFilters}
             >
               Clear Filters
@@ -360,17 +250,128 @@ export function EntitiesTable() {
           </button>
           <button
             type="button"
-            className="ss-btn-ghost h-8 text-xs cursor-pointer"
+            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
             disabled={listQuery.isFetching}
             onClick={() => void listQuery.refetch()}
           >
-            Refresh
+            {listQuery.isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="ss-workbench-filters">
+        <div>
+          <label className="ss-form-label" htmlFor="entity-monitor">
+            Monitor
+          </label>
+          <select
+            id="entity-monitor"
+            className="ss-select h-8 min-w-[9rem] text-xs"
+            value={monitorId}
+            onChange={(e) => setMonitorId(e.target.value)}
+          >
+            <option value="">All Monitors</option>
+            {(monitorsQuery.data ?? []).map((m) => (
+              <option key={m.id} value={String(m.id)}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="ss-form-label" htmlFor="entity-label">
+            Label
+          </label>
+          <select
+            id="entity-label"
+            className="ss-select h-8 min-w-[8rem] text-xs"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+          >
+            <option value="">All Labels</option>
+            {(labelsQuery.data?.labels ?? ['EVT_TYPE', 'LOC', 'ADDRESS', 'UNIT', 'STATUS', 'TIME']).map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="ss-form-label" htmlFor="entity-tg">
+            Talkgroup
+          </label>
+          <input
+            id="entity-tg"
+            type="search"
+            className="ss-input h-8 w-32 text-xs"
+            placeholder="contains…"
+            value={talkgroup}
+            onChange={(e) => setTalkgroup(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="ss-form-label" htmlFor="entity-span">
+            Span ID
+          </label>
+          <input
+            id="entity-span"
+            type="text"
+            inputMode="numeric"
+            className="ss-input h-8 w-20 text-xs font-mono"
+            placeholder="span"
+            value={spanStoreId}
+            onChange={(e) => setSpanStoreId(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="ss-form-label" htmlFor="entity-log">
+            Log ID
+          </label>
+          <input
+            id="entity-log"
+            type="text"
+            inputMode="numeric"
+            className="ss-input h-8 w-20 text-xs font-mono"
+            placeholder="log"
+            value={logEntryId}
+            onChange={(e) => setLogEntryId(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <DatabaseDateRangePicker
+            from={dateFrom}
+            to={dateTo}
+            onChange={(f, t) => {
+              setDateFrom(f)
+              setDateTo(t)
+            }}
+            activeDates={activeDateList}
+          />
+        </div>
+
+        <div className="min-w-[11rem] flex-1">
+          <label className="ss-form-label" htmlFor="entity-search">
+            Search
+          </label>
+          <input
+            id="entity-search"
+            type="search"
+            className="ss-input h-8 text-xs"
+            placeholder="Search entity text…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       {selectedIds.size > 0 && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-2">
+        <div className="ss-workbench-bulkbar border-emerald-500/35 bg-emerald-500/10">
           <div className="flex items-center gap-3 text-xs">
             <span className="font-semibold text-emerald-100">
               {selectedIds.size} observation{selectedIds.size === 1 ? '' : 's'} selected
@@ -396,23 +397,25 @@ export function EntitiesTable() {
         </div>
       )}
 
-      {(logEntryInvalid || spanStoreInvalid) && (
-        <p className="ss-form-error" role="alert">
-          Span ID and Log Entry ID must be numbers.
-        </p>
-      )}
+      <div className="ss-workbench-grid-wrap">
+        {(logEntryInvalid || spanStoreInvalid) && (
+          <p className="ss-form-error m-4" role="alert">
+            Span ID and Log Entry ID must be numbers.
+          </p>
+        )}
 
-      {listQuery.isError && (
-        <p className="ss-form-error" role="alert">
-          {errorMessage(listQuery.error, 'Failed to load entity observations')}
-        </p>
-      )}
+        {listQuery.isError && (
+          <p className="ss-form-error m-4" role="alert">
+            {errorMessage(listQuery.error, 'Failed to load entity observations')}
+          </p>
+        )}
 
-      {listQuery.isSuccess && rows.length === 0 ? (
-        <p className="ss-empty not-italic">No entity observations found matching the selected filters.</p>
-      ) : (
-        <div className="ss-events-table-wrap overflow-x-auto">
-          <table className="ss-events-table w-full text-left text-xs">
+        {listQuery.isLoading && <p className="p-5 text-xs text-gray-500">Loading NER observations…</p>}
+
+        {listQuery.isSuccess && rows.length === 0 ? (
+          <p className="ss-empty m-4 not-italic">No entity observations found matching the selected filters.</p>
+        ) : !listQuery.isLoading && !listQuery.isError && rows.length > 0 ? (
+          <table className="ss-workbench-table">
             <thead>
               <tr>
                 <th className="w-8 text-center">
@@ -618,56 +621,74 @@ export function EntitiesTable() {
               })}
             </tbody>
           </table>
-        </div>
-      )}
+        ) : null}
+      </div>
 
       {/* Pagination Controls */}
-      {total > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+      <div className="ss-workbench-footer">
+        <div className="flex items-center gap-3">
           <span>
-            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()} observations (Page {page} of {totalPages})
+            {total > 0
+              ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()}`
+              : '0 observations'}
           </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2 text-xs"
-              disabled={page <= 1 || listQuery.isFetching}
-              onClick={() => setPage(1)}
-              title="First Page"
+          <label className="flex items-center gap-1.5 text-gray-500" htmlFor="entity-page-size">
+            <span>Rows</span>
+            <select
+              id="entity-page-size"
+              className="ss-select h-7 w-[4.25rem] text-xs"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
             >
-              ««
-            </button>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2.5 text-xs"
-              disabled={page <= 1 || listQuery.isFetching}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </button>
-            <span className="px-2 font-mono text-gray-400">
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2.5 text-xs"
-              disabled={page >= totalPages || listQuery.isFetching}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2 text-xs"
-              disabled={page >= totalPages || listQuery.isFetching}
-              onClick={() => setPage(totalPages)}
-              title="Last Page"
-            >
-              »»
-            </button>
-          </div>
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-      ) : null}
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={page <= 1 || listQuery.isFetching}
+            onClick={() => setPage(1)}
+            title="First Page"
+          >
+            ««
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            disabled={page <= 1 || listQuery.isFetching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </button>
+          <span className="px-2 font-mono text-gray-300">
+            {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            disabled={total === 0 || page >= totalPages || listQuery.isFetching}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={total === 0 || page >= totalPages || listQuery.isFetching}
+            onClick={() => setPage(totalPages)}
+            title="Last Page"
+          >
+            »»
+          </button>
+        </div>
+      </div>
 
       <NerCsvExporterModal
         open={exporterOpen}

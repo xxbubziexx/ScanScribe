@@ -158,17 +158,59 @@ export function SpansTable() {
     return <span className="ml-1 text-sky-400">{sortOrder === 'asc' ? '▲' : '▼'}</span>
   }
 
+  const hasFilters = Boolean(
+    monitorId || talkgroup.trim() || logEntryId.trim() || search.trim() || dateFrom || dateTo,
+  )
+  const clearFilters = () => {
+    setMonitorId('')
+    setTalkgroup('')
+    setLogEntryId('')
+    setSearch('')
+    setDebouncedSearch('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
   return (
-    <div className="ss-events-page">
+    <div className="ss-workbench-pane">
+      <div className="ss-workbench-header">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold text-gray-100">Span Store</h2>
+          <span className="ss-events-pill-tiny font-mono">
+            {total.toLocaleString()} span{total === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {hasFilters && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={clearFilters}
+            >
+              Clear Filters
+            </button>
+          )}
+          <button
+            type="button"
+            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+            disabled={listQuery.isFetching}
+            onClick={() => void listQuery.refetch()}
+          >
+            {listQuery.isFetching ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+      </div>
+
       {/* Filters */}
-      <div className="ss-events-debug-controls flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="span-monitor">
+      <div className="ss-workbench-filters">
+        <div>
+          <label className="ss-form-label" htmlFor="span-monitor">
             Monitor
           </label>
           <select
             id="span-monitor"
-            className="ss-select h-8 min-w-[10rem] text-xs"
+            className="ss-select h-8 min-w-[9.5rem] text-xs"
             value={monitorId}
             onChange={(e) => setMonitorId(e.target.value)}
           >
@@ -179,8 +221,10 @@ export function SpansTable() {
               </option>
             ))}
           </select>
+        </div>
 
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="span-tg">
+        <div>
+          <label className="ss-form-label" htmlFor="span-tg">
             Talkgroup
           </label>
           <input
@@ -191,8 +235,10 @@ export function SpansTable() {
             value={talkgroup}
             onChange={(e) => setTalkgroup(e.target.value)}
           />
+        </div>
 
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="span-log">
+        <div>
+          <label className="ss-form-label" htmlFor="span-log">
             Log ID
           </label>
           <input
@@ -204,7 +250,9 @@ export function SpansTable() {
             value={logEntryId}
             onChange={(e) => setLogEntryId(e.target.value)}
           />
+        </div>
 
+        <div>
           <DatabaseDateRangePicker
             from={dateFrom}
             to={dateTo}
@@ -214,67 +262,42 @@ export function SpansTable() {
             }}
             activeDates={activeDateList}
           />
+        </div>
 
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="span-search">
+        <div className="min-w-[12rem] flex-1">
+          <label className="ss-form-label" htmlFor="span-search">
             Transcript
           </label>
           <input
             id="span-search"
             type="search"
-            className="ss-input h-8 min-w-[12rem] flex-1 text-xs"
+            className="ss-input h-8 text-xs"
             placeholder="Search transcript text…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="span-page-size">
-            Page Size
-          </label>
-          <select
-            id="span-page-size"
-            className="ss-select h-8 text-xs"
-            value={String(pageSize)}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-          >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-
-          <span className="ss-events-pill-tiny">
-            {total.toLocaleString()} span{total === 1 ? '' : 's'}
-          </span>
         </div>
-
-        <button
-          type="button"
-          className="ss-btn-ghost h-8 text-xs"
-          disabled={listQuery.isFetching}
-          onClick={() => void listQuery.refetch()}
-        >
-          Refresh
-        </button>
       </div>
 
-      {logEntryInvalid && (
-        <p className="ss-form-error" role="alert">
-          Log entry ID must be a valid integer.
-        </p>
-      )}
+      <div className="ss-workbench-grid-wrap">
+        {logEntryInvalid && (
+          <p className="ss-form-error m-4" role="alert">
+            Log entry ID must be a valid integer.
+          </p>
+        )}
 
-      {listQuery.isError && (
-        <p className="ss-form-error" role="alert">
-          {errorMessage(listQuery.error, 'Failed to load spans table')}
-        </p>
-      )}
+        {listQuery.isError && (
+          <p className="ss-form-error m-4" role="alert">
+            {errorMessage(listQuery.error, 'Failed to load spans table')}
+          </p>
+        )}
 
-      {listQuery.isSuccess && rows.length === 0 ? (
-        <p className="ss-empty not-italic">No span_store entries match the selected filters.</p>
-      ) : (
-        <div className="ss-events-table-wrap overflow-x-auto">
-          <table className="ss-events-table w-full text-left text-xs">
+        {listQuery.isLoading && <p className="p-5 text-xs text-gray-500">Loading span store…</p>}
+
+        {listQuery.isSuccess && rows.length === 0 ? (
+          <p className="ss-empty m-4 not-italic">No span_store entries match the selected filters.</p>
+        ) : !listQuery.isLoading && !listQuery.isError && rows.length > 0 ? (
+          <table className="ss-workbench-table">
             <thead>
               <tr>
                 <th className="w-8" />
@@ -461,56 +484,74 @@ export function SpansTable() {
               })}
             </tbody>
           </table>
-        </div>
-      )}
+        ) : null}
+      </div>
 
       {/* Pagination Controls */}
-      {total > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+      <div className="ss-workbench-footer">
+        <div className="flex items-center gap-3">
           <span>
-            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()} spans (Page {page} of {totalPages})
+            {total > 0
+              ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()}`
+              : '0 spans'}
           </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2 text-xs"
-              disabled={page <= 1 || listQuery.isFetching}
-              onClick={() => setPage(1)}
-              title="First Page"
+          <label className="flex items-center gap-1.5 text-gray-500" htmlFor="span-page-size">
+            <span>Rows</span>
+            <select
+              id="span-page-size"
+              className="ss-select h-7 w-[4.25rem] text-xs"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
             >
-              ««
-            </button>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2.5 text-xs"
-              disabled={page <= 1 || listQuery.isFetching}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </button>
-            <span className="px-2 font-mono text-gray-400">
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2.5 text-xs"
-              disabled={page >= totalPages || listQuery.isFetching}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2 text-xs"
-              disabled={page >= totalPages || listQuery.isFetching}
-              onClick={() => setPage(totalPages)}
-              title="Last Page"
-            >
-              »»
-            </button>
-          </div>
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-      ) : null}
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={page <= 1 || listQuery.isFetching}
+            onClick={() => setPage(1)}
+            title="First Page"
+          >
+            ««
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            disabled={page <= 1 || listQuery.isFetching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </button>
+          <span className="px-2 font-mono text-gray-300">
+            {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            disabled={total === 0 || page >= totalPages || listQuery.isFetching}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={total === 0 || page >= totalPages || listQuery.isFetching}
+            onClick={() => setPage(totalPages)}
+            title="Last Page"
+          >
+            »»
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

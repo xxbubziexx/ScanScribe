@@ -312,17 +312,64 @@ export function EventsTable() {
     return <span className="ml-1 text-indigo-400">{sortOrder === 'asc' ? '▲' : '▼'}</span>
   }
 
+  const hasFilters = Boolean(monitorId || status || search.trim() || dateFrom || dateTo)
+  const clearFilters = () => {
+    setMonitorId('')
+    setStatus('')
+    setSearch('')
+    setDebouncedSearch('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
   return (
-    <div className="ss-events-page">
+    <div className="ss-workbench-pane">
+      <div className="ss-workbench-header">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold text-gray-100">Events</h2>
+          <span className="ss-events-pill-tiny font-mono">
+            {total.toLocaleString()} event{total === 1 ? '' : 's'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {hasFilters && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={clearFilters}
+            >
+              Clear Filters
+            </button>
+          )}
+          <button
+            type="button"
+            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+            disabled={eventsQuery.isFetching}
+            onClick={() => void eventsQuery.refetch()}
+          >
+            {eventsQuery.isFetching ? 'Refreshing…' : 'Refresh'}
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+            disabled={isExporting}
+            onClick={() => void handleExport()}
+          >
+            {isExporting ? 'Exporting…' : 'Export CSV'}
+          </button>
+        </div>
+      </div>
+
       {/* Filter Controls */}
-      <div className="ss-events-debug-controls flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="event-monitor">
+      <div className="ss-workbench-filters">
+        <div>
+          <label className="ss-form-label" htmlFor="event-monitor">
             Monitor
           </label>
           <select
             id="event-monitor"
-            className="ss-select h-8 min-w-[10rem] text-xs"
+            className="ss-select h-8 min-w-[9.5rem] text-xs"
             value={monitorId}
             onChange={(e) => setMonitorId(e.target.value)}
           >
@@ -333,8 +380,10 @@ export function EventsTable() {
               </option>
             ))}
           </select>
+        </div>
 
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="event-status">
+        <div>
+          <label className="ss-form-label" htmlFor="event-status">
             Status
           </label>
           <select
@@ -347,7 +396,9 @@ export function EventsTable() {
             <option value="open">Open</option>
             <option value="closed">Closed</option>
           </select>
+        </div>
 
+        <div>
           <DatabaseDateRangePicker
             from={dateFrom}
             to={dateTo}
@@ -357,71 +408,36 @@ export function EventsTable() {
             }}
             activeDates={activeDateList}
           />
+        </div>
 
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="event-search">
+        <div className="min-w-[12rem] flex-1">
+          <label className="ss-form-label" htmlFor="event-search">
             Search
           </label>
           <input
             id="event-search"
             type="search"
-            className="ss-input h-8 min-w-[12rem] flex-1 text-xs"
+            className="ss-input h-8 text-xs"
             placeholder="Type, location, units, summary…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-
-          <label className="flex items-center gap-2 text-xs text-gray-500" htmlFor="event-page-size">
-            Page Size
-          </label>
-          <select
-            id="event-page-size"
-            className="ss-select h-8 text-xs"
-            value={String(pageSize)}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-          >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-
-          <span className="ss-events-pill-tiny">
-            {total.toLocaleString()} event{total === 1 ? '' : 's'}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="ss-btn-ghost h-8 text-xs"
-            disabled={eventsQuery.isFetching}
-            onClick={() => void eventsQuery.refetch()}
-          >
-            Refresh
-          </button>
-          <button
-            type="button"
-            className="ss-btn-ghost h-8 text-xs"
-            disabled={isExporting}
-            onClick={() => void handleExport()}
-          >
-            {isExporting ? 'Exporting…' : 'Export CSV'}
-          </button>
         </div>
       </div>
 
-      {eventsQuery.isError && (
-        <p className="ss-form-error" role="alert">
-          {errorMessage(eventsQuery.error, 'Failed to load events table')}
-        </p>
-      )}
+      <div className="ss-workbench-grid-wrap">
+        {eventsQuery.isError && (
+          <p className="ss-form-error m-4" role="alert">
+            {errorMessage(eventsQuery.error, 'Failed to load events table')}
+          </p>
+        )}
 
-      {eventsQuery.isSuccess && rows.length === 0 ? (
-        <p className="ss-empty not-italic">No events match the selected filters.</p>
-      ) : (
-        <div className="ss-events-table-wrap overflow-x-auto">
-          <table className="ss-events-table w-full text-left text-xs">
+        {eventsQuery.isLoading && <p className="p-5 text-xs text-gray-500">Loading events…</p>}
+
+        {eventsQuery.isSuccess && rows.length === 0 ? (
+          <p className="ss-empty m-4 not-italic">No events match the selected filters.</p>
+        ) : !eventsQuery.isLoading && !eventsQuery.isError && rows.length > 0 ? (
+          <table className="ss-workbench-table">
             <thead>
               <tr>
                 <th className="w-8" />
@@ -506,56 +522,74 @@ export function EventsTable() {
               })}
             </tbody>
           </table>
-        </div>
-      )}
+        ) : null}
+      </div>
 
       {/* Pagination Controls */}
-      {total > 0 ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+      <div className="ss-workbench-footer">
+        <div className="flex items-center gap-3">
           <span>
-            Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} of {total.toLocaleString()} events (Page {page} of {totalPages})
+            {total > 0
+              ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()}`
+              : '0 events'}
           </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2 text-xs"
-              disabled={page <= 1 || eventsQuery.isFetching}
-              onClick={() => setPage(1)}
-              title="First Page"
+          <label className="flex items-center gap-1.5 text-gray-500" htmlFor="event-page-size">
+            <span>Rows</span>
+            <select
+              id="event-page-size"
+              className="ss-select h-7 w-[4.25rem] text-xs"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
             >
-              ««
-            </button>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2.5 text-xs"
-              disabled={page <= 1 || eventsQuery.isFetching}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </button>
-            <span className="px-2 font-mono text-gray-400">
-              {page} / {totalPages}
-            </span>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2.5 text-xs"
-              disabled={page >= totalPages || eventsQuery.isFetching}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-            <button
-              type="button"
-              className="ss-btn-ghost h-7 px-2 text-xs"
-              disabled={page >= totalPages || eventsQuery.isFetching}
-              onClick={() => setPage(totalPages)}
-              title="Last Page"
-            >
-              »»
-            </button>
-          </div>
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
-      ) : null}
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={page <= 1 || eventsQuery.isFetching}
+            onClick={() => setPage(1)}
+            title="First Page"
+          >
+            ««
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            disabled={page <= 1 || eventsQuery.isFetching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Previous
+          </button>
+          <span className="px-2 font-mono text-gray-300">
+            {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            disabled={total === 0 || page >= totalPages || eventsQuery.isFetching}
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={total === 0 || page >= totalPages || eventsQuery.isFetching}
+            onClick={() => setPage(totalPages)}
+            title="Last Page"
+          >
+            »»
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

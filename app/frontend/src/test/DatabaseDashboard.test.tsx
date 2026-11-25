@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ToastProvider } from '@/context/ToastContext'
-import { DatabaseOverviewPage } from '@/pages/DataExplorer/DatabaseOverviewPage'
+import { DataExplorerLayout } from '@/pages/DataExplorer/DataExplorerLayout'
 import { DatabasePage } from '@/pages/Database/DatabasePage'
 import { EntitiesTable } from '@/pages/DataExplorer/Tables/EntitiesTable'
 import { maintenanceApi } from '@/lib/maintenance'
@@ -46,7 +46,7 @@ vi.mock('@/lib/events', () => ({
   downloadEntitiesCsv: vi.fn(),
 }))
 
-function wrap(ui: React.ReactElement, initialEntries = ['/data']) {
+function wrap(ui: React.ReactElement, initialEntries = ['/data/logs']) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <MemoryRouter initialEntries={initialEntries}>
@@ -57,12 +57,12 @@ function wrap(ui: React.ReactElement, initialEntries = ['/data']) {
   )
 }
 
-describe('Database Explorer Suite', () => {
+describe('Database Workbench Suite', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('renders DatabaseOverviewPage KPIs, table inventory, and NER label breakdown', async () => {
+  it('renders DataExplorerLayout sidebar with all 5 tables, live counts, and telemetry without Overview tab', async () => {
     vi.mocked(maintenanceApi.overview).mockResolvedValue({
       generated_at: '2026-11-24T19:00:00Z',
       logs_last_24h: 42,
@@ -83,16 +83,12 @@ describe('Database Explorer Suite', () => {
         retention_days: 30,
       },
       tables: [
-        {
-          key: 'logs',
-          label: 'Audio Logs',
-          route: '/data/logs',
-          row_count: 150,
-          secondary_label: 'Reviewed',
-          secondary_value: '12',
-          oldest: '2026-11-01',
-          newest: '2026-11-24',
-        },
+        { key: 'logs', label: 'Audio Logs', route: '/data/logs', row_count: 150, secondary_label: null, secondary_value: null, oldest: null, newest: null },
+        { key: 'spans', label: 'Span Store', route: '/data/spans', row_count: 120, secondary_label: null, secondary_value: null, oldest: null, newest: null },
+        { key: 'entities', label: 'NER Entities', route: '/data/entities', row_count: 310, secondary_label: null, secondary_value: null, oldest: null, newest: null },
+        { key: 'events', label: 'Events', route: '/data/events', row_count: 18, secondary_label: null, secondary_value: null, oldest: null, newest: null },
+        { key: 'dataset', label: 'Fine-Tuning Dataset', route: '/data/dataset', row_count: 12, secondary_label: null, secondary_value: null, oldest: null, newest: null },
+        { key: 'monitors', label: 'Monitors', route: '/events/monitors', row_count: 3, secondary_label: null, secondary_value: null, oldest: null, newest: null },
       ],
       ner: {
         pipeline_enabled: true,
@@ -104,25 +100,29 @@ describe('Database Explorer Suite', () => {
         coverage_pct: 80.0,
         total_spans: 120,
         total_observations: 310,
-        labels: [
-          { label: 'UNIT', total_count: 180, unique_raw_count: 24, pct_of_total: 58.1 },
-          { label: 'ADDRESS', total_count: 130, unique_raw_count: 55, pct_of_total: 41.9 },
-        ],
+        labels: [],
       },
-      daily_volume: [{ date: '2026-11-24', count: 42 }],
-      top_talkgroups_24h: [{ talkgroup: 'FIRE-DISP', count: 25, duration_seconds: 300 }],
+      daily_volume: [],
+      top_talkgroups_24h: [],
     })
 
-    wrap(<DatabaseOverviewPage />)
+    wrap(<DataExplorerLayout />)
+
+    expect(screen.queryByRole('link', { name: /overview/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Audio Logs/i })).toHaveAttribute('href', '/data/logs')
+    expect(screen.getByRole('link', { name: /Span Store/i })).toHaveAttribute('href', '/data/spans')
+    expect(screen.getByRole('link', { name: /NER Entities/i })).toHaveAttribute('href', '/data/entities')
+    expect(screen.getByRole('link', { name: /Events/i })).toHaveAttribute('href', '/data/events')
+    expect(screen.getByRole('link', { name: /Fine-Tuning Dataset/i })).toHaveAttribute('href', '/data/dataset')
 
     expect(await screen.findByText('NER-Only')).toBeInTheDocument()
     expect(screen.getByText('80.0%')).toBeInTheDocument()
-    expect(screen.getByText('UNIT')).toBeInTheDocument()
-    expect(screen.getByText('FIRE-DISP')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /Audio Logs/i })).toHaveAttribute('href', '/data/logs')
+    expect(screen.getByText('42 clips')).toBeInTheDocument()
+    expect(screen.getByText('150')).toBeInTheDocument()
+    expect(screen.getByText('310')).toBeInTheDocument()
   })
 
-  it('supports cross-page style row selection and bulk audio ZIP download in DatabasePage', async () => {
+  it('supports cross-page row selection and bulk audio ZIP download in DatabasePage', async () => {
     vi.mocked(logsApi.activeDates).mockResolvedValue({ dates: ['2026-11-24'] })
     vi.mocked(logsApi.talkgroups).mockResolvedValue({ talkgroups: ['FIRE-DISP', 'EMS-TAC'] })
     vi.mocked(logsApi.list).mockResolvedValue({

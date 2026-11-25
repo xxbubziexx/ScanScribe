@@ -91,12 +91,12 @@ export function MobileLogCard({
           className="truncate max-w-[200px] font-mono text-[11px] text-gray-400"
           title={row.filename}
         >
-          📄 {row.filename || '—'}
+          {row.filename || '—'}
         </span>
         <div className="flex items-center gap-2 text-[11px] font-mono shrink-0 text-gray-400">
-          <span>⏱️ {typeof row.duration === 'number' ? `${row.duration.toFixed(1)}s` : '—'}</span>
+          <span>{typeof row.duration === 'number' ? `${row.duration.toFixed(1)}s` : '—'}</span>
           <span>·</span>
-          <span>💾 {formatBytes(row.file_size || 0)}</span>
+          <span>{formatBytes(row.file_size || 0)}</span>
         </div>
       </div>
 
@@ -114,7 +114,7 @@ export function MobileLogCard({
           {hasAudio && (
             <button
               type="button"
-              className="w-10 h-10 flex items-center justify-center rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-gray-200 transition text-sm cursor-pointer"
+              className="ss-btn-ghost h-8 px-2.5 text-xs cursor-pointer"
               onClick={() => {
                 void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
                   console.error('Download failed:', err)
@@ -123,20 +123,20 @@ export function MobileLogCard({
               title="Download audio file directly"
               aria-label="Download audio file"
             >
-              ⬇️
+              Audio
             </button>
           )}
 
           {isAdmin && (
             <button
               type="button"
-              className="w-10 h-10 flex items-center justify-center rounded-lg border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-300 transition text-sm cursor-pointer disabled:opacity-40"
+              className="ss-btn-ghost h-8 px-2.5 text-xs text-red-300 border-red-500/20 hover:bg-red-500/15 cursor-pointer disabled:opacity-40"
               onClick={() => onDelete(row.id)}
               disabled={deleting}
               title="Remove log entry"
               aria-label="Remove log entry"
             >
-              🗑️
+              Delete
             </button>
           )}
         </div>

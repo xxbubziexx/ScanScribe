@@ -172,4 +172,53 @@
   .ss-db-expand-audio {
     @apply mt-4;
   }
+
+  /* Full-bleed Database Workbench */
+  .ss-workbench {
+    @apply flex h-[calc(100dvh-3.5rem)] w-full flex-col lg:flex-row bg-[#0b0d13] overflow-hidden;
+  }
+
+  .ss-workbench-rail {
+    @apply flex w-full shrink-0 flex-col border-b border-white/10 bg-[#10131c] lg:w-64 lg:border-b-0 lg:border-r;
+  }
+
+  .ss-workbench-main {
+    @apply flex min-w-0 flex-1 flex-col overflow-hidden bg-[#0c0f16];
+  }
+
+  .ss-workbench-pane {
+    @apply flex min-h-0 flex-1 flex-col overflow-hidden;
+  }
+
+  .ss-workbench-header {
+    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-[#111520] px-4 py-3 sm:px-5;
+  }
+
+  .ss-workbench-filters {
+    @apply relative z-20 flex shrink-0 flex-wrap items-end gap-2.5 border-b border-white/[0.07] bg-[#0e1119] px-4 py-2.5 sm:px-5;
+  }
+
+  .ss-workbench-bulkbar {
+    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-indigo-500/30 bg-indigo-500/10 px-4 py-2 sm:px-5;
+  }
+
+  .ss-workbench-grid-wrap {
+    @apply min-h-0 flex-1 overflow-auto;
+  }
+
+  .ss-workbench-table {
+    @apply w-full border-collapse text-left text-xs;
+  }
+
+  .ss-workbench-table thead th {
+    @apply sticky top-0 z-10 whitespace-nowrap border-b border-white/10 bg-[#131722] px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400;
+  }
+
+  .ss-workbench-table tbody td {
+    @apply border-b border-white/[0.05] px-3 py-2 align-middle text-gray-300;
+  }
+
+  .ss-workbench-footer {
+    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-[#111520] px-4 py-2.5 text-xs text-gray-400 sm:px-5;
+  }
 }

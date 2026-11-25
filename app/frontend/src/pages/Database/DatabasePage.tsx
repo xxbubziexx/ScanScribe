@@ -36,7 +36,6 @@ export function DatabasePage() {
   const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '')
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') ?? '')
   const [talkgroup, setTalkgroup] = useState(() => searchParams.get('talkgroup') ?? '')
-
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
@@ -102,7 +101,7 @@ export function DatabasePage() {
   const data = query.data
   const rows = data?.logs ?? []
   const total = data?.total ?? 0
-  const totalPages = data?.total_pages ?? 0
+  const totalPages = Math.max(1, data?.total_pages ?? 1)
 
   const pageIds = useMemo(() => rows.map((r) => r.id), [rows])
   const selectedOnPageCount = useMemo(
@@ -221,47 +220,67 @@ export function DatabasePage() {
   }
 
   return (
-    <div className="ss-db-page">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-base font-semibold text-gray-200">Audio Logs</h2>
-          <p className="text-xs text-gray-500">
-            Browse, filter, select rows across pages, and download bulk audio ZIP archives.
-          </p>
+    <div className="ss-workbench-pane">
+      <div className="ss-workbench-header">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold text-gray-100">Audio Logs</h2>
+          <span className="ss-events-pill-tiny font-mono">
+            {total.toLocaleString()} row{total === 1 ? '' : 's'}
+          </span>
         </div>
-        {hasFilters && (
+
+        <div className="flex flex-wrap items-center gap-2">
+          {hasFilters && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={clearFilters}
+            >
+              Clear Filters
+            </button>
+          )}
           <button
             type="button"
             className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
-            onClick={clearFilters}
+            onClick={() => void query.refetch()}
+            disabled={query.isFetching}
           >
-            Clear filters
+            {query.isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
-        )}
+          <button
+            type="button"
+            className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+            onClick={onExport}
+            disabled={query.isFetching}
+          >
+            Export CSV
+          </button>
+        </div>
       </div>
 
-      <div className="ss-db-filters">
-        <div className="min-w-0 w-full md:flex-1">
+      <div className="ss-workbench-filters">
+        <div className="min-w-[14rem] flex-1">
           <label className="ss-form-label" htmlFor="db-search">
             Search
           </label>
           <input
             id="db-search"
             type="search"
-            className="ss-input min-h-[40px]"
+            className="ss-input h-8 text-xs"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Transcript, filename, talkgroup…"
             autoComplete="off"
           />
         </div>
-        <div className="w-full sm:w-auto">
+
+        <div>
           <label className="ss-form-label" htmlFor="db-talkgroup">
             Talkgroup
           </label>
           <select
             id="db-talkgroup"
-            className="ss-select w-full sm:min-w-[11rem] min-h-[40px]"
+            className="ss-select h-8 min-w-[10.5rem] text-xs"
             value={talkgroup}
             onChange={(e) => setTalkgroup(e.target.value)}
           >
@@ -273,7 +292,8 @@ export function DatabasePage() {
             ))}
           </select>
         </div>
-        <div className="w-full sm:w-auto">
+
+        <div>
           <DatabaseDateRangePicker
             from={dateFrom}
             to={dateTo}
@@ -284,56 +304,28 @@ export function DatabasePage() {
             activeDates={activeDateList}
           />
         </div>
-        <div className="flex flex-wrap items-end gap-2.5 w-full sm:w-auto">
-          <div className="flex-1 sm:flex-initial">
-            <label className="ss-form-label" htmlFor="db-sort">
-              Sort
-            </label>
-            <select
-              id="db-sort"
-              className="ss-select w-full sm:min-w-[10rem] min-h-[40px]"
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as LogsSortBy)}
-            >
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="ss-form-label" htmlFor="db-ps">
-              Per page
-            </label>
-            <select
-              id="db-ps"
-              className="ss-select w-[4.5rem] min-h-[40px]"
-              value={String(pageSize)}
-              onChange={(e) => setPageSize(Number(e.target.value))}
-            >
-              {PAGE_SIZES.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-end">
-            <button
-              type="button"
-              className="ss-btn-ghost min-h-[40px] px-3.5 flex items-center justify-center cursor-pointer"
-              onClick={onExport}
-              disabled={query.isFetching}
-            >
-              Export CSV
-            </button>
-          </div>
+
+        <div>
+          <label className="ss-form-label" htmlFor="db-sort">
+            Sort
+          </label>
+          <select
+            id="db-sort"
+            className="ss-select h-8 min-w-[9.5rem] text-xs"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as LogsSortBy)}
+          >
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-500/35 bg-indigo-500/10 px-4 py-2.5">
+        <div className="ss-workbench-bulkbar">
           <div className="flex items-center gap-3 text-xs">
             <span className="font-semibold text-indigo-100">
               {selectedIds.size} {selectedIds.size === 1 ? 'entry' : 'entries'} selected
@@ -349,18 +341,16 @@ export function DatabasePage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              className="ss-btn-primary h-8 px-3.5 text-xs cursor-pointer disabled:opacity-50"
+              className="ss-btn-primary h-7 px-3 text-xs cursor-pointer disabled:opacity-50"
               onClick={() => void onBulkDownloadZip()}
               disabled={isDownloadingZip}
             >
-              {isDownloadingZip
-                ? 'Building ZIP…'
-                : `Download ZIP (${selectedIds.size})`}
+              {isDownloadingZip ? 'Building ZIP…' : `Download ZIP (${selectedIds.size})`}
             </button>
             {isAdmin && (
               <button
                 type="button"
-                className="ss-btn-ghost h-8 px-3 text-xs text-red-300 border-red-500/30 hover:bg-red-500/15 cursor-pointer disabled:opacity-50"
+                className="ss-btn-ghost h-7 px-3 text-xs text-red-300 border-red-500/30 hover:bg-red-500/15 cursor-pointer disabled:opacity-50"
                 onClick={onBulkDelete}
                 disabled={bulkDelMutation.isPending}
               >
@@ -371,118 +361,156 @@ export function DatabasePage() {
         </div>
       )}
 
-      {query.isError && (
-        <p className="ss-form-error mb-4" role="alert">
-          {errorMessage(query.error, 'Failed to load logs')}
-        </p>
-      )}
+      <div className="ss-workbench-grid-wrap">
+        {query.isError && (
+          <p className="ss-form-error m-4" role="alert">
+            {errorMessage(query.error, 'Failed to load logs')}
+          </p>
+        )}
 
-      {query.isLoading && <p className="text-sm text-gray-500">Loading…</p>}
+        {query.isLoading && <p className="p-5 text-xs text-gray-500">Loading audio logs…</p>}
 
-      {!query.isLoading && !query.isError && rows.length === 0 && (
-        <p className="ss-empty not-italic">No log entries for these filters.</p>
-      )}
+        {!query.isLoading && !query.isError && rows.length === 0 && (
+          <p className="ss-empty m-4 not-italic">No log entries for these filters.</p>
+        )}
 
-      {!query.isLoading && !query.isError && rows.length > 0 && (
-        <>
-          <div className="hidden md:block ss-db-table-wrap">
-            <table className="ss-db-table">
-              <thead>
-                <tr>
-                  <th className="ss-db-th w-9 text-center">
-                    <input
-                      ref={selectAllRef}
-                      type="checkbox"
-                      className="h-4 w-4 accent-indigo-500 cursor-pointer"
-                      checked={allOnPageSelected}
-                      onChange={toggleSelectPage}
-                      aria-label="Select all entries on this page"
-                    />
-                  </th>
-                  <th className="ss-db-th">Time</th>
-                  <th className="ss-db-th">Talkgroup</th>
-                  <th className="ss-db-th">Filename</th>
-                  <th className="ss-db-th">Transcript</th>
-                  <th className="ss-db-th">Dur</th>
-                  <th className="ss-db-th">Size</th>
-                  <th className="ss-db-th">Conf.</th>
-                  <th className="ss-db-th text-right"> </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <Fragment key={row.id}>
-                    <LogRow
-                      row={row}
-                      isAdmin={isAdmin}
-                      selected={selectedIds.has(row.id)}
-                      onToggleSelect={() => toggleRowSelect(row.id)}
-                      onDelete={onDelete}
-                      deleting={delMutation.isPending}
-                      expanded={expandedId === row.id}
-                      onToggleExpand={() =>
-                        setExpandedId((cur) => (cur === row.id ? null : row.id))
-                      }
-                    />
-                    {expandedId === row.id && (
-                      <tr>
-                        <td className="ss-db-td p-0" colSpan={9}>
-                          <LogExpandedRow row={row} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="md:hidden flex flex-col gap-3">
-            {rows.map((row) => (
-              <MobileLogCard
-                key={row.id}
-                row={row}
-                isAdmin={isAdmin}
-                selected={selectedIds.has(row.id)}
-                onToggleSelect={() => toggleRowSelect(row.id)}
-                onDelete={onDelete}
-                deleting={delMutation.isPending}
-                expanded={expandedId === row.id}
-                onToggleExpand={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
-              />
-            ))}
-          </div>
-
-          <div className="ss-db-pager">
-            <span className="w-full sm:w-auto text-center sm:text-left text-xs sm:text-sm">
-              {total.toLocaleString()} entries
-              {query.isFetching && !query.isLoading ? ' · …' : ''}
-            </span>
-            <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
-              <button
-                type="button"
-                className="ss-btn-ghost min-h-[42px] px-4 flex-1 sm:flex-initial cursor-pointer"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1 || query.isFetching}
-              >
-                Previous
-              </button>
-              <span className="text-gray-400 text-xs sm:text-sm px-1">
-                Page {page}
-                {totalPages > 0 ? ` of ${totalPages}` : ''}
-              </span>
-              <button
-                type="button"
-                className="ss-btn-ghost min-h-[42px] px-4 flex-1 sm:flex-initial cursor-pointer"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={totalPages === 0 || page >= totalPages || query.isFetching}
-              >
-                Next
-              </button>
+        {!query.isLoading && !query.isError && rows.length > 0 && (
+          <>
+            <div className="hidden md:block">
+              <table className="ss-workbench-table">
+                <thead>
+                  <tr>
+                    <th className="w-9 text-center">
+                      <input
+                        ref={selectAllRef}
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-indigo-500 cursor-pointer"
+                        checked={allOnPageSelected}
+                        onChange={toggleSelectPage}
+                        aria-label="Select all entries on this page"
+                      />
+                    </th>
+                    <th>Time</th>
+                    <th>Talkgroup</th>
+                    <th>Filename</th>
+                    <th>Transcript</th>
+                    <th>Dur</th>
+                    <th>Size</th>
+                    <th>Conf.</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <Fragment key={row.id}>
+                      <LogRow
+                        row={row}
+                        isAdmin={isAdmin}
+                        selected={selectedIds.has(row.id)}
+                        onToggleSelect={() => toggleRowSelect(row.id)}
+                        onDelete={onDelete}
+                        deleting={delMutation.isPending}
+                        expanded={expandedId === row.id}
+                        onToggleExpand={() =>
+                          setExpandedId((cur) => (cur === row.id ? null : row.id))
+                        }
+                      />
+                      {expandedId === row.id && (
+                        <tr>
+                          <td className="p-0" colSpan={9}>
+                            <LogExpandedRow row={row} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        </>
-      )}
+
+            <div className="md:hidden flex flex-col gap-3 p-3">
+              {rows.map((row) => (
+                <MobileLogCard
+                  key={row.id}
+                  row={row}
+                  isAdmin={isAdmin}
+                  selected={selectedIds.has(row.id)}
+                  onToggleSelect={() => toggleRowSelect(row.id)}
+                  onDelete={onDelete}
+                  deleting={delMutation.isPending}
+                  expanded={expandedId === row.id}
+                  onToggleExpand={() => setExpandedId((cur) => (cur === row.id ? null : row.id))}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="ss-workbench-footer">
+        <div className="flex items-center gap-3">
+          <span>
+            {total > 0
+              ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()}`
+              : '0 entries'}
+          </span>
+          <label className="flex items-center gap-1.5 text-gray-500" htmlFor="db-ps">
+            <span>Rows</span>
+            <select
+              id="db-ps"
+              className="ss-select h-7 w-[4.25rem] text-xs"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={page <= 1 || query.isFetching}
+            onClick={() => setPage(1)}
+            title="First Page"
+          >
+            ««
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || query.isFetching}
+          >
+            Previous
+          </button>
+          <span className="px-2 font-mono text-gray-300">
+            {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={total === 0 || page >= totalPages || query.isFetching}
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={total === 0 || page >= totalPages || query.isFetching}
+            onClick={() => setPage(totalPages)}
+            title="Last Page"
+          >
+            »»
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

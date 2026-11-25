@@ -7,14 +7,7 @@ import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRange
 import { errorMessage } from '@/types/api'
 import type { LogListEntry, LogsSortBy } from '@/types/logs'
 import { ScAudioPlayer } from '@/components/ui/ScAudioPlayer'
-
-function formatBytes(bytes: number) {
-  if (!bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / k ** i).toFixed(1))} ${sizes[i]}`
-}
+import { formatBytes } from '@/pages/Database/utils/formatBytes'
 
 const SORT_OPTIONS: { value: LogsSortBy; label: string }[] = [
   { value: 'timestamp_desc', label: 'Newest first' },
@@ -33,7 +26,6 @@ export function DatasetPage() {
 
   const [searchInput, setSearchInput] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
@@ -89,7 +81,7 @@ export function DatasetPage() {
   const data = query.data
   const rows = data?.logs ?? []
   const total = data?.total ?? 0
-  const totalPages = data?.total_pages ?? 0
+  const totalPages = Math.max(1, data?.total_pages ?? 1)
 
   const delMutation = useMutation({
     mutationFn: (id: number) => logsApi.delete(id),
@@ -97,6 +89,7 @@ export function DatasetPage() {
       addToast('Log entry removed', 'success')
       void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['database-overview'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Delete failed'), 'error'),
   })
@@ -117,6 +110,7 @@ export function DatasetPage() {
       setSelectedIds(new Set())
       void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['database-overview'] })
     },
     onError: (e: unknown) => addToast(errorMessage(e, 'Failed to clear dataset'), 'error'),
   })
@@ -135,42 +129,87 @@ export function DatasetPage() {
     }
   }
 
-  return (
-    <div className="ss-db-page">
-      <h1 className="ss-db-title">Fine-Tuning Dataset</h1>
-      <p className="mb-4 text-sm text-gray-500">Manage reviewed spans for your Whisper fine-tuning dataset.</p>
+  const allOnPageSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
+  const hasFilters = Boolean(searchInput.trim() || dateFrom || dateTo)
 
-      <div className="ss-db-filters">
-        <div className="min-w-0 flex-1">
-          <label className="ss-form-label" htmlFor="db-search">
+  return (
+    <div className="ss-workbench-pane">
+      <div className="ss-workbench-header">
+        <div className="flex items-center gap-3">
+          <h2 className="text-sm font-semibold text-gray-100">Fine-Tuning Dataset</h2>
+          <span className="ss-events-pill-tiny font-mono">
+            {total.toLocaleString()} reviewed
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {hasFilters && (
+            <button
+              type="button"
+              className="ss-btn-ghost h-8 px-3 text-xs cursor-pointer"
+              onClick={() => {
+                setSearchInput('')
+                setDebouncedSearch('')
+                setDateFrom('')
+                setDateTo('')
+              }}
+            >
+              Clear Filters
+            </button>
+          )}
+          <button
+            type="button"
+            className="ss-btn-ghost h-8 px-3 text-xs text-red-400 hover:bg-red-400/10 hover:text-red-300 border-red-500/30 cursor-pointer"
+            onClick={onClearDataset}
+            disabled={clearMutation.isPending || query.isFetching || total === 0}
+            title="Unreview and remove all spans from this dataset"
+          >
+            {clearMutation.isPending ? 'Clearing…' : 'Clear Dataset'}
+          </button>
+          <button
+            type="button"
+            className="ss-btn-primary h-8 px-3 text-xs cursor-pointer"
+            onClick={onExportDataset}
+            disabled={query.isFetching || total === 0}
+          >
+            Export Whisper ZIP
+          </button>
+        </div>
+      </div>
+
+      <div className="ss-workbench-filters">
+        <div className="min-w-[14rem] flex-1">
+          <label className="ss-form-label" htmlFor="dataset-search">
             Search
           </label>
           <input
-            id="db-search"
+            id="dataset-search"
             type="search"
-            className="ss-input"
+            className="ss-input h-8 text-xs"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Transcript, filename, talkgroup…"
             autoComplete="off"
           />
         </div>
-        <DatabaseDateRangePicker
-          from={dateFrom}
-          to={dateTo}
-          onChange={(a, b) => {
-            setDateFrom(a)
-            setDateTo(b)
-          }}
-          activeDates={activeDateList}
-        />
         <div>
-          <label className="ss-form-label" htmlFor="db-sort">
+          <DatabaseDateRangePicker
+            from={dateFrom}
+            to={dateTo}
+            onChange={(a, b) => {
+              setDateFrom(a)
+              setDateTo(b)
+            }}
+            activeDates={activeDateList}
+          />
+        </div>
+        <div>
+          <label className="ss-form-label" htmlFor="dataset-sort">
             Sort
           </label>
           <select
-            id="db-sort"
-            className="ss-select min-w-[10rem]"
+            id="dataset-sort"
+            className="ss-select h-8 min-w-[9.5rem] text-xs"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as LogsSortBy)}
           >
@@ -181,174 +220,209 @@ export function DatasetPage() {
             ))}
           </select>
         </div>
-        <div>
-          <label className="ss-form-label" htmlFor="db-ps">
-            Per page
-          </label>
-          <select
-            id="db-ps"
-            className="ss-select w-[4.5rem]"
-            value={String(pageSize)}
-            onChange={(e) => setPageSize(Number(e.target.value))}
-          >
-            {PAGE_SIZES.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-end gap-2">
-          <button
-            type="button"
-            className="ss-btn-ghost text-red-400 hover:bg-red-400/10 hover:text-red-300 border-red-500/30"
-            onClick={onClearDataset}
-            disabled={clearMutation.isPending || query.isFetching || total === 0}
-            title="Unreview and remove all spans from this dataset"
-          >
-            {clearMutation.isPending ? 'Clearing…' : 'Clear Dataset'}
-          </button>
-          <button
-            type="button"
-            className="ss-btn-ghost"
-            onClick={onExportDataset}
-            disabled={query.isFetching || total === 0}
-          >
-            Export Fine-Tuning Dataset
-          </button>
-        </div>
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="bg-indigo-500/10 border border-indigo-500/30 p-2 rounded flex items-center justify-between mb-4">
-          <span className="text-sm text-indigo-200 ml-2 font-bold">{selectedIds.size} spans selected</span>
+        <div className="ss-workbench-bulkbar">
+          <div className="flex items-center gap-3 text-xs">
+            <span className="font-semibold text-indigo-100">{selectedIds.size} spans selected</span>
+            <button
+              type="button"
+              className="text-indigo-300 hover:text-white underline cursor-pointer"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear selection
+            </button>
+          </div>
           <div className="flex gap-2">
-            <button className="ss-btn-ghost text-red-400 hover:bg-red-400/10 text-xs py-1" onClick={async () => {
-              if (!window.confirm(`Remove ${selectedIds.size} spans from dataset?`)) return
-              for (const id of selectedIds) await logsApi.unreview(id)
-              addToast('Removed selected spans', 'success')
-              setSelectedIds(new Set())
-              void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
-              void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
-            }}>Remove Selected</button>
-            <button className="ss-btn-primary text-xs py-1" onClick={async () => {
-              try {
-                const res = await fetch('/api/logs/export-dataset', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                  },
-                  body: JSON.stringify({ log_ids: Array.from(selectedIds) })
-                })
-                if (!res.ok) throw new Error('Export failed')
-                const blob = await res.blob()
-                const url = window.URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `whisper_dataset_selected.zip`
-                document.body.appendChild(a)
-                a.click()
-                a.remove()
-                window.URL.revokeObjectURL(url)
-                addToast('Dataset exported', 'success')
-              } catch (e: any) {
-                addToast(e.message, 'error')
-              }
-            }}>Download Selected</button>
+            <button
+              type="button"
+              className="ss-btn-ghost h-7 px-3 text-xs text-red-300 border-red-500/30 hover:bg-red-500/15 cursor-pointer"
+              onClick={async () => {
+                if (!window.confirm(`Remove ${selectedIds.size} spans from dataset?`)) return
+                for (const id of selectedIds) await logsApi.unreview(id)
+                addToast('Removed selected spans', 'success')
+                setSelectedIds(new Set())
+                void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
+                void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+                void queryClient.invalidateQueries({ queryKey: ['database-overview'] })
+              }}
+            >
+              Remove Selected
+            </button>
+            <button
+              type="button"
+              className="ss-btn-primary h-7 px-3 text-xs cursor-pointer"
+              onClick={async () => {
+                try {
+                  const token = localStorage.getItem('access_token')
+                  const res = await fetch('/api/logs/export-dataset', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({ log_ids: Array.from(selectedIds) }),
+                  })
+                  if (!res.ok) throw new Error('Export failed')
+                  const blob = await res.blob()
+                  const url = window.URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `whisper_dataset_selected.zip`
+                  document.body.appendChild(a)
+                  a.click()
+                  a.remove()
+                  window.URL.revokeObjectURL(url)
+                  addToast('Dataset exported', 'success')
+                } catch (e: unknown) {
+                  addToast(errorMessage(e, 'Export failed'), 'error')
+                }
+              }}
+            >
+              Download Selected ZIP
+            </button>
           </div>
         </div>
       )}
 
-      {query.isError && (
-        <p className="ss-form-error mb-4" role="alert">
-          {errorMessage(query.error, 'Failed to load logs')}
-        </p>
-      )}
+      <div className="ss-workbench-grid-wrap">
+        {query.isError && (
+          <p className="ss-form-error m-4" role="alert">
+            {errorMessage(query.error, 'Failed to load logs')}
+          </p>
+        )}
 
-      {query.isLoading && <p className="text-sm text-gray-500">Loading…</p>}
+        {query.isLoading && <p className="p-5 text-xs text-gray-500">Loading dataset…</p>}
 
-      {!query.isLoading && !query.isError && rows.length === 0 && (
-        <p className="ss-empty not-italic">No log entries for these filters.</p>
-      )}
+        {!query.isLoading && !query.isError && rows.length === 0 && (
+          <p className="ss-empty m-4 not-italic">No reviewed entries for these filters.</p>
+        )}
 
-      {!query.isLoading && !query.isError && rows.length > 0 && (
-        <>
-          <div className="ss-db-table-wrap">
-            <table className="ss-db-table">
-              <thead>
-                <tr>
-                  <th className="ss-db-th w-10"></th>
-                  <th className="ss-db-th">Time</th>
-                  <th className="ss-db-th">Talkgroup</th>
-                  <th className="ss-db-th">Filename</th>
-                  <th className="ss-db-th">Transcript</th>
-                  <th className="ss-db-th text-right"> </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <Fragment key={row.id}>
-                    <LogRow
-                      selected={selectedIds.has(row.id)}
-                      onToggleSelect={() => {
-                        const newSet = new Set(selectedIds)
-                        if (newSet.has(row.id)) newSet.delete(row.id)
-                        else newSet.add(row.id)
-                        setSelectedIds(newSet)
-                      }}
-                      row={row}
-                      isAdmin={isAdmin}
-                      onDelete={onDelete}
-                      deleting={delMutation.isPending}
-                      expanded={expandedId === row.id}
-                      onToggleExpand={() =>
-                        setExpandedId((cur) => (cur === row.id ? null : row.id))
+        {!query.isLoading && !query.isError && rows.length > 0 && (
+          <table className="ss-workbench-table">
+            <thead>
+              <tr>
+                <th className="w-9 text-center">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-indigo-500 cursor-pointer"
+                    checked={allOnPageSelected}
+                    onChange={() => {
+                      const next = new Set(selectedIds)
+                      if (allOnPageSelected) {
+                        for (const r of rows) next.delete(r.id)
+                      } else {
+                        for (const r of rows) next.add(r.id)
                       }
-                    />
-                    {expandedId === row.id && (
-                      <tr>
-                        <td className="ss-db-td p-0" colSpan={6}>
-                          <LogExpandedRow row={row} />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      setSelectedIds(next)
+                    }}
+                    aria-label="Select all dataset spans on this page"
+                  />
+                </th>
+                <th>Time</th>
+                <th>Talkgroup</th>
+                <th>Filename</th>
+                <th>Reviewed Transcript</th>
+                <th className="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <Fragment key={row.id}>
+                  <LogRow
+                    selected={selectedIds.has(row.id)}
+                    onToggleSelect={() => {
+                      const newSet = new Set(selectedIds)
+                      if (newSet.has(row.id)) newSet.delete(row.id)
+                      else newSet.add(row.id)
+                      setSelectedIds(newSet)
+                    }}
+                    row={row}
+                    isAdmin={isAdmin}
+                    onDelete={onDelete}
+                    deleting={delMutation.isPending}
+                    expanded={expandedId === row.id}
+                    onToggleExpand={() =>
+                      setExpandedId((cur) => (cur === row.id ? null : row.id))
+                    }
+                  />
+                  {expandedId === row.id && (
+                    <tr>
+                      <td className="p-0" colSpan={6}>
+                        <LogExpandedRow row={row} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
-          <div className="ss-db-pager">
-            <span>
-              {total} entries
-              {query.isFetching && !query.isLoading ? ' · …' : ''}
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="ss-btn-ghost"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1 || query.isFetching}
-              >
-                Previous
-              </button>
-              <span className="text-gray-400">
-                Page {page}
-                {totalPages > 0 ? ` of ${totalPages}` : ''}
-              </span>
-              <button
-                type="button"
-                className="ss-btn-ghost"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={totalPages === 0 || page >= totalPages || query.isFetching}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+      <div className="ss-workbench-footer">
+        <div className="flex items-center gap-3">
+          <span>
+            {total > 0
+              ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()}`
+              : '0 entries'}
+          </span>
+          <label className="flex items-center gap-1.5 text-gray-500" htmlFor="dataset-ps">
+            <span>Rows</span>
+            <select
+              id="dataset-ps"
+              className="ss-select h-7 w-[4.25rem] text-xs"
+              value={String(pageSize)}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+            >
+              {PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={page <= 1 || query.isFetching}
+            onClick={() => setPage(1)}
+          >
+            ««
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || query.isFetching}
+          >
+            Previous
+          </button>
+          <span className="px-2 font-mono text-gray-300">
+            {page} / {totalPages}
+          </span>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2.5 text-xs cursor-pointer"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={total === 0 || page >= totalPages || query.isFetching}
+          >
+            Next
+          </button>
+          <button
+            type="button"
+            className="ss-btn-ghost h-7 px-2 text-xs cursor-pointer"
+            disabled={total === 0 || page >= totalPages || query.isFetching}
+            onClick={() => setPage(totalPages)}
+          >
+            »»
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -375,42 +449,48 @@ function LogRow({
   const hasAudio = row.audio_path && row.audio_path !== 'file not saved'
   return (
     <tr
-      className={`ss-db-row ${expanded ? 'ss-db-row--expanded' : ''}`}
+      className={`ss-db-row ${expanded ? 'ss-db-row--expanded' : ''} ${
+        selected ? 'bg-indigo-500/[0.08]' : ''
+      }`}
       onClick={onToggleExpand}
       aria-expanded={expanded}
-        >
-      <td className="ss-db-td text-center" onClick={(e) => e.stopPropagation()}>
-        <input type="checkbox" className="ss-checkbox" checked={selected} onChange={(e) => { e.stopPropagation(); if (onToggleSelect) onToggleSelect(); }} />
+    >
+      <td className="text-center" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          className="h-3.5 w-3.5 accent-indigo-500 cursor-pointer"
+          checked={selected}
+          onChange={(e) => {
+            e.stopPropagation()
+            if (onToggleSelect) onToggleSelect()
+          }}
+        />
       </td>
-      <td className="ss-db-td font-mono text-xs text-gray-400">
+      <td className="font-mono text-xs text-gray-400">
         <span className={`ss-db-expand-icon ${expanded ? 'ss-db-expand-icon--open' : ''}`}>▶</span>{' '}
         {row.timestamp
           ? new Date(row.timestamp).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
           : '—'}
       </td>
-      <td className="ss-db-td">
+      <td>
         <span className="inline-block max-w-[12rem] truncate text-indigo-200" title={row.talkgroup ?? ''}>
           {row.talkgroup || '—'}
         </span>
       </td>
-      <td className="ss-db-td" title={row.filename}>
+      <td title={row.filename}>
         <span className="ss-db-filename-clip block">{row.filename || '—'}</span>
       </td>
-      <td className="ss-db-td">
-        <span className="ss-db-td-clip block text-gray-400">
-          
+      <td>
+        <span className="ss-db-td-clip block text-gray-300">
           {row.corrected_transcript || row.transcript || '—'}
         </span>
       </td>
-      
-      
-      
-      <td className="ss-db-td text-right">
+      <td className="text-right">
         <div className="ss-db-actions">
           {hasAudio && (
             <button
               type="button"
-              className="ss-text-link"
+              className="ss-text-link cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()
                 void downloadAudioFile(row.audio_path!, row.filename || undefined).catch((err) => {
@@ -420,13 +500,13 @@ function LogRow({
               title="Download audio file directly"
               aria-label="Download audio file directly"
             >
-              ⬇️
+              Audio
             </button>
           )}
           {isAdmin && (
             <button
               type="button"
-              className="ss-btn-filter-clear"
+              className="ss-btn-filter-clear cursor-pointer"
               onClick={(e) => {
                 e.stopPropagation()
                 onDelete(row.id)
@@ -435,7 +515,7 @@ function LogRow({
               title="Remove log entry"
               aria-label="Remove log entry"
             >
-              🗑️
+              Delete
             </button>
           )}
         </div>
@@ -467,13 +547,14 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
   const [text, setText] = useState(row.corrected_transcript ?? row.transcript ?? '')
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  
+
   const unreviewMutation = useMutation({
     mutationFn: () => logsApi.unreview(row.id),
     onSuccess: () => {
       addToast('Removed from dataset', 'success')
       void queryClient.invalidateQueries({ queryKey: ['dataset-logs'] })
       void queryClient.invalidateQueries({ queryKey: ['database-logs'] })
+      void queryClient.invalidateQueries({ queryKey: ['database-overview'] })
     },
   })
 
@@ -526,7 +607,6 @@ function LogExpandedRow({ row }: { row: LogListEntry }) {
           >
             {unreviewMutation.isPending ? 'Removing...' : 'Remove from Dataset'}
           </button>
-
         </div>
       </div>
 

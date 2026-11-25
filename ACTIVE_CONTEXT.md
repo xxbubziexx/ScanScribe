@@ -1423,5 +1423,25 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Live UI validation on the station browser and promotion from `snapshot` → `main` when ready.
 
+---
+
+### 2026-11-24 22:59 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Database Workbench Full Restyle):**
+  1. **Removed Extra Overview Tab & Added Full-Bleed Workbench Shell ([`AppLayout.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/layout/AppLayout.tsx), [`App.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/App.tsx), [`DataExplorerLayout.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DataExplorerLayout.tsx), [`database.css`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/styles/components/database.css)):**
+     - Deleted `DatabaseOverviewPage.tsx`; `/data` now opens directly onto `/data/logs` (Audio Logs) inside a full-bleed `h-[calc(100dvh-3.5rem)]` workbench (`isFullBleed` includes `/data*`).
+     - Replaced the horizontal subnav header with a left schema/table sidebar (live row counts per table from `GET /api/maintenance/overview`, quick `NER CSV Exporter` / `Monitors` shortcuts, and a compact bottom `Storage & Pipeline` telemetry panel showing SQLite+WAL size, audio footprint, NER coverage/mode, and 24h ingest count; collapses to a horizontal scroll strip on `< lg`).
+  2. **Unified All 5 Tables to `.ss-workbench-pane` ([`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx), [`SpansTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/SpansTable.tsx), [`EntitiesTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EntitiesTable.tsx), [`EventsTable.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/Tables/EventsTable.tsx), [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx)):**
+     - Standardized every tab to a consistent sticky header, uniform filter strip (`Clear Filters`), scrollable sticky-header data grid (`.ss-workbench-table`), and pinned bottom pagination footer (`First / Prev / Page / Next / Last` + rows-per-page selector).
+     - Cleaned remaining emoji buttons in [`MobileLogCard.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/components/MobileLogCard.tsx) and [`DatasetPage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/DataExplorer/DatasetPage.tsx), and fixed `DatasetPage.tsx` selected ZIP auth token key (`localStorage.getItem('access_token')`).
+- **Live Ubuntu Ingestion Impact:**
+  - Zero backend or ingestion changes; frontend static bundle rebuilt in `app/frontend/dist`.
+- **Verification Performed:**
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed in 3.52s (0 errors).
+  - `.venv\Scripts\python.exe -m pytest tests/test_database_dashboard.py -v`: **3 passed in 3.33s**.
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx src/test/App.test.tsx src/test/TopNav.test.tsx src/test/AdminMobileRestriction.test.tsx` (in `app/frontend`): executed to verify Workbench sidebar, bulk ZIP, NER exporter, routing, and mobile restrictions.
+- **Next Tasks / Unfinished Work:**
+  - Live browser check of `/data/logs` through `/data/dataset` and promotion from `snapshot` → `main` when approved.
+
+
 
 

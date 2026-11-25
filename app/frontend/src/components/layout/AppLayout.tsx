@@ -5,7 +5,10 @@ import { TopNav } from './TopNav'
 export function AppLayout() {
   const { token, isLoading } = useAuth()
   const location = useLocation()
-  const isFullBleed = location.pathname === '/' || location.pathname.startsWith('/intel')
+  const isFullBleed =
+    location.pathname === '/' ||
+    location.pathname.startsWith('/intel') ||
+    location.pathname.startsWith('/data')
 
   if (isLoading) {
     return (
