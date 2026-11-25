@@ -10,6 +10,7 @@ import {
   logsApi,
 } from '@/lib/logs'
 import { DatabaseDateRangePicker } from '@/components/database/DatabaseDateRangePicker'
+import { TalkgroupMultiSelect } from '@/components/database/TalkgroupMultiSelect'
 import { errorMessage } from '@/types/api'
 import type { LogsSortBy } from '@/types/logs'
 
@@ -49,7 +50,12 @@ export function DatabasePage() {
 
   const [searchInput, setSearchInput] = useState(() => searchParams.get('search') ?? '')
   const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get('search') ?? '')
-  const [talkgroup, setTalkgroup] = useState(() => searchParams.get('talkgroup') ?? '')
+  const [selectedTalkgroups, setSelectedTalkgroups] = useState<string[]>(() =>
+    searchParams
+      .getAll('talkgroup')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
@@ -90,11 +96,11 @@ export function DatabasePage() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, talkgroup, dateFrom, dateTo, sortBy, pageSize])
+  }, [debouncedSearch, selectedTalkgroups, dateFrom, dateTo, sortBy, pageSize])
 
   useEffect(() => {
     setExpandedId(null)
-  }, [page, pageSize, debouncedSearch, talkgroup, dateFrom, dateTo, sortBy])
+  }, [page, pageSize, debouncedSearch, selectedTalkgroups, dateFrom, dateTo, sortBy])
 
   const query = useQuery({
     queryKey: [
@@ -102,7 +108,7 @@ export function DatabasePage() {
       page,
       pageSize,
       debouncedSearch,
-      talkgroup,
+      selectedTalkgroups,
       dateFrom,
       dateTo,
       sortBy,
@@ -113,7 +119,7 @@ export function DatabasePage() {
           page,
           pageSize,
           search: debouncedSearch,
-          talkgroup,
+          talkgroups: selectedTalkgroups,
           dateFrom,
           dateTo,
           sortBy,
@@ -226,18 +232,23 @@ export function DatabasePage() {
 
   const onExport = async () => {
     try {
-      await downloadLogsExport({ search: debouncedSearch, talkgroup, dateFrom, dateTo })
+      await downloadLogsExport({
+        search: debouncedSearch,
+        talkgroups: selectedTalkgroups,
+        dateFrom,
+        dateTo,
+      })
       addToast('CSV export started', 'success')
     } catch (e) {
       addToast(errorMessage(e, 'Export failed'), 'error')
     }
   }
 
-  const hasFilters = Boolean(searchInput.trim() || talkgroup || dateFrom || dateTo)
+  const hasFilters = Boolean(searchInput.trim() || selectedTalkgroups.length > 0 || dateFrom || dateTo)
   const clearFilters = () => {
     setSearchInput('')
     setDebouncedSearch('')
-    setTalkgroup('')
+    setSelectedTalkgroups([])
     setDateFrom('')
     setDateTo('')
   }
@@ -311,19 +322,12 @@ export function DatabasePage() {
           <label className="ss-form-label" htmlFor="db-talkgroup">
             Talkgroup
           </label>
-          <select
+          <TalkgroupMultiSelect
             id="db-talkgroup"
-            className="ss-select h-8 min-w-[10.5rem] text-xs"
-            value={talkgroup}
-            onChange={(e) => setTalkgroup(e.target.value)}
-          >
-            <option value="">All Talkgroups</option>
-            {talkgroupList.map((tg) => (
-              <option key={tg} value={tg}>
-                {tg}
-              </option>
-            ))}
-          </select>
+            talkgroups={talkgroupList}
+            selected={selectedTalkgroups}
+            onChange={setSelectedTalkgroups}
+          />
         </div>
 
         <div>

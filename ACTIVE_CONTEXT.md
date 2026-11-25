@@ -1516,6 +1516,18 @@ This living document is the **shared memory** between different AI models, human
 - **Next Tasks / Unfinished Work:**
   - Live UI check and `snapshot` → `main` promotion when ready.
 
+### 2026-11-25 16:43 | Gemini 4 Neon (High) (Windows Dev Workstation)
+- **Work Performed (Multi-Select Checkbox Talkgroup Filter for Transmissions):**
+  - Updated [`logs.py`](file:///a:/Scanscribe_Projects/scanscribe/app/routes/logs.py) (`GET /api/logs` and `GET /api/logs/export`) to accept `talkgroup: Optional[List[str]] = Query(None)` via `_apply_talkgroup_filter(query, talkgroups)` (handling single/multiple talkgroups and mapping `"N/A"` to `NULL`/`""`/`"N/A"` while preserving `LogEntry.is_deleted.is_not(True)`).
+  - Updated `buildListParams` and `downloadLogsExport` in [`logs.ts`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/lib/logs.ts) to serialize `talkgroups?: string[]` as repeated `talkgroup` query parameters (`sp.append('talkgroup', tg)`).
+  - Created [`TalkgroupMultiSelect.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/components/database/TalkgroupMultiSelect.tsx) featuring a searchable popover with per-talkgroup checkboxes, `Select all`, `Clear`, count badge trigger (`All Talkgroups` / single talkgroup name / `<N> Talkgroups`), and outside-click/`Escape` dismissal, and wired it into [`DatabasePage.tsx`](file:///a:/Scanscribe_Projects/scanscribe/app/frontend/src/pages/Database/DatabasePage.tsx).
+- **Verification Performed:**
+  - `.venv\Scripts\python.exe -m pytest tests/test_database_dashboard.py -v`: **5 passed** (including `test_logs_multi_talkgroup_filter_and_export`).
+  - `npm.cmd --prefix app/frontend run build`: `tsc -b && vite build` passed (`built in 1.45s`, `app/frontend/dist` rebuilt).
+  - `npx.cmd vitest run src/test/DatabaseDashboard.test.tsx src/test/App.test.tsx src/test/TopNav.test.tsx src/test/AdminMobileRestriction.test.tsx`: **4 test files passed (20 tests passed)**.
+- **Next Tasks / Unfinished Work:**
+  - Live UI check and `snapshot` → `main` promotion when ready.
+
 
 
 

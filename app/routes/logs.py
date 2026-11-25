@@ -27,12 +27,33 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
 
+def _apply_talkgroup_filter(query, talkgroups: Optional[List[str]]):
+    """Apply multi-talkgroup SQLAlchemy filter, mapping 'N/A' to null/empty/N/A."""
+    cleaned = [tg.strip() for tg in (talkgroups or []) if tg and tg.strip()]
+    if not cleaned:
+        return query
+    has_na = "N/A" in cleaned
+    others = [tg for tg in cleaned if tg != "N/A"]
+    na_expr = or_(
+        LogEntry.talkgroup.is_(None),
+        LogEntry.talkgroup == "",
+        LogEntry.talkgroup == "N/A",
+    )
+    if has_na and others:
+        return query.filter(or_(LogEntry.talkgroup.in_(others), na_expr))
+    if has_na:
+        return query.filter(na_expr)
+    if len(others) == 1:
+        return query.filter(LogEntry.talkgroup == others[0])
+    return query.filter(LogEntry.talkgroup.in_(others))
+
+
 @router.get("")
 async def get_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     search: Optional[str] = None,
-    talkgroup: Optional[str] = None,
+    talkgroup: Optional[List[str]] = Query(None),
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     is_reviewed: Optional[bool] = None,
@@ -54,8 +75,7 @@ async def get_logs(
                 LogEntry.talkgroup.like(search_pattern)
             )
         )
-    if talkgroup and talkgroup.strip():
-        query = query.filter(LogEntry.talkgroup == talkgroup.strip())
+    query = _apply_talkgroup_filter(query, talkgroup)
     # Apply date filters
     if date_from:
         query = query.filter(LogEntry.log_date >= date_from.isoformat())
@@ -151,7 +171,7 @@ async def get_talkgroups(
 @router.get("/export")
 async def export_logs_csv(
     search: Optional[str] = None,
-    talkgroup: Optional[str] = None,
+    talkgroup: Optional[List[str]] = Query(None),
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     current_user: User = Depends(get_current_active_user),
@@ -170,8 +190,7 @@ async def export_logs_csv(
                 LogEntry.talkgroup.like(search_pattern)
             )
         )
-    if talkgroup and talkgroup.strip():
-        query = query.filter(LogEntry.talkgroup == talkgroup.strip())
+    query = _apply_talkgroup_filter(query, talkgroup)
     
     if date_from:
         query = query.filter(LogEntry.log_date >= date_from.isoformat())

@@ -7,7 +7,7 @@ import { DataExplorerLayout } from '@/pages/DataExplorer/DataExplorerLayout'
 import { DatabasePage } from '@/pages/Database/DatabasePage'
 import { EntitiesTable } from '@/pages/DataExplorer/Tables/EntitiesTable'
 import { maintenanceApi } from '@/lib/maintenance'
-import { downloadBulkAudioZip, logsApi } from '@/lib/logs'
+import { buildListParams, downloadBulkAudioZip, logsApi } from '@/lib/logs'
 import { downloadEntitiesCsv, eventsApi } from '@/lib/events'
 
 vi.mock('@/context/AuthContext', () => ({
@@ -286,5 +286,70 @@ describe('Database Workbench Suite', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Reset Widths' }))
     expect((container.querySelectorAll('table colgroup col')[2] as HTMLElement).style.width).toBe('195px')
     expect(window.localStorage.getItem('scanscribe_col_widths_transmissions')).toBeNull()
+  })
+
+  it('supports multi-select talkgroups with checkboxes, keeps menu open, and clears cleanly', async () => {
+    vi.mocked(logsApi.activeDates).mockResolvedValue({ dates: ['2026-11-24'] })
+    vi.mocked(logsApi.talkgroups).mockResolvedValue({
+      talkgroups: ['Fire Dispatch', 'EMS Tac', 'Law Main'],
+    })
+    vi.mocked(logsApi.list).mockResolvedValue({
+      total: 1,
+      page: 1,
+      page_size: 50,
+      total_pages: 1,
+      logs: [
+        {
+          id: 301,
+          filename: 'tg_test.mp3',
+          talkgroup: 'Fire Dispatch',
+          timestamp: '2026-11-24T12:00:00',
+          duration: 3.2,
+          file_size: 1024,
+          confidence: 0.91,
+          transcript: 'Unit 1 responding',
+          audio_path: 'audio_storage/2026/11/24/tg_test.mp3',
+          log_date: '2026-11-24',
+          created_at: '2026-11-24T12:00:00Z',
+          is_reviewed: false,
+          corrected_transcript: null,
+        },
+      ],
+    })
+
+    wrap(<DatabasePage />, ['/data/logs'])
+
+    const trigger = await screen.findByRole('button', { name: /Talkgroup/i })
+    expect(trigger).toHaveTextContent('All Talkgroups')
+
+    fireEvent.click(trigger)
+    const fireCheckbox = await screen.findByLabelText('Fire Dispatch')
+    const emsCheckbox = screen.getByLabelText('EMS Tac')
+
+    fireEvent.click(fireCheckbox)
+    fireEvent.click(emsCheckbox)
+
+    // Popover stays open after toggling checkboxes and trigger reflects count
+    expect(screen.getByRole('listbox')).toBeInTheDocument()
+    expect(trigger).toHaveTextContent('2 Talkgroups')
+
+    await waitFor(() => {
+      expect(buildListParams).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          talkgroups: ['Fire Dispatch', 'EMS Tac'],
+        }),
+      )
+    })
+
+    // Clear resets selection to All Talkgroups
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(trigger).toHaveTextContent('All Talkgroups')
+    await waitFor(() => {
+      expect(buildListParams).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          talkgroups: [],
+        }),
+      )
+    })
   })
 })

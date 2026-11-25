@@ -8,11 +8,28 @@ function getToken(): string | null {
   return localStorage.getItem('access_token')
 }
 
+function appendTalkgroupParams(
+  sp: URLSearchParams,
+  talkgroups?: string[],
+  talkgroup?: string
+): void {
+  const list = talkgroups
+    ? talkgroups
+    : talkgroup?.trim()
+      ? [talkgroup.trim()]
+      : []
+  for (const tg of list) {
+    const trimmed = tg.trim()
+    if (trimmed) sp.append('talkgroup', trimmed)
+  }
+}
+
 function buildListParams(args: {
   page: number
   pageSize: number
   search: string
   talkgroup?: string
+  talkgroups?: string[]
   dateFrom: string
   dateTo: string
   sortBy: string
@@ -22,7 +39,7 @@ function buildListParams(args: {
   sp.set('page', String(args.page))
   sp.set('page_size', String(args.pageSize))
   if (args.search.trim()) sp.set('search', args.search.trim())
-  if (args.talkgroup?.trim()) sp.set('talkgroup', args.talkgroup.trim())
+  appendTalkgroupParams(sp, args.talkgroups, args.talkgroup)
   if (args.dateFrom) sp.set('date_from', args.dateFrom)
   if (args.dateTo) sp.set('date_to', args.dateTo)
   if (args.is_reviewed !== undefined) sp.set('is_reviewed', String(args.is_reviewed))
@@ -98,13 +115,14 @@ export const logsApi = {
 export async function downloadLogsExport(args: {
   search: string
   talkgroup?: string
+  talkgroups?: string[]
   dateFrom: string
   dateTo: string
   is_reviewed?: boolean
 }): Promise<void> {
   const sp = new URLSearchParams()
   if (args.search.trim()) sp.set('search', args.search.trim())
-  if (args.talkgroup?.trim()) sp.set('talkgroup', args.talkgroup.trim())
+  appendTalkgroupParams(sp, args.talkgroups, args.talkgroup)
   if (args.dateFrom) sp.set('date_from', args.dateFrom)
   if (args.dateTo) sp.set('date_to', args.dateTo)
   if (args.is_reviewed !== undefined) sp.set('is_reviewed', String(args.is_reviewed))

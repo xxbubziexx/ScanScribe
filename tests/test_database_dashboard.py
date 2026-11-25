@@ -437,3 +437,87 @@ def test_monitor_delete_impact_and_cascade(db_ctx, tmp_path):
         assert verify_db.query(LogEntry).filter(LogEntry.is_deleted.is_not(True)).count() == 2
     finally:
         verify_db.close()
+
+
+def test_logs_multi_talkgroup_filter_and_export(db_ctx):
+    """GET /api/logs and /api/logs/export support repeated talkgroup parameters."""
+    Session, _ = db_ctx
+    now_local = datetime.now()
+    db = Session()
+    try:
+        db.add_all(
+            [
+                LogEntry(
+                    filename="tg_fire.mp3",
+                    timestamp=now_local,
+                    log_date=now_local.date().isoformat(),
+                    duration=5.0,
+                    file_size=1024,
+                    audio_path="audio_storage/tg_fire.mp3",
+                    transcript="Engine 1 on scene",
+                    confidence=0.9,
+                    talkgroup="FIRE-DISP",
+                ),
+                LogEntry(
+                    filename="tg_ems.mp3",
+                    timestamp=now_local - timedelta(minutes=1),
+                    log_date=now_local.date().isoformat(),
+                    duration=4.0,
+                    file_size=1024,
+                    audio_path="audio_storage/tg_ems.mp3",
+                    transcript="Medic 2 responding",
+                    confidence=0.88,
+                    talkgroup="EMS-TAC",
+                ),
+                LogEntry(
+                    filename="tg_pd.mp3",
+                    timestamp=now_local - timedelta(minutes=2),
+                    log_date=now_local.date().isoformat(),
+                    duration=3.0,
+                    file_size=1024,
+                    audio_path="audio_storage/tg_pd.mp3",
+                    transcript="Unit 4 clear",
+                    confidence=0.85,
+                    talkgroup="PD-DISP",
+                ),
+                LogEntry(
+                    filename="tg_empty.mp3",
+                    timestamp=now_local - timedelta(minutes=3),
+                    log_date=now_local.date().isoformat(),
+                    duration=2.0,
+                    file_size=1024,
+                    audio_path="audio_storage/tg_empty.mp3",
+                    transcript="Unlabeled carrier",
+                    confidence=0.8,
+                    talkgroup=None,
+                ),
+            ]
+        )
+        db.commit()
+    finally:
+        db.close()
+
+    client = TestClient(app)
+
+    # Single talkgroup still works
+    r_single = client.get("/api/logs", params=[("talkgroup", "FIRE-DISP")])
+    assert r_single.status_code == 200
+    assert [row["talkgroup"] for row in r_single.json()["logs"]] == ["FIRE-DISP"]
+
+    # Multiple talkgroups return union
+    r_multi = client.get("/api/logs", params=[("talkgroup", "FIRE-DISP"), ("talkgroup", "EMS-TAC")])
+    assert r_multi.status_code == 200
+    assert {row["talkgroup"] for row in r_multi.json()["logs"]} == {"FIRE-DISP", "EMS-TAC"}
+
+    # Mixing N/A with named talkgroup includes null/empty talkgroup
+    r_na = client.get("/api/logs", params=[("talkgroup", "N/A"), ("talkgroup", "FIRE-DISP")])
+    assert r_na.status_code == 200
+    assert {row["filename"] for row in r_na.json()["logs"]} == {"tg_fire.mp3", "tg_empty.mp3"}
+
+    # Export CSV respects multiple talkgroups
+    r_export = client.get("/api/logs/export", params=[("talkgroup", "FIRE-DISP"), ("talkgroup", "EMS-TAC")])
+    assert r_export.status_code == 200
+    csv_rows = list(csv.reader(io.StringIO(r_export.text)))
+    assert len(csv_rows) == 3  # header + 2 matching rows
+    exported_tgs = {row[2] for row in csv_rows[1:]}
+    assert exported_tgs == {"FIRE-DISP", "EMS-TAC"}
